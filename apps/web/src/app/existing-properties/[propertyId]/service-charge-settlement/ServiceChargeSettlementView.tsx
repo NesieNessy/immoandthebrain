@@ -13,6 +13,7 @@ import {
     NumberField,
     SectionLabel,
     StickyActionBar,
+    Switch,
     TextField,
     type BreadcrumbItem,
 } from '@/components/ui';
@@ -79,15 +80,46 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                     {/* Abrechnungszeitraum */}
                     <div>
                         <SectionLabel>Abrechnungszeitraum & Kostenpositionen</SectionLabel>
-                        <div className="mt-3 flex items-end gap-3">
-                            <div className="w-40">
-                                <CalendarField label="Von" value={data.periodStart} onChange={data.setPeriodStart} />
-                            </div>
-                            <span className="pb-2.5 text-sm text-muted-foreground">bis</span>
-                            <div className="w-40">
-                                <CalendarField label="Bis" value={data.periodEnd} onChange={data.setPeriodEnd} />
-                            </div>
+                        <div className="mt-3">
+                            <Switch
+                                label="Individueller Zeitraum"
+                                checked={data.periodMode === 'custom'}
+                                onCheckedChange={(checked) => data.setPeriodMode(checked ? 'custom' : 'year')}
+                            />
                         </div>
+                        {data.periodMode === 'year' ? (
+                            <div className="mt-3 flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => data.setSettlementYear(data.settlementYear - 1)}
+                                    aria-label="Vorheriges Jahr"
+                                    className="p-2 rounded-md border border-primary/30 text-muted-foreground hover:border-primary/55 hover:text-foreground transition-colors cursor-pointer"
+                                >
+                                    <Icons.ChevronLeft className="w-4 h-4" />
+                                </button>
+                                <div className="min-w-24 px-4 py-2 rounded-md border border-primary/30 bg-card text-center text-sm font-semibold text-foreground">
+                                    Abrechnungsjahr {data.settlementYear}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => data.setSettlementYear(data.settlementYear + 1)}
+                                    aria-label="Nächstes Jahr"
+                                    className="p-2 rounded-md border border-primary/30 text-muted-foreground hover:border-primary/55 hover:text-foreground transition-colors cursor-pointer"
+                                >
+                                    <Icons.ChevronRight className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="mt-3 flex items-end gap-3">
+                                <div className="w-40">
+                                    <CalendarField label="Von" value={data.periodStart} onChange={data.setPeriodStart} />
+                                </div>
+                                <span className="pb-2.5 text-sm text-muted-foreground">bis</span>
+                                <div className="w-40">
+                                    <CalendarField label="Bis" value={data.periodEnd} onChange={data.setPeriodEnd} />
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Stat cards */}
@@ -177,7 +209,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
 
                     {/* Info banner */}
                     <div className="px-4 py-3 rounded-lg bg-primary/5 border border-primary/20 text-sm text-foreground">
-                        Erfasse alle Kostenpositionen des Abrechnungsjahres. Die Wohnungsanteile und der Wirtschaftsplan werden automatisch berechnet. Fehlende Werte im Wirtschaftsplan kannst du manuell ergänzen.
+                        Erfasse alle Kostenpositionen des Abrechnungsjahres. Die Wohnungsanteile und der Wirtschaftsplan werden automatisch berechnet, können bei Bedarf pro Position aber manuell angepasst werden. Fehlende Werte im Wirtschaftsplan kannst du manuell ergänzen.
                     </div>
 
                     {/* Cost item table */}
@@ -238,9 +270,20 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                 <NumberField
                                                     unit="€"
                                                     placeholder="–"
-                                                    value={item.allocable && item.actualAmount !== '' ? String(Math.round(Number(item.actualAmount) * data.unitShare * 100) / 100) : ''}
-                                                    disabled
+                                                    value={item.actualShareOverride !== '' ? item.actualShareOverride : (data.actualShareForItem(item) != null ? String(data.actualShareForItem(item)) : '')}
+                                                    onChange={(e) => data.updateCostItemField(index, { actualShareOverride: e.target.value })}
+                                                    disabled={!item.allocable || item.actualAmount === ''}
+                                                    min={0}
                                                 />
+                                                {item.actualShareOverride !== '' && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => data.updateCostItemField(index, { actualShareOverride: '' })}
+                                                        className="mt-1 text-xs text-primary hover:underline cursor-pointer"
+                                                    >
+                                                        Automatisch berechnen
+                                                    </button>
+                                                )}
                                             </td>
                                             <td className="px-3 py-2 border-l border-border w-36">
                                                 <NumberField
@@ -255,9 +298,20 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                 <NumberField
                                                     unit="€"
                                                     placeholder="–"
-                                                    value={item.allocable && item.budgetAmount !== '' ? String(Math.round(Number(item.budgetAmount) * data.unitShare * 100) / 100) : ''}
-                                                    disabled
+                                                    value={item.budgetShareOverride !== '' ? item.budgetShareOverride : (data.budgetShareForItem(item) != null ? String(data.budgetShareForItem(item)) : '')}
+                                                    onChange={(e) => data.updateCostItemField(index, { budgetShareOverride: e.target.value })}
+                                                    disabled={!item.allocable || item.budgetAmount === ''}
+                                                    min={0}
                                                 />
+                                                {item.budgetShareOverride !== '' && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => data.updateCostItemField(index, { budgetShareOverride: '' })}
+                                                        className="mt-1 text-xs text-primary hover:underline cursor-pointer"
+                                                    >
+                                                        Automatisch berechnen
+                                                    </button>
+                                                )}
                                             </td>
                                             <td className="px-2 py-2">
                                                 <button

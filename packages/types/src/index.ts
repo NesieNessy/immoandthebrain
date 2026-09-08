@@ -611,6 +611,12 @@ export interface ServiceChargeCostItem {
   actualAmount: number | null;
   /** Wirtschaftsplan <settlement year + 1> — next year's budgeted cost, whole building. */
   budgetAmount: number | null;
+  /** Manual override of the computed Abrechnung-year Anteil Wohnung for this
+   *  row; null uses the automatic actualAmount * unit share calculation. */
+  actualShareOverride: number | null;
+  /** Manual override of the computed Wirtschaftsplan-year Anteil Wohnung for
+   *  this row; null uses the automatic budgetAmount * unit share calculation. */
+  budgetShareOverride: number | null;
   createdAt: string;
   updatedAt: string;
 }

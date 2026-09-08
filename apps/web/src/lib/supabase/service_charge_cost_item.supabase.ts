@@ -11,6 +11,8 @@ function toCostItem(row: Record<string, unknown>): ServiceChargeCostItem {
         allocable: row.allocable as boolean,
         actualAmount: row.actual_amount == null ? null : Number(row.actual_amount),
         budgetAmount: row.budget_amount == null ? null : Number(row.budget_amount),
+        actualShareOverride: row.actual_share_override == null ? null : Number(row.actual_share_override),
+        budgetShareOverride: row.budget_share_override == null ? null : Number(row.budget_share_override),
         createdAt: row.created_at as string,
         updatedAt: row.updated_at as string,
     };
@@ -38,6 +40,8 @@ export async function createCostItem(payload: ServiceChargeCostItemInsert): Prom
         allocable: payload.allocable,
         actual_amount: payload.actualAmount,
         budget_amount: payload.budgetAmount,
+        actual_share_override: payload.actualShareOverride,
+        budget_share_override: payload.budgetShareOverride,
     } }));
     if (!data) return null;
     return toCostItem(data);
@@ -53,6 +57,8 @@ export async function updateCostItem(
     if (updates.allocable !== undefined) dbUpdates.allocable = updates.allocable;
     if (updates.actualAmount !== undefined) dbUpdates.actual_amount = updates.actualAmount;
     if (updates.budgetAmount !== undefined) dbUpdates.budget_amount = updates.budgetAmount;
+    if (updates.actualShareOverride !== undefined) dbUpdates.actual_share_override = updates.actualShareOverride;
+    if (updates.budgetShareOverride !== undefined) dbUpdates.budget_share_override = updates.budgetShareOverride;
 
     const data = await propertyResourceRequest<Record<string, unknown>>('service-charge-cost-items', jsonRequest('PATCH', { id: costItemId, values: dbUpdates }));
     if (!data) return null;

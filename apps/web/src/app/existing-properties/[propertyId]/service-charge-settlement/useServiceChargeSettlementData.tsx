@@ -53,6 +53,11 @@ export interface CostItemForm {
     allocable: boolean;
     actualAmount: string;
     budgetAmount: string;
+    /** Manual override of the computed Anteil Wohnung for this row — empty
+     *  string means "use the automatic actualAmount * unit share calculation". */
+    actualShareOverride: string;
+    /** Same as `actualShareOverride`, for the Wirtschaftsplan column. */
+    budgetShareOverride: string;
 }
 
 function toCostItemForm(item: ServiceChargeCostItem): CostItemForm {
@@ -62,6 +67,8 @@ function toCostItemForm(item: ServiceChargeCostItem): CostItemForm {
         allocable: item.allocable,
         actualAmount: item.actualAmount != null ? String(item.actualAmount) : '',
         budgetAmount: item.budgetAmount != null ? String(item.budgetAmount) : '',
+        actualShareOverride: item.actualShareOverride != null ? String(item.actualShareOverride) : '',
+        budgetShareOverride: item.budgetShareOverride != null ? String(item.budgetShareOverride) : '',
     };
 }
 
@@ -69,8 +76,20 @@ function serializeCostItems(items: CostItemForm[], periodStart: Date | undefined
     return JSON.stringify({
         periodStart: periodStart?.toISOString() ?? null,
         periodEnd: periodEnd?.toISOString() ?? null,
-        items: items.map((i) => ({ id: i.id, label: i.label, allocable: i.allocable, actualAmount: i.actualAmount, budgetAmount: i.budgetAmount })),
+        items: items.map((i) => ({
+            id: i.id, label: i.label, allocable: i.allocable, actualAmount: i.actualAmount, budgetAmount: i.budgetAmount,
+            actualShareOverride: i.actualShareOverride, budgetShareOverride: i.budgetShareOverride,
+        })),
     });
+}
+
+/** A settlement period counts as "whole year" when it spans exactly Jan 1 –
+ *  Dec 31 of a single year — the common case, vs. a shorter custom range
+ *  (e.g. a tenant moved in/out mid-year). */
+function isFullCalendarYear(start: Date, end: Date): boolean {
+    return start.getMonth() === 0 && start.getDate() === 1
+        && end.getMonth() === 11 && end.getDate() === 31
+        && start.getFullYear() === end.getFullYear();
 }
 
 export { euro };
@@ -84,6 +103,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const [settlement, setSettlement] = useState<ServiceChargeSettlement | null>(null);
     const [periodStart, setPeriodStart] = useState<Date | undefined>(undefined);
     const [periodEnd, setPeriodEnd] = useState<Date | undefined>(undefined);
+    const [periodMode, setPeriodModeState] = useState<'year' | 'custom'>('year');
     const [costItems, setCostItems] = useState<CostItemForm[]>([]);
     const [deletedCostItemIds, setDeletedCostItemIds] = useState<number[]>([]);
     const [originalSnapshot, setOriginalSnapshot] = useState('');
@@ -117,11 +137,14 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             setMiscRentHistory(history.filter((entry) => entry.adjustmentType === 'miscRent'));
             setMaintenanceCosts(loadedMaintenanceCosts);
 
-            const defaultItems = () => DEFAULT_COST_ITEMS.map((item) => ({ id: null, label: item.label, allocable: item.allocable, actualAmount: '', budgetAmount: '' }));
+            const defaultItems = () => DEFAULT_COST_ITEMS.map((item) => ({ id: null, label: item.label, allocable: item.allocable, actualAmount: '', budgetAmount: '', actualShareOverride: '', budgetShareOverride: '' }));
 
             if (currentSettlement) {
-                setPeriodStart(new Date(currentSettlement.periodStart));
-                setPeriodEnd(new Date(currentSettlement.periodEnd));
+                const start = new Date(currentSettlement.periodStart);
+                const end = new Date(currentSettlement.periodEnd);
+                setPeriodStart(start);
+                setPeriodEnd(end);
+                setPeriodModeState(isFullCalendarYear(start, end) ? 'year' : 'custom');
                 const loadedItems = (loadedCostItems ?? []).map(toCostItemForm);
                 // The settlement row can exist with no saved cost items yet (e.g.
                 // it was created just by uploading a source document, before any
@@ -134,6 +157,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 const currentYear = new Date().getFullYear();
                 setPeriodStart(new Date(currentYear, 0, 1));
                 setPeriodEnd(new Date(currentYear, 11, 31));
+                setPeriodModeState('year');
                 setCostItems(defaultItems());
                 setOriginalSnapshot('');
             }
@@ -158,6 +182,20 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     const isEditing = !settlement || serializeCostItems(costItems, periodStart, periodEnd) !== originalSnapshot;
 
+    // ── Abrechnungszeitraum: whole calendar year vs. a shorter custom range ──
+    const setPeriodMode = (mode: 'year' | 'custom') => {
+        setPeriodModeState(mode);
+        if (mode === 'year') {
+            const year = periodEnd?.getFullYear() ?? periodStart?.getFullYear() ?? new Date().getFullYear();
+            setPeriodStart(new Date(year, 0, 1));
+            setPeriodEnd(new Date(year, 11, 31));
+        }
+    };
+    const setSettlementYear = (year: number) => {
+        setPeriodStart(new Date(year, 0, 1));
+        setPeriodEnd(new Date(year, 11, 31));
+    };
+
     // ── Allocation & summary math ───────────────────────────────────────────
     const totalArea = useMemo(() => units.reduce((sum, u) => sum + (u.livingAreaM2 ?? 0), 0), [units]);
     const unitShare = unit.livingAreaM2 && totalArea > 0 ? unit.livingAreaM2 / totalArea : 0;
@@ -177,10 +215,30 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const totalActualAllocable = actualSplit.allocable;
     const totalBudgetAllocable = budgetSplit.allocable;
 
+    // Per-row Anteil Wohnung: the automatic amount * unitShare calculation,
+    // unless the row carries a manual override (different cost items often
+    // use a different Verteilerschlüssel than living-area proportion).
+    const actualShareForItem = useCallback((item: CostItemForm): number | null => {
+        if (!item.allocable || item.actualAmount === '') return null;
+        if (item.actualShareOverride !== '') return Number(item.actualShareOverride);
+        return Math.round(Number(item.actualAmount) * unitShare * 100) / 100;
+    }, [unitShare]);
+    const budgetShareForItem = useCallback((item: CostItemForm): number | null => {
+        if (!item.allocable || item.budgetAmount === '') return null;
+        if (item.budgetShareOverride !== '') return Number(item.budgetShareOverride);
+        return Math.round(Number(item.budgetAmount) * unitShare * 100) / 100;
+    }, [unitShare]);
+
     // (1) Apartment share: sum of allocable actual cost items for this unit.
-    const unitActualShare = totalActualAllocable * unitShare;
+    const unitActualShare = useMemo(
+        () => costItems.reduce((sum, item) => sum + (actualShareForItem(item) ?? 0), 0),
+        [costItems, actualShareForItem],
+    );
     // (3) Budget plan: sum of allocable budgeted cost items for this unit, for the following year.
-    const unitBudgetShare = totalBudgetAllocable * unitShare;
+    const unitBudgetShare = useMemo(
+        () => costItems.reduce((sum, item) => sum + (budgetShareForItem(item) ?? 0), 0),
+        [costItems, budgetShareForItem],
+    );
 
     const currentMonthlyPrepayment = tenancy?.miscRent ?? 0;
     // (2) Annual total from the tenant's NK-Vorauszahlung, prorated for any
@@ -213,7 +271,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     };
 
     const addCostItem = () => {
-        setCostItems((prev) => [...prev, { id: null, label: '', allocable: true, actualAmount: '', budgetAmount: '' }]);
+        setCostItems((prev) => [...prev, { id: null, label: '', allocable: true, actualAmount: '', budgetAmount: '', actualShareOverride: '', budgetShareOverride: '' }]);
     };
 
     const removeCostItem = (index: number) => {
@@ -262,6 +320,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                     allocable: item.allocable,
                     actualAmount: item.actualAmount === '' ? null : Number(item.actualAmount),
                     budgetAmount: item.budgetAmount === '' ? null : Number(item.budgetAmount),
+                    actualShareOverride: item.actualShareOverride === '' ? null : Number(item.actualShareOverride),
+                    budgetShareOverride: item.budgetShareOverride === '' ? null : Number(item.budgetShareOverride),
                 };
                 if (item.id != null) {
                     const updated = await updateCostItem(item.id, payload);
@@ -412,9 +472,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         const costRows = costItems.map((item) => ({
             label: item.label,
             actualAmount: item.actualAmount === '' ? null : Number(item.actualAmount),
-            actualShare: item.allocable && item.actualAmount !== '' ? Number(item.actualAmount) * unitShare : null,
+            actualShare: actualShareForItem(item),
             budgetAmount: item.budgetAmount === '' ? null : Number(item.budgetAmount),
-            budgetShare: item.allocable && item.budgetAmount !== '' ? Number(item.budgetAmount) * unitShare : null,
+            budgetShare: budgetShareForItem(item),
         }));
 
         return serviceChargeStatementHtml({
@@ -482,6 +542,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         // state
         isLoading, isSaving, isUploadingSource, isGeneratingPdf, isApplyingPrepayment, error,
         settlement, periodStart, setPeriodStart, periodEnd, setPeriodEnd,
+        periodMode, setPeriodMode, setSettlementYear,
         costItems, tenancy, landlord, useCaseMenuItems, backHref,
         previewHtml, isLoadingPreview,
         // computed
@@ -490,6 +551,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         totalActualAllocable, totalBudgetAllocable,
         actualSplit, budgetSplit,
         unitActualShare, unitBudgetShare,
+        actualShareForItem, budgetShareForItem,
         annualPrepayment, currentMonthlyPrepayment, overUnderCoverage, settlementCoverage, budgetCoverage,
         newMonthlyPrepayment, prepaymentDelta, newTotalRent, settlementYear,
         canGeneratePdf, canApplyPrepayment,

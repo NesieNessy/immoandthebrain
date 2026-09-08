@@ -98,7 +98,7 @@ const RESOURCES: Record<string, ResourceConfig> = {
   'service-charge-cost-items': {
     table: 'service_charge_cost_item',
     primaryKey: 'service_charge_cost_item_id',
-    columns: ['service_charge_settlement_id', 'property_id', 'sort_order', 'label', 'allocable', 'actual_amount', 'budget_amount'],
+    columns: ['service_charge_settlement_id', 'property_id', 'sort_order', 'label', 'allocable', 'actual_amount', 'budget_amount', 'actual_share_override', 'budget_share_override'],
     orderBy: 'sort_order, service_charge_cost_item_id',
   },
 };

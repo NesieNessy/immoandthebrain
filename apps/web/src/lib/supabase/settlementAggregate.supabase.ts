@@ -91,6 +91,8 @@ function toCostItem(row: Record<string, unknown>): ServiceChargeCostItem {
     allocable: row.allocable as boolean,
     actualAmount: row.actual_amount == null ? null : Number(row.actual_amount),
     budgetAmount: row.budget_amount == null ? null : Number(row.budget_amount),
+    actualShareOverride: row.actual_share_override == null ? null : Number(row.actual_share_override),
+    budgetShareOverride: row.budget_share_override == null ? null : Number(row.budget_share_override),
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
