@@ -22,8 +22,9 @@ export async function PUT(request: Request) {
   const input = await request.json();
   const values = Object.fromEntries(Object.entries(COLUMNS).filter(([key]) => Object.hasOwn(input, key)).map(([key, column]) => [column, input[key]]));
   const required = ['last_name', 'first_name', 'street', 'house_number', 'city', 'postal_code', 'email_address', 'tax_identification_number'];
-  if (required.some((column) => !String(values[column] ?? '').trim())) {
-    return NextResponse.json({ error: 'Pflichtfelder fehlen.' }, { status: 400 });
+  const missing = required.filter((column) => !String(values[column] ?? '').trim());
+  if (missing.length > 0) {
+    return NextResponse.json({ error: 'Pflichtfelder fehlen.', missing }, { status: 400 });
   }
   const columns = Object.keys(values);
   const updates = columns.filter((column) => column !== 'user_id').map((column) => `${column} = EXCLUDED.${column}`).join(', ');

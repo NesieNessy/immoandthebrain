@@ -1,6 +1,18 @@
 import { authFetch } from '@/lib/api/authFetch';
 import type { PersonalData, PersonalDataInsert, PersonalDataUpdate } from '@immonext/types';
 
+/** Thrown by `upsertPersonalData`/`updatePersonalData` when the API rejects the
+ *  request — carries the raw `missing` column names (snake_case) from the API
+ *  so callers can translate them into field labels for the user. */
+export class PersonalDataSaveError extends Error {
+  missing: string[];
+  constructor(message: string, missing: string[] = []) {
+    super(message);
+    this.name = 'PersonalDataSaveError';
+    this.missing = missing;
+  }
+}
+
 function toPersonalData(row: Record<string, unknown>): PersonalData {
   return {
     userId: row.user_id as string,
@@ -27,11 +39,14 @@ export async function getPersonalData(userId: string): Promise<PersonalData | nu
   return toPersonalData(data);
 }
 
-export async function upsertPersonalData(personalData: PersonalDataInsert): Promise<PersonalData | null> {
+export async function upsertPersonalData(personalData: PersonalDataInsert): Promise<PersonalData> {
   const response = await authFetch('/api/personal-data', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(personalData),
   });
-  if (!response.ok) return null;
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string; missing?: string[] } | null;
+    throw new PersonalDataSaveError(body?.error ?? 'Fehler beim Speichern.', body?.missing ?? []);
+  }
   const data = await response.json() as Record<string, unknown>;
   return toPersonalData(data);
 }

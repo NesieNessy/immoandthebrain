@@ -1,13 +1,13 @@
 "use client";
 
 import { formatUnitLabel, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
-import { Header, Icons, PAGE_CONTAINER_CLASS, StickyActionBar, type BreadcrumbItem } from '@/components/ui';
+import { Button, Header, Icons, Modal, PAGE_CONTAINER_CLASS, StickyActionBar, type BreadcrumbItem } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
-import { htmlToPdfBlob } from '@/lib/pdf/htmlToPdf';
+import { buildCertificateDocxBlob } from '@/lib/docx/certificateDocx';
 import { uploadTenancyDocument } from '@/lib/supabase/tenancy_document.supabase';
-import { formatDeDate } from '@/lib/utils';
+import { downloadBlob, formatDeDate } from '@/lib/utils';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -26,10 +26,14 @@ interface CertificateContent {
     landlordName: string;
     landlordStreet: string;
     landlordCity: string;
+    /** Whether the Vermieter is also the Eigentümer of the unit. */
+    isLandlordOwner: boolean;
     propertyAddress: string;
     unitLabel: string;
     tenants: { name: string; role: string }[];
     mietbeginn: string;
+    /** Move-out date ("Mietauszug") — null when the tenancy has no end date yet. */
+    mietende: string | null;
     mietvertragAktiv: boolean;
     issuePlace: string;
     issueDate: string;
@@ -64,7 +68,8 @@ function certificateBodyHtml(c: CertificateContent): string {
 
         <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.04em;color:#475467;border-bottom:1px solid #d0d5dd;padding-bottom:6px;margin-bottom:10px;">Vermieter</h2>
         <p style="margin:4px 0;"><span style="color:#475467;">Name:</span> ${c.landlordName}</p>
-        <p style="margin:4px 0 20px;"><span style="color:#475467;">Adresse:</span> ${c.landlordStreet}, ${c.landlordCity}</p>
+        <p style="margin:4px 0;"><span style="color:#475467;">Adresse:</span> ${c.landlordStreet}, ${c.landlordCity}</p>
+        <p style="margin:4px 0 20px;"><span style="color:#475467;">Eigentümer der Wohnung:</span> ${c.isLandlordOwner ? 'Ja' : 'Nein'}</p>
 
         <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.04em;color:#475467;border-bottom:1px solid #d0d5dd;padding-bottom:6px;margin-bottom:10px;">Mietobjekt</h2>
         <p style="margin:4px 0;"><span style="color:#475467;">Adresse:</span> ${c.propertyAddress}</p>
@@ -75,7 +80,8 @@ function certificateBodyHtml(c: CertificateContent): string {
         ${tenantRows}
 
         <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.04em;color:#475467;border-bottom:1px solid #d0d5dd;padding-bottom:6px;margin:20px 0 10px;">Mietverhältnis</h2>
-        <p style="margin:4px 0;"><span style="color:#475467;">Mietbeginn:</span> ${c.mietbeginn}</p>
+        <p style="margin:4px 0;"><span style="color:#475467;">Mieteinzug:</span> ${c.mietbeginn}</p>
+        <p style="margin:4px 0;"><span style="color:#475467;">Mietauszug:</span> ${c.mietende ?? 'noch nicht bekannt'}</p>
         <p style="margin:4px 0 20px;"><span style="color:#475467;">Mietvertrag aktiv:</span> ${c.mietvertragAktiv ? 'Ja' : 'Nein'}</p>
 
         <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.04em;color:#475467;border-bottom:1px solid #d0d5dd;padding-bottom:6px;margin-bottom:10px;">Bescheinigung</h2>
@@ -107,9 +113,20 @@ export default function TenantCertificatePage({ propertyId, unitId }: { property
     const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
     const [isUploadingSignature, setIsUploadingSignature] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
+    // Not persisted (like the signature) — set per generated document, since
+    // the app's "landlord" (personal data) has no separate ownership field.
+    // null = not yet confirmed — generating always asks first (via the modal
+    // below) rather than silently defaulting, even on the ?autoGenerate=1
+    // shortcut that used to skip straight to generation.
+    const [isLandlordOwner, setIsLandlordOwner] = useState<boolean | null>(null);
+    const [ownerModalOpen, setOwnerModalOpen] = useState(false);
+    // Whether confirming the modal should immediately continue to generation
+    // (opened via "Word-Dokument generieren") or just record the answer
+    // (opened via "Ändern" in the review screen).
+    const generateAfterOwnerChoice = useRef(false);
 
-    // The "PDF generieren" shortcut on the tenant-unit page links here with
-    // ?autoGenerate=1 to skip the extra click — handleGenerate is defined
+    // The "Word-Dokument generieren" shortcut on the tenant-unit page links
+    // here with ?autoGenerate=1 to skip the extra click — handleGenerate is defined
     // further down (after the not-found/loading early returns), so it's
     // invoked indirectly through a ref that gets assigned once it exists.
     const didAutoGenerate = useRef(false);
@@ -164,26 +181,34 @@ export default function TenantCertificatePage({ propertyId, unitId }: { property
         role: p.isPrimary ? 'Hauptmieter' : 'Weitere Person',
     }));
     const mietbeginn = tenancy?.tenancyStartDate ? formatDeDate(tenancy.tenancyStartDate) : '–';
+    const mietende = tenancy?.tenancyEndDate ? formatDeDate(tenancy.tenancyEndDate) : null;
     const mietvertragAktiv = tenancy != null && !tenancy.tenancyEndDate;
     const issuePlace = landlord?.city || property.city;
     const issueDate = formatDeDate(new Date().toISOString());
     const canGenerate = landlord != null && tenants.length > 0 && tenancy != null;
     const documentNumber = `MB-${new Date().getFullYear()}-${String(tenancy?.tenancyId ?? 0).padStart(3, '0')}`;
 
-    const content: CertificateContent = {
+    const buildContent = (ownerValue: boolean): CertificateContent => ({
         landlordName,
         landlordStreet,
         landlordCity,
+        isLandlordOwner: ownerValue,
         propertyAddress,
         unitLabel,
         tenants,
         mietbeginn,
+        mietende,
         mietvertragAktiv,
         issuePlace,
         issueDate,
         documentNumber,
         signatureDataUrl,
-    };
+    });
+    // Preview-only fallback — the review/preview tab needs some value to
+    // render before the owner question has been answered, but that fallback
+    // never reaches the actually-generated document (runGenerate always gets
+    // the confirmed value explicitly).
+    const content = buildContent(isLandlordOwner ?? true);
 
     const handleUploadSignature = async (file: File) => {
         setIsUploadingSignature(true);
@@ -194,26 +219,59 @@ export default function TenantCertificatePage({ propertyId, unitId }: { property
         }
     };
 
-    const handleGenerate = async () => {
+    const WORD_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    const runGenerate = async (ownerValue: boolean) => {
         if (!canGenerate) return;
         setIsGenerating(true);
         try {
-            const blob = await htmlToPdfBlob(certificateBodyHtml(content));
+            const blob = await buildCertificateDocxBlob(buildContent(ownerValue));
+            const fileName = `${documentNumber}.docx`;
             if (tenancy && user) {
-                const file = new File([blob], `${documentNumber}.pdf`, { type: 'application/pdf' });
+                const file = new File([blob], fileName, { type: WORD_MIME });
                 await uploadTenancyDocument(user.id, file, {
                     tenancyId: tenancy.tenancyId,
                     tenancyPersonId: null,
                     documentType: 'Mieterbescheinigung',
                 });
             }
-            window.open(URL.createObjectURL(blob), '_blank', 'noopener,noreferrer');
+            // Word blobs aren't browser-renderable, so — unlike the PDF this
+            // replaced, which could just be window.open()'d — this has to be
+            // saved directly for the user to open in Word.
+            downloadBlob(blob, fileName);
         } finally {
             setIsGenerating(false);
         }
     };
 
-    handleGenerateRef.current = () => void handleGenerate();
+    // Always asks for the Eigentümer answer before generating if it hasn't
+    // been given yet — including via the ?autoGenerate=1 shortcut, which
+    // previously generated immediately with a silent default.
+    const handleGenerate = () => {
+        if (!canGenerate) return;
+        if (isLandlordOwner === null) {
+            generateAfterOwnerChoice.current = true;
+            setOwnerModalOpen(true);
+            return;
+        }
+        void runGenerate(isLandlordOwner);
+    };
+
+    const openOwnerModalToEdit = () => {
+        generateAfterOwnerChoice.current = false;
+        setOwnerModalOpen(true);
+    };
+
+    const handleConfirmOwner = (value: boolean) => {
+        setIsLandlordOwner(value);
+        setOwnerModalOpen(false);
+        if (generateAfterOwnerChoice.current) {
+            generateAfterOwnerChoice.current = false;
+            void runGenerate(value);
+        }
+    };
+
+    handleGenerateRef.current = handleGenerate;
 
     return (
         <div className="min-h-screen bg-background pb-24">
@@ -271,6 +329,22 @@ export default function TenantCertificatePage({ propertyId, unitId }: { property
                                         <Field label="Straße & Hausnummer" value={landlord ? landlordStreet : '–'} />
                                         <Field label="PLZ & Ort" value={landlord ? landlordCity : '–'} />
                                     </div>
+                                    <div className="mt-4 pt-4 border-t border-border flex items-center justify-between gap-3 flex-wrap">
+                                        <div>
+                                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Eigentümer der Wohnung</p>
+                                            {isLandlordOwner === null ? (
+                                                <span className="text-sm text-muted-foreground">Noch nicht angegeben</span>
+                                            ) : (
+                                                <Pill ok={isLandlordOwner} label={isLandlordOwner ? 'Ja' : 'Nein'} />
+                                            )}
+                                        </div>
+                                        <Button
+                                            label={isLandlordOwner === null ? 'Angeben' : 'Ändern'}
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={openOwnerModalToEdit}
+                                        />
+                                    </div>
                                 </DataCard>
                             )}
                         </div>
@@ -313,7 +387,8 @@ export default function TenantCertificatePage({ propertyId, unitId }: { property
                             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Mietverhältnis</p>
                             <DataCard icon={Icons.FileText} title="Mietvertrag" source="Bestandsobjekt · Mietvertrag">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <Field label="Mietbeginn" value={mietbeginn} />
+                                    <Field label="Mieteinzug" value={mietbeginn} />
+                                    <Field label="Mietauszug" value={mietende ?? 'noch nicht bekannt'} />
                                     <div>
                                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Mietvertrag aktiv</p>
                                         <div className="mt-1"><Pill ok={mietvertragAktiv} label={mietvertragAktiv ? 'Ja' : 'Nein'} /></div>
@@ -341,8 +416,8 @@ export default function TenantCertificatePage({ propertyId, unitId }: { property
                                         </div>
                                     ) : (
                                         <p className="text-sm text-muted-foreground max-w-md">
-                                            Lade eine Unterschrift als Bilddatei hoch (PNG, JPG). Diese wird automatisch in das generierte PDF eingefügt.
-                                            Alternativ kann die Unterschrift nachträglich in PDF ergänzt werden.
+                                            Lade eine Unterschrift als Bilddatei hoch (PNG, JPG). Diese wird automatisch in das generierte Word-Dokument eingefügt.
+                                            Alternativ kann die Unterschrift nachträglich im Dokument ergänzt werden.
                                         </p>
                                     )}
                                     <input
@@ -389,12 +464,26 @@ export default function TenantCertificatePage({ propertyId, unitId }: { property
             <StickyActionBar
                 show={true}
                 onGhost={() => router.push(backHref)}
-                onPrimary={() => void handleGenerate()}
+                onPrimary={handleGenerate}
                 ghostLabel={BUTTON_DETAILS.Back.label}
                 ghostIcon={<BUTTON_DETAILS.Back.icon />}
-                primaryLabel={isGenerating ? 'Wird erstellt…' : 'PDF generieren'}
+                primaryLabel={isGenerating ? 'Wird erstellt…' : 'Word-Dokument generieren'}
                 primaryIcon={<Icons.FileText className="w-4 h-4" />}
                 primaryDisabled={!canGenerate || isGenerating}
+            />
+
+            <Modal
+                open={ownerModalOpen}
+                onClose={() => { setOwnerModalOpen(false); generateAfterOwnerChoice.current = false; }}
+                title="Eigentümer der Wohnung"
+                subtitle="Ist der Vermieter gleichzeitig Eigentümer der Wohnung?"
+                icon={<Icons.Landmark className="w-5 h-5" />}
+                footer={
+                    <>
+                        <Button label="Nein" variant="outline" onClick={() => handleConfirmOwner(false)} />
+                        <Button label="Ja" variant="primary" onClick={() => handleConfirmOwner(true)} />
+                    </>
+                }
             />
         </div>
     );

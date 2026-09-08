@@ -976,7 +976,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                             <input
                                 id={`doc-upload-${row.key}`}
                                 type="file"
-                                accept=".pdf,.jpg,.jpeg,.png"
+                                accept=".pdf,.jpg,.jpeg,.png,.docx"
                                 className="sr-only"
                                 disabled={isPending}
                                 onChange={(e) => {
@@ -1027,7 +1027,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                 <input
                     id={`doc-upload-footer-${row.key}`}
                     type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
+                    accept=".pdf,.jpg,.jpeg,.png,.docx"
                     className="sr-only"
                     disabled={isPending}
                     onChange={(e) => {
