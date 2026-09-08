@@ -367,8 +367,18 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                             {data.overUnderCoverage < 0 ? '-' : '+'}{euro(Math.abs(data.overUnderCoverage))}
                                         </td>
                                         <td className="px-3 py-2 border-l border-border">–</td>
-                                        <td className="px-3 py-2 text-right whitespace-nowrap text-warning">
-                                            {data.prepaymentDelta != null ? `${data.prepaymentDelta >= 0 ? '+' : '-'}${euro(Math.abs(data.prepaymentDelta))}` : '–'}
+                                        <td className="px-3 py-2 text-right whitespace-nowrap">–</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr className={data.budgetCoverage === 'shortfall' ? 'text-destructive' : 'text-success'}>
+                                        <td className="px-3 py-2 font-medium">
+                                            {data.budgetCoverage === 'shortfall' ? 'Voraussichtliche Nachzahlung' : 'Voraussichtliches Guthaben'}
+                                        </td>
+                                        <td className="px-3 py-2 border-l border-border">–</td>
+                                        <td className="px-3 py-2 text-right whitespace-nowrap">–</td>
+                                        <td className="px-3 py-2 border-l border-border">–</td>
+                                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                                            {data.budgetOverUnderCoverage < 0 ? '-' : '+'}{euro(Math.abs(data.budgetOverUnderCoverage))}
                                         </td>
                                         <td></td>
                                     </tr>

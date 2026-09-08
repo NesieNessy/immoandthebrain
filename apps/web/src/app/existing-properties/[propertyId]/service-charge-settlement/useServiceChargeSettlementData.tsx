@@ -258,6 +258,11 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     // (2) vs (3): shortfall = prepayment too low (increase), surplus = prepayment too high (decrease).
     const budgetCoverage = compareBudgetCoverage(annualPrepayment, unitBudgetShare);
+    // Same comparison as overUnderCoverage, but against next year's *budgeted*
+    // share instead of the actual settlement — an annual € figure, so it's
+    // the correct like-for-like counterpart to overUnderCoverage rather than
+    // prepaymentDelta (a monthly rate change, not directly comparable).
+    const budgetOverUnderCoverage = unitBudgetShare - annualPrepayment;
 
     // Budget plan (3) divided by 12, compared against the current monthly NK-Vorauszahlung.
     const newMonthlyPrepayment = totalBudgetAllocable > 0 ? Math.round((unitBudgetShare / 12) * 100) / 100 : null;
@@ -374,18 +379,27 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             });
             if (historyEntry) setMiscRentHistory((prev) => [historyEntry, ...prev]);
 
+            // This maintenance_costs record is displayed as *this tenant's own*
+            // Nebenkosten breakdown (see "Nebenkosten" on the Vertragsdaten
+            // page, whose "Detailerfassung" button links back to this exact
+            // settlement) — it must hold the unit's share, not the whole
+            // building's totals, or a multi-unit property would show every
+            // tenant the full building's costs instead of their own portion.
+            const nonAllocableShare = Math.round(budgetSplit.nonAllocable * unitShare * 100) / 100;
             const mcPayload = {
                 costBreakdown: true,
-                allocableCosts: budgetSplit.allocable,
-                nonAllocableCosts: budgetSplit.nonAllocable,
-                totalCosts: budgetSplit.total,
+                allocableCosts: unitBudgetShare,
+                nonAllocableCosts: nonAllocableShare,
+                totalCosts: Math.round((unitBudgetShare + nonAllocableShare) * 100) / 100,
                 allocableCostsProjection: true,
                 nonAllocableCostsProjection: true,
                 totalCostsProjection: true,
                 costItems: costItems.map((item, index) => ({
                     id: item.id != null ? String(item.id) : `new-${index}`,
                     label: item.label,
-                    amount: Number(item.budgetAmount) || 0,
+                    amount: item.allocable
+                        ? (budgetShareForItem(item) ?? 0)
+                        : Math.round((Number(item.budgetAmount) || 0) * unitShare * 100) / 100,
                     allocable: item.allocable,
                 })),
             };
@@ -614,7 +628,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         actualSplit, budgetSplit,
         unitActualShare, unitBudgetShare,
         actualShareForItem, budgetShareForItem,
-        annualPrepayment, currentMonthlyPrepayment, overUnderCoverage, settlementCoverage, budgetCoverage,
+        annualPrepayment, currentMonthlyPrepayment, overUnderCoverage, settlementCoverage, budgetCoverage, budgetOverUnderCoverage,
         newMonthlyPrepayment, prepaymentDelta, newTotalRent, settlementYear,
         canGeneratePdf, canApplyPrepayment,
         // handlers
