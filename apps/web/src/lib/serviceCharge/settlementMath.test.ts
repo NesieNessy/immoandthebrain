@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
     compareBudgetCoverage,
     compareSettlementCoverage,
+    defaultSettlementPeriod,
+    isFullCalendarYear,
     prorateAnnualPrepayment,
     splitByAllocable,
 } from './settlementMath';
@@ -80,5 +82,45 @@ describe('prorateAnnualPrepayment', () => {
         const result = prorateAnnualPrepayment(130, history, new Date(2026, 0, 1), new Date(2026, 11, 31));
         const expected = (80 * 12 * 90 + 100 * 12 * 153 + 130 * 12 * 122) / 365;
         expect(result).toBeCloseTo(expected, 2);
+    });
+});
+
+describe('isFullCalendarYear', () => {
+    it('is true for Jan 1 – Dec 31 of the same year', () => {
+        expect(isFullCalendarYear(new Date(2026, 0, 1), new Date(2026, 11, 31))).toBe(true);
+    });
+
+    it('is false when the start date is not Jan 1', () => {
+        expect(isFullCalendarYear(new Date(2026, 0, 2), new Date(2026, 11, 31))).toBe(false);
+    });
+
+    it('is false when the end date is not Dec 31', () => {
+        expect(isFullCalendarYear(new Date(2026, 0, 1), new Date(2026, 11, 30))).toBe(false);
+    });
+
+    it('is false when start and end fall in different years', () => {
+        expect(isFullCalendarYear(new Date(2025, 0, 1), new Date(2026, 11, 31))).toBe(false);
+    });
+});
+
+describe('defaultSettlementPeriod', () => {
+    it('defaults to Jan 1 – Dec 31 of the current year when there is no move-out date', () => {
+        const { start, end } = defaultSettlementPeriod(null, 2026);
+        expect(start).toEqual(new Date(2026, 0, 1));
+        expect(end).toEqual(new Date(2026, 11, 31));
+    });
+
+    it('ends at the move-out date instead of Dec 31 when one is given', () => {
+        const moveOut = new Date(2026, 5, 15);
+        const { start, end } = defaultSettlementPeriod(moveOut, 2026);
+        expect(start).toEqual(new Date(2026, 0, 1));
+        expect(end).toBe(moveOut);
+    });
+
+    it('uses the move-out date\'s own year for the period start, not the passed-in current year', () => {
+        const moveOut = new Date(2025, 3, 10);
+        const { start, end } = defaultSettlementPeriod(moveOut, 2026);
+        expect(start).toEqual(new Date(2025, 0, 1));
+        expect(end).toBe(moveOut);
     });
 });

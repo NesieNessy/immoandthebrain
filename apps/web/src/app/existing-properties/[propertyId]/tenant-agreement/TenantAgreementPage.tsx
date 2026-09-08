@@ -3,10 +3,18 @@
 import { formatUnitLabel } from '@/components/features/PropertyDisplay';
 import { AdjustmentStatusBox } from '../tenant-data/AdjustmentStatusBox';
 import { DataCard } from '../tenant-data/DocumentGeneratorParts';
-import { Button, CalendarField, ConfirmDeleteModal, Header, Icons, Modal, NumberField, PAGE_CONTAINER_CLASS, SectionLabel, StickyActionBar, Switch, Tag, UnsavedChangesModal, type BreadcrumbItem } from '@/components/ui';
+import { Button, CalendarField, ConfirmDeleteModal, Dropdown, Header, Icons, Modal, NumberField, PAGE_CONTAINER_CLASS, SectionLabel, StickyActionBar, Switch, Tag, TextArea, UnsavedChangesModal, type BreadcrumbItem } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { formatDeDate } from '@/lib/utils';
-import type { Property, PropertyUnit } from '@immonext/types';
+import type { Property, PropertyUnit, RentalTermsPetsAllowed, RentalTermsRedecorationClause, RentalTermsSubletAllowed } from '@immonext/types';
+import { useRentalAgreementGenerator } from '../tenant-data/rentalAgreementGenerator';
+import {
+    PETS_OPTIONS,
+    REDECORATION_OPTIONS,
+    RENOVATION_ADJUSTMENT_OPTIONS,
+    SUBLET_OPTIONS,
+    type TriState,
+} from '../tenant-data/rentalAgreementLetter';
 import { euro, useTenantUnitData } from '../tenant-data/useTenantUnitData';
 
 interface TenantAgreementPageProps {
@@ -23,6 +31,10 @@ interface TenantAgreementPageProps {
  *  for that side. Only the data layer (useTenantUnitData) is shared. */
 export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUnits }: TenantAgreementPageProps) {
     const data = useTenantUnitData(propertyId, property, unit, hasMultipleUnits);
+    // Own independent data load (see useRentalAgreementGenerator's doc
+    // comment) — lets "PDF generieren" run right here instead of navigating
+    // to the /rental-agreement review page first.
+    const rentalGen = useRentalAgreementGenerator(propertyId, String(unit.propertyUnitId));
 
     const currentTenantHref = hasMultipleUnits
         ? `/existing-properties/${propertyId}/tenant-data/${unit.propertyUnitId}`
@@ -85,6 +97,11 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                             {data.error}
                         </div>
                     )}
+                    {rentalGen.saveError && (
+                        <div className="px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/30 text-sm text-destructive">
+                            {rentalGen.saveError}
+                        </div>
+                    )}
 
                     <div className="flex items-center gap-2">
                         <Tag label={data.status} variant={data.status === 'Vermietet' ? 'success' : 'muted'} size="md" />
@@ -112,7 +129,7 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
 
                     <div>
                         <SectionLabel>Miete & Nebenkosten</SectionLabel>
-                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                             <NumberField
                                 label="Netto-Mieteinnahmen"
                                 unit="€"
@@ -120,6 +137,17 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                                 onChange={(e) => data.setRentalForm((prev) => ({ ...prev, coldRent: e.target.value }))}
                                 min={0}
                             />
+                            <div>
+                                <NumberField
+                                    label="NK-Vorauszahlung"
+                                    optional
+                                    unit="€"
+                                    value={data.rentalForm.miscRent}
+                                    onChange={(e) => data.setRentalForm((prev) => ({ ...prev, miscRent: e.target.value }))}
+                                    min={0}
+                                />
+                                <p className="mt-1 text-xs text-muted-foreground">Wird auch von &bdquo;NK-Vorauszahlung übernehmen&ldquo; in der Nebenkostenabrechnung aktualisiert</p>
+                            </div>
                             <NumberField
                                 label="Stellplatz"
                                 optional
@@ -354,12 +382,12 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                                                     onClick={() => data.goTo(`${data.generatorBase}/rental-agreement?personId=${row.tenancyPersonId}`)}
                                                 />
                                                 <Button
-                                                    label="PDF generieren"
-                                                    icon={<Icons.FileText className="w-4 h-4" />}
+                                                    label={rentalGen.isGeneratingFor(row.tenancyPersonId) ? 'Wird erstellt…' : 'PDF generieren'}
+                                                    icon={rentalGen.isGeneratingFor(row.tenancyPersonId) ? <Icons.Loader2 className="w-4 h-4 animate-spin" /> : <Icons.FileText className="w-4 h-4" />}
                                                     variant="primary"
-                                                    disabled={data.landlordMissing || data.tenancy == null || row.tenancyPersonId == null}
+                                                    disabled={data.landlordMissing || data.tenancy == null || row.tenancyPersonId == null || rentalGen.isGenerating}
                                                     title={row.tenancyPersonId == null ? 'Bitte zuerst speichern' : undefined}
-                                                    onClick={() => data.goTo(`${data.generatorBase}/rental-agreement?personId=${row.tenancyPersonId}&autoGenerate=1`)}
+                                                    onClick={() => rentalGen.requestGenerate(row.tenancyPersonId)}
                                                 />
                                             </>
                                         }
@@ -387,11 +415,11 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                                                 onClick={() => data.goTo(`${data.generatorBase}/rental-agreement`)}
                                             />
                                             <Button
-                                                label="PDF generieren"
-                                                icon={<Icons.FileText className="w-4 h-4" />}
+                                                label={rentalGen.isGeneratingFor(null) ? 'Wird erstellt…' : 'PDF generieren'}
+                                                icon={rentalGen.isGeneratingFor(null) ? <Icons.Loader2 className="w-4 h-4 animate-spin" /> : <Icons.FileText className="w-4 h-4" />}
                                                 variant="primary"
-                                                disabled={data.landlordMissing || data.tenancy == null}
-                                                onClick={() => data.goTo(`${data.generatorBase}/rental-agreement?autoGenerate=1`)}
+                                                disabled={data.landlordMissing || data.tenancy == null || rentalGen.isGenerating}
+                                                onClick={() => rentalGen.requestGenerate(null)}
                                             />
                                         </>
                                     }
@@ -462,6 +490,79 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                         ))}
                     </div>
                 )}
+            </Modal>
+
+            <Modal
+                open={rentalGen.clauseModalOpen}
+                onClose={rentalGen.closeClauseModal}
+                title="Anpassungsregelungen"
+                subtitle="Diese Angaben fehlen noch für den Mietvertrag. Ergänze sie kurz, oder lasse sie leer für „Nicht geregelt“."
+                icon={<Icons.FileSignature className="w-5 h-5" />}
+                footer={
+                    <>
+                        <Button label={BUTTON_DETAILS.Cancel.label} variant="outline" onClick={rentalGen.closeClauseModal} />
+                        <Button
+                            label={rentalGen.isGenerating ? 'Wird erstellt…' : 'Übernehmen & generieren'}
+                            icon={rentalGen.isGenerating ? <Icons.Loader2 className="w-4 h-4 animate-spin" /> : <Icons.FileText className="w-4 h-4" />}
+                            variant="primary"
+                            disabled={rentalGen.isGenerating}
+                            onClick={rentalGen.confirmClausesAndGenerate}
+                        />
+                    </>
+                }
+            >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <CalendarField
+                        label="Nächste Mietanpassung"
+                        optional
+                        value={rentalGen.nextRentAdjustmentDate}
+                        onChange={rentalGen.setNextRentAdjustmentDate}
+                    />
+                    <NumberField
+                        label="Höhe der Anpassung"
+                        optional
+                        unit="€"
+                        min={0}
+                        value={rentalGen.nextRentAdjustmentAmount}
+                        onChange={(e) => rentalGen.setNextRentAdjustmentAmount(e.target.value)}
+                    />
+                    <Dropdown
+                        label="Sanierungsanpassung geplant"
+                        optional
+                        options={RENOVATION_ADJUSTMENT_OPTIONS}
+                        value={rentalGen.renovationAdjustmentPlanned}
+                        onChange={(e) => rentalGen.setRenovationAdjustmentPlanned(e.target.value as TriState)}
+                    />
+                    <Dropdown
+                        label="Haustierhaltung"
+                        optional
+                        options={PETS_OPTIONS}
+                        value={rentalGen.petsAllowed}
+                        onChange={(e) => rentalGen.setPetsAllowed(e.target.value as RentalTermsPetsAllowed | '')}
+                    />
+                    <Dropdown
+                        label="Schönheitsreparaturen"
+                        optional
+                        options={REDECORATION_OPTIONS}
+                        value={rentalGen.redecorationClause}
+                        onChange={(e) => rentalGen.setRedecorationClause(e.target.value as RentalTermsRedecorationClause | '')}
+                    />
+                    <Dropdown
+                        label="Untervermietung"
+                        optional
+                        options={SUBLET_OPTIONS}
+                        value={rentalGen.subletAllowed}
+                        onChange={(e) => rentalGen.setSubletAllowed(e.target.value as RentalTermsSubletAllowed | '')}
+                    />
+                    <TextArea
+                        label="Sonstige Vereinbarungen"
+                        optional
+                        placeholder="Freitext für individuelle Vereinbarungen…"
+                        className="sm:col-span-2"
+                        value={rentalGen.additionalTerms}
+                        onChange={(e) => rentalGen.setAdditionalTerms(e.target.value)}
+                    />
+                </div>
             </Modal>
         </div>
     );

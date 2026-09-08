@@ -7,6 +7,7 @@ import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import type { Property, PropertyUnit } from '@immonext/types';
 import { formatDeDate } from '@/lib/utils';
+import { useMieterbescheinigungGenerator } from './mieterbescheinigungGenerator';
 import { MIETERBESCHEINIGUNG, personDisplayName, useTenantUnitData } from './useTenantUnitData';
 
 interface CurrentTenantPageProps {
@@ -27,6 +28,10 @@ interface CurrentTenantPageProps {
  *  bar) beyond the data layer. */
 export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits, archivedTenancyId }: CurrentTenantPageProps) {
     const data = useTenantUnitData(propertyId, property, unit, hasMultipleUnits, archivedTenancyId);
+    // Own independent data load (see useMieterbescheinigungGenerator's doc
+    // comment) — lets "Word-Dokument generieren" run right here instead of
+    // navigating to the /certificate review page first.
+    const certGen = useMieterbescheinigungGenerator(propertyId, String(unit.propertyUnitId));
 
     const address = `${property.street} ${property.houseNumber}, ${property.postalCode} ${property.city}`;
     const unitLabel = formatUnitLabel(unit.unitLabel, unit.floor, unit.locationNote);
@@ -239,13 +244,15 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                                             onClick={() => data.goTo(`${data.generatorBase}/certificate`)}
                                         />
                                         {!data.isArchived && (
-                                            <Button
-                                                label="Word-Dokument generieren"
-                                                icon={<Icons.FileText className="w-4 h-4" />}
-                                                variant="primary"
-                                                disabled={data.tenancy == null}
-                                                onClick={() => data.goTo(`${data.generatorBase}/certificate?autoGenerate=1`)}
-                                            />
+                                            <span title={!certGen.canGenerate ? 'Bitte zuerst Vermieter- und Mieterdaten vervollständigen' : undefined}>
+                                                <Button
+                                                    label={certGen.isGenerating ? 'Wird erstellt…' : 'Word-Dokument generieren'}
+                                                    icon={certGen.isGenerating ? <Icons.Loader2 className="w-4 h-4 animate-spin" /> : <Icons.FileText className="w-4 h-4" />}
+                                                    variant="primary"
+                                                    disabled={!certGen.canGenerate || certGen.isGenerating}
+                                                    onClick={certGen.handleGenerate}
+                                                />
+                                            </span>
                                         )}
                                     </>
                                 }
@@ -446,6 +453,20 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                     Du kannst direkt einen neuen Mieter erfassen, oder zuerst den Mieterauszug für den bisherigen Mieter durchführen.
                 </p>
             </Modal>
+
+            <Modal
+                open={certGen.ownerModalOpen}
+                onClose={certGen.closeOwnerModal}
+                title="Eigentümer der Wohnung"
+                subtitle="Ist der Vermieter gleichzeitig Eigentümer der Wohnung?"
+                icon={<Icons.Landmark className="w-5 h-5" />}
+                footer={
+                    <>
+                        <Button label="Nein" variant="outline" onClick={() => certGen.handleConfirmOwner(false)} />
+                        <Button label="Ja" variant="primary" onClick={() => certGen.handleConfirmOwner(true)} />
+                    </>
+                }
+            />
         </div>
     );
 }

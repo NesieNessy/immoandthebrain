@@ -21,14 +21,18 @@ import { addAdjustmentHistoryEntry, getAdjustmentHistoryByTenancy } from '@/lib/
 import { uploadTenancyDocument } from '@/lib/supabase/tenancy_document.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
 import { createMaintenanceCosts, getMaintenanceCostsById, updateMaintenanceCosts } from '@/lib/supabase/maintenance_costs.supabase';
-import { formatDeDate } from '@/lib/utils';
+import { downloadBlob, formatDeDate } from '@/lib/utils';
 import { htmlToPdfBlob } from '@/lib/pdf/htmlToPdf';
+import { authFetch } from '@/lib/api/authFetch';
 import {
     compareBudgetCoverage,
     compareSettlementCoverage,
+    defaultSettlementPeriod,
+    isFullCalendarYear,
     prorateAnnualPrepayment,
     splitByAllocable,
 } from '@/lib/serviceCharge/settlementMath';
+import { mergeExtractedCostItems, type ExtractedSettlementData } from '@/lib/serviceCharge/settlementExtraction';
 import type {
     MaintenanceCosts,
     PersonalData,
@@ -44,6 +48,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { DEFAULT_COST_ITEMS, euro } from '../tenant-data/useTenantUnitData';
+import { readFileAsDataUrl } from '../tenant-data/DocumentGeneratorParts';
 import { formatUnitLabel } from '@/components/features/PropertyDisplay';
 import { serviceChargeStatementHtml } from './serviceChargeStatementLetter';
 
@@ -83,15 +88,6 @@ function serializeCostItems(items: CostItemForm[], periodStart: Date | undefined
     });
 }
 
-/** A settlement period counts as "whole year" when it spans exactly Jan 1 –
- *  Dec 31 of a single year — the common case, vs. a shorter custom range
- *  (e.g. a tenant moved in/out mid-year). */
-function isFullCalendarYear(start: Date, end: Date): boolean {
-    return start.getMonth() === 0 && start.getDate() === 1
-        && end.getMonth() === 11 && end.getDate() === 31
-        && start.getFullYear() === end.getFullYear();
-}
-
 export { euro };
 
 export function useServiceChargeSettlementData(propertyId: string, property: Property, unit: PropertyUnit, hasMultipleUnits: boolean) {
@@ -114,6 +110,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingSource, setIsUploadingSource] = useState(false);
+    const [isExtractingSettlement, setIsExtractingSettlement] = useState(false);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isApplyingPrepayment, setIsApplyingPrepayment] = useState(false);
     const [previewHtml, setPreviewHtml] = useState<string | null>(null);
@@ -154,10 +151,14 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 setCostItems(items);
                 setOriginalSnapshot(loadedItems.length > 0 ? serializeCostItems(items, new Date(currentSettlement.periodStart), new Date(currentSettlement.periodEnd)) : '');
             } else {
-                const currentYear = new Date().getFullYear();
-                setPeriodStart(new Date(currentYear, 0, 1));
-                setPeriodEnd(new Date(currentYear, 11, 31));
-                setPeriodModeState('year');
+                // Default the period to the tenant's Mietauszug date when
+                // there is one — a settlement for a moved-out tenant almost
+                // always needs to end there, not run through Dec 31.
+                const moveOutDate = currentTenancy?.tenancyEndDate ? new Date(currentTenancy.tenancyEndDate) : null;
+                const { start, end } = defaultSettlementPeriod(moveOutDate, new Date().getFullYear());
+                setPeriodStart(start);
+                setPeriodEnd(end);
+                setPeriodModeState(isFullCalendarYear(start, end) ? 'year' : 'custom');
                 setCostItems(defaultItems());
                 setOriginalSnapshot('');
             }
@@ -257,6 +258,11 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     // (2) vs (3): shortfall = prepayment too low (increase), surplus = prepayment too high (decrease).
     const budgetCoverage = compareBudgetCoverage(annualPrepayment, unitBudgetShare);
+    // Same comparison as overUnderCoverage, but against next year's *budgeted*
+    // share instead of the actual settlement — an annual € figure, so it's
+    // the correct like-for-like counterpart to overUnderCoverage rather than
+    // prepaymentDelta (a monthly rate change, not directly comparable).
+    const budgetOverUnderCoverage = unitBudgetShare - annualPrepayment;
 
     // Budget plan (3) divided by 12, compared against the current monthly NK-Vorauszahlung.
     const newMonthlyPrepayment = totalBudgetAllocable > 0 ? Math.round((unitBudgetShare / 12) * 100) / 100 : null;
@@ -354,7 +360,12 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         setIsApplyingPrepayment(true);
         setError(null);
         try {
-            const updatedTenancy = await updateTenancy(tenancy.tenancyId, { miscRent: newMonthlyPrepayment });
+            // warmRent is persisted (not just derived on the fly) because the
+            // generated Mietvertrag document reads tenancy.warmRent directly —
+            // without updating it here it would still show the old total rent
+            // after applying a new NK-Vorauszahlung.
+            const newWarmRent = Math.round(((tenancy.coldRent ?? 0) + newMonthlyPrepayment + (tenancy.parkingSpaceRent ?? 0)) * 100) / 100;
+            const updatedTenancy = await updateTenancy(tenancy.tenancyId, { miscRent: newMonthlyPrepayment, warmRent: newWarmRent });
             if (updatedTenancy) setTenancy(updatedTenancy);
 
             const effectiveDate = format(new Date(settlementYear + 1, 0, 1), 'yyyy-MM-dd');
@@ -368,18 +379,27 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             });
             if (historyEntry) setMiscRentHistory((prev) => [historyEntry, ...prev]);
 
+            // This maintenance_costs record is displayed as *this tenant's own*
+            // Nebenkosten breakdown (see "Nebenkosten" on the Vertragsdaten
+            // page, whose "Detailerfassung" button links back to this exact
+            // settlement) — it must hold the unit's share, not the whole
+            // building's totals, or a multi-unit property would show every
+            // tenant the full building's costs instead of their own portion.
+            const nonAllocableShare = Math.round(budgetSplit.nonAllocable * unitShare * 100) / 100;
             const mcPayload = {
                 costBreakdown: true,
-                allocableCosts: budgetSplit.allocable,
-                nonAllocableCosts: budgetSplit.nonAllocable,
-                totalCosts: budgetSplit.total,
+                allocableCosts: unitBudgetShare,
+                nonAllocableCosts: nonAllocableShare,
+                totalCosts: Math.round((unitBudgetShare + nonAllocableShare) * 100) / 100,
                 allocableCostsProjection: true,
                 nonAllocableCostsProjection: true,
                 totalCostsProjection: true,
                 costItems: costItems.map((item, index) => ({
                     id: item.id != null ? String(item.id) : `new-${index}`,
                     label: item.label,
-                    amount: Number(item.budgetAmount) || 0,
+                    amount: item.allocable
+                        ? (budgetShareForItem(item) ?? 0)
+                        : Math.round((Number(item.budgetAmount) || 0) * unitShare * 100) / 100,
                     allocable: item.allocable,
                 })),
             };
@@ -422,6 +442,47 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         return created;
     };
 
+    // ── Automatic data takeover from the uploaded source document ───────────
+    // Documents vary wildly in layout (scan, photo, export from any property
+    // management tool), so a fixed template parser can't handle them — the
+    // file is sent to Claude with a structured-output tool call instead. The
+    // result only pre-fills the (still editable, still unsaved) form state;
+    // nothing is persisted until the user reviews it and hits "Abrechnung
+    // speichern", same as manual entry.
+    const extractSettlementDocument = async (file: File): Promise<ExtractedSettlementData | null> => {
+        const fileDataUrl = await readFileAsDataUrl(file);
+        const response = await authFetch('/api/settlement-extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileDataUrl, mimeType: file.type }),
+        });
+        if (!response.ok) return null;
+        return await response.json() as ExtractedSettlementData;
+    };
+
+    const applyExtractedData = (extracted: ExtractedSettlementData) => {
+        if (extracted.periodStart && extracted.periodEnd) {
+            const start = new Date(extracted.periodStart);
+            const end = new Date(extracted.periodEnd);
+            if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+                setPeriodStart(start);
+                setPeriodEnd(end);
+                setPeriodModeState(isFullCalendarYear(start, end) ? 'year' : 'custom');
+            }
+        }
+        if (extracted.costItems.length > 0) {
+            setCostItems((prev) => mergeExtractedCostItems(prev, extracted.costItems, (item) => ({
+                id: null,
+                label: item.label,
+                allocable: item.allocable,
+                actualAmount: item.actualAmount != null ? String(item.actualAmount) : '',
+                budgetAmount: item.budgetAmount != null ? String(item.budgetAmount) : '',
+                actualShareOverride: '',
+                budgetShareOverride: '',
+            })));
+        }
+    };
+
     const handleUploadSourceDocument = async (file: File) => {
         if (!user) return;
         setIsUploadingSource(true);
@@ -438,6 +499,21 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             if (updated) setSettlement(updated);
         } finally {
             setIsUploadingSource(false);
+        }
+
+        setIsExtractingSettlement(true);
+        try {
+            const extracted = await extractSettlementDocument(file);
+            if (extracted && (extracted.costItems.length > 0 || extracted.periodStart)) {
+                applyExtractedData(extracted);
+                showToast(`${extracted.costItems.length} Kostenposition(en) aus dem Dokument übernommen. Bitte prüfen und speichern.`, 'success');
+            } else {
+                showToast('Datei hochgeladen. Automatische Datenübernahme war nicht möglich – bitte Werte manuell erfassen.', 'error');
+            }
+        } catch {
+            showToast('Automatische Datenübernahme fehlgeschlagen – bitte Werte manuell erfassen.', 'error');
+        } finally {
+            setIsExtractingSettlement(false);
         }
     };
 
@@ -527,7 +603,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 tenancyPersonId: null,
                 documentType: 'Nebenkostenabrechnung',
             });
-            window.open(URL.createObjectURL(blob), '_blank', 'noopener,noreferrer');
+            downloadBlob(blob, file.name);
             showToast('Nebenkostenabrechnung als PDF erstellt.', 'success');
         } finally {
             setIsGeneratingPdf(false);
@@ -540,7 +616,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     return {
         // state
-        isLoading, isSaving, isUploadingSource, isGeneratingPdf, isApplyingPrepayment, error,
+        isLoading, isSaving, isUploadingSource, isExtractingSettlement, isGeneratingPdf, isApplyingPrepayment, error,
         settlement, periodStart, setPeriodStart, periodEnd, setPeriodEnd,
         periodMode, setPeriodMode, setSettlementYear,
         costItems, tenancy, landlord, useCaseMenuItems, backHref,
@@ -552,7 +628,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         actualSplit, budgetSplit,
         unitActualShare, unitBudgetShare,
         actualShareForItem, budgetShareForItem,
-        annualPrepayment, currentMonthlyPrepayment, overUnderCoverage, settlementCoverage, budgetCoverage,
+        annualPrepayment, currentMonthlyPrepayment, overUnderCoverage, settlementCoverage, budgetCoverage, budgetOverUnderCoverage,
         newMonthlyPrepayment, prepaymentDelta, newTotalRent, settlementYear,
         canGeneratePdf, canApplyPrepayment,
         // handlers
