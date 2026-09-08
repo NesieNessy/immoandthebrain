@@ -3,7 +3,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { Icons } from "../common";
-import { useFieldIds } from "./fieldIds";
+import { FieldLabel, useFieldIds } from "./fieldIds";
 import { Calendar } from "../ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { format } from "date-fns";
@@ -13,6 +13,9 @@ interface CalendarFieldProps extends Omit<React.InputHTMLAttributes<HTMLInputEle
   error?: string;
   value?: Date;
   onChange?: (date: Date | undefined) => void;
+  /** Appends a muted "(optional)" to the label instead of the mandatory
+   *  default (no marker). */
+  optional?: boolean;
 }
 
 export function CalendarField({
@@ -20,6 +23,7 @@ export function CalendarField({
   error,
   value,
   onChange,
+  optional,
   className,
   id,
   "aria-describedby": ariaDescribedBy,
@@ -82,9 +86,7 @@ export function CalendarField({
   return (
     <div className="w-full">
       {label && (
-        <label htmlFor={controlId} className="block mb-2 text-sm text-foreground">
-          {label}
-        </label>
+        <FieldLabel label={label} optional={optional} htmlFor={controlId} className="block mb-2 text-sm text-foreground" />
       )}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild disabled={props.readOnly || props.disabled}>

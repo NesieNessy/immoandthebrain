@@ -526,19 +526,20 @@ export default function DocumentsPage() {
                 {uploadCategory !== 'Persönlich' && (
                     <Dropdown
                         label="Objekt"
+                        optional
                         options={[{ value: '', label: 'Kein Objekt verknüpft' }, ...uploadObjectOptions]}
                         value={uploadObjectId}
                         onChange={(e) => setUploadObjectId(e.target.value)}
                     />
                 )}
                 <TextField
-                    label="Name *"
+                    label="Name"
                     placeholder="z.B. Gehaltsnachweis"
                     value={uploadName}
                     onChange={(e) => setUploadName(e.target.value)}
                 />
                 <div>
-                    <label className="block mb-2 text-sm text-foreground">Datei *</label>
+                    <label className="block mb-2 text-sm text-foreground">Datei</label>
                     <input
                         id="document-upload-file"
                         type="file"

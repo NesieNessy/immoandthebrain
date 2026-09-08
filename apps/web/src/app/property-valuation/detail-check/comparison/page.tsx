@@ -153,6 +153,7 @@ function ComparisonContent() {
     <PropertyValuationLayout
       currentStep={8}
       title="Vergleich"
+      showFieldLegend
       actions={
         <Button
           label="Überspringen"

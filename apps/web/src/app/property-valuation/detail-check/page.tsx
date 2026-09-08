@@ -9,6 +9,7 @@ import { authFetch } from '@/lib/api/authFetch';
 import { createAcquisitionCosts } from '@/lib/supabase/acquisition_costs.supabase';
 import { createParkingSpace } from '@/lib/supabase/parking_space.supabase';
 import { createProperty } from '@/lib/supabase/property.supabase';
+import { cn } from '@/lib/utils';
 import type { EnergyEfficient } from '@immonext/types';
 import { MoreVertical, Building2 } from 'lucide-react';
 import Link from 'next/link';
@@ -51,11 +52,18 @@ interface DetailCheckRow extends Record<string, unknown> {
   resumeRoute: string;
 }
 
+// "Nicht begonnen" stays the actual status value (used for sorting/filtering
+// and elsewhere in this file) — "Neu" is only how it's labeled to the user,
+// here and in every Tag/pill below.
 const STATUS_FILTER_OPTIONS = [
   { value: 'Abgeschlossen', label: 'Abgeschlossen' },
   { value: 'In Bearbeitung', label: 'In Bearbeitung' },
-  { value: 'Nicht begonnen', label: 'Nicht begonnen' },
+  { value: 'Nicht begonnen', label: 'Neu' },
 ];
+
+function statusLabel(status: string): string {
+  return STATUS_FILTER_OPTIONS.find((opt) => opt.value === status)?.label ?? status;
+}
 
 interface DetailCheckApiRow {
   workflow_id: string;
@@ -113,7 +121,7 @@ function computeResumeState(row: DetailCheckApiRow): { resumed: boolean; resumeR
 
 function statusTagVariant(status: DetailCheckRow['status']) {
   if (status === 'Abgeschlossen') return 'success';
-  if (status === 'In Bearbeitung') return 'warning';
+  if (status === 'In Bearbeitung') return 'info';
   return 'muted';
 }
 
@@ -321,7 +329,7 @@ export default function DetailCheckOverviewPage() {
       filterable: true,
       filterOptions: STATUS_FILTER_OPTIONS,
       renderCell: (value) => (
-        <Tag label={String(value)} variant={statusTagVariant(value as DetailCheckRow['status'])} />
+        <Tag label={statusLabel(String(value))} variant={statusTagVariant(value as DetailCheckRow['status'])} dot />
       ),
     },
     {
@@ -387,6 +395,38 @@ export default function DetailCheckOverviewPage() {
           </Link>
         </div>
 
+        {/* Status filter pills — mobile only; the desktop table has a filter
+            dropdown in the Status column header instead. */}
+        <div className="mt-4 md:hidden flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <button
+            type="button"
+            onClick={() => handleColumnFilterChange('status', '')}
+            className={cn(
+              "shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors",
+              !columnFilters.status
+                ? "bg-primary text-primary-foreground"
+                : "bg-transparent border border-border text-foreground hover:bg-muted"
+            )}
+          >
+            Alle
+          </button>
+          {STATUS_FILTER_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => handleColumnFilterChange('status', opt.value)}
+              className={cn(
+                "shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors",
+                columnFilters.status === opt.value
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-transparent border border-border text-foreground hover:bg-muted"
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
         {(authLoading || isLoading) && <LoadingScreen fullScreen={false} />}
         {error && !isLoading && <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">Fehler beim Laden: {error}</div>}
 
@@ -424,13 +464,21 @@ export default function DetailCheckOverviewPage() {
                 footerLeft={`${displayedRows.length} Einträge`}
                 pageSize={10}
                 renderMobileCard={(row) => (
-                  <button type="button" onClick={() => openRow(row)} className="w-full rounded-lg border border-border bg-card p-4 text-left">
+                  <div onClick={() => openRow(row)} className="bg-card border border-border rounded-2xl p-4 flex flex-col gap-3 cursor-pointer transition-all duration-200 hover:shadow-lg hover:border-primary/50">
                     <div className="flex items-start justify-between gap-3">
-                      <div><p className="font-medium text-foreground">{row.address}</p><p className="text-sm text-muted-foreground">{row.postalCode} {row.city}</p></div>
-                      <Tag label={row.status} variant={statusTagVariant(row.status)} />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-foreground truncate">{row.address}</p>
+                        <p className="text-sm text-primary truncate">{row.city}</p>
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <Button iconOnly icon={<MoreVertical className="h-4 w-4" />} variant="ghost" size="sm" menuItems={menuItems(row)} />
+                      </div>
                     </div>
-                    <div className="mt-3 flex justify-between text-sm text-muted-foreground"><span>{row.livingAreaM2.toLocaleString('de-DE')} m²</span><span>{new Date(row.updatedAt).toLocaleDateString('de-DE')}</span></div>
-                  </button>
+                    <div className="flex items-center justify-between">
+                      <Tag label={statusLabel(row.status)} variant={statusTagVariant(row.status)} dot />
+                      <span className="text-sm text-muted-foreground">{new Date(row.updatedAt).toLocaleDateString('de-DE')}</span>
+                    </div>
+                  </div>
                 )}
               />
             )}

@@ -21,21 +21,21 @@ type View = 'review' | 'preview';
 type TriState = '' | 'true' | 'false';
 
 const PETS_OPTIONS: { value: RentalTermsPetsAllowed | ''; label: string }[] = [
-    { value: '', label: 'Bitte wählen…' },
+    { value: '', label: 'Bitte wählen...' },
     { value: 'Erlaubt', label: 'Erlaubt' },
     { value: 'Nicht erlaubt', label: 'Nicht erlaubt' },
     { value: 'Nach Vereinbarung', label: 'Nach Vereinbarung' },
 ];
 
 const REDECORATION_OPTIONS: { value: RentalTermsRedecorationClause | ''; label: string }[] = [
-    { value: '', label: 'Bitte wählen…' },
+    { value: '', label: 'Bitte wählen...' },
     { value: 'Mieter trägt Kosten (üblich)', label: 'Mieter trägt Kosten (üblich)' },
     { value: 'Vermieter trägt Kosten', label: 'Vermieter trägt Kosten' },
     { value: 'Individuelle Regelung', label: 'Individuelle Regelung' },
 ];
 
 const SUBLET_OPTIONS: { value: RentalTermsSubletAllowed | ''; label: string }[] = [
-    { value: '', label: 'Bitte wählen…' },
+    { value: '', label: 'Bitte wählen...' },
     { value: 'Erlaubt', label: 'Erlaubt' },
     { value: 'Nicht erlaubt', label: 'Nicht erlaubt' },
     { value: 'Nach Zustimmung', label: 'Nach Zustimmung' },

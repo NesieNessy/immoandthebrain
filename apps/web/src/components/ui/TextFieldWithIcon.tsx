@@ -3,13 +3,16 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { LucideIcon } from "lucide-react";
-import { useFieldIds } from "./fieldIds";
+import { FieldLabel, useFieldIds } from "./fieldIds";
 
 interface TextFieldWithIconProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   icon: LucideIcon;
   iconPosition?: "left" | "right";
+  /** Appends a muted "(optional)" to the label instead of the mandatory
+   *  default (no marker). */
+  optional?: boolean;
 }
 
 export function TextFieldWithIcon({
@@ -17,6 +20,7 @@ export function TextFieldWithIcon({
   error,
   icon: Icon,
   iconPosition = "left",
+  optional,
   className,
   readOnly,
   disabled,
@@ -33,9 +37,7 @@ export function TextFieldWithIcon({
   return (
     <div className="w-full">
       {label && (
-        <label htmlFor={controlId} className="block mb-2 text-sm text-foreground">
-          {label}
-        </label>
+        <FieldLabel label={label} optional={optional} htmlFor={controlId} className="block mb-2 text-sm text-foreground" />
       )}
       <div className="relative">
         {iconPosition === "left" && (

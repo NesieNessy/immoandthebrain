@@ -1,6 +1,6 @@
 "use client";
 
-import { CalculatedPanel, LoadingScreen, ReadOnlyField, StickyActionBar, TextField } from '@/components/ui';
+import { LoadingScreen, ReadOnlyField, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import {
@@ -236,7 +236,7 @@ function AcquisitionCostsContent() {
   };
 
   return (
-    <PropertyValuationLayout currentStep={1} title="Kaufkosten" beforeStepChange={persist}>
+    <PropertyValuationLayout currentStep={1} title="Kaufkosten" beforeStepChange={persist} showFieldLegend>
       <div className="pb-24">
 
         {error && (
@@ -248,10 +248,10 @@ function AcquisitionCostsContent() {
         {isLoading ? (
           <LoadingScreen message="Kaufkosten werden geladen…" fullScreen={false} />
         ) : (
-          <div className="space-y-6">
-            <section>
-              <h2 className="mb-3 text-lg font-medium text-foreground">Kaufkosten</h2>
-              <div className="grid gap-4 md:grid-cols-3">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Kaufpreise</SectionLabel>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <DecimalField
                   label="Kaufpreis"
                   value={form.purchasePrice}
@@ -266,7 +266,7 @@ function AcquisitionCostsContent() {
                   helperText={computed.purchasePricePerM2 == null ? 'Wohnfläche fehlt noch.' : 'Aus Kaufpreis und Wohnfläche berechnet.'}
                 />
                 <DecimalField
-                  label="Kaufkosten Stellplatz/Stellplätze"
+                  label="Kaufpreis Stellplatz"
                   value={form.parkingPurchasePrice}
                   unit="€"
                   error={errors.parkingPurchasePrice}
@@ -275,33 +275,44 @@ function AcquisitionCostsContent() {
                   onChange={(parkingPurchasePrice) => setForm((prev) => ({ ...prev, parkingPurchasePrice }))}
                 />
               </div>
-            </section>
+            </div>
 
-            <section>
-              <h2 className="mb-3 text-lg font-medium text-foreground">Kaufnebenkosten</h2>
-              <div className="grid gap-4 md:grid-cols-4">
-                <div className="space-y-3">
-                  <DecimalField
-                    label="Makler"
-                    value={form.brokerPercent}
-                    unit="%"
-                    error={errors.brokerPercent}
-                    onChange={(brokerPercent) => setForm((prev) => ({ ...prev, brokerPercent }))}
-                  />
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Kaufnebenkosten</SectionLabel>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <DecimalField
+                      label="Makler"
+                      value={form.brokerPercent}
+                      unit="%"
+                      error={errors.brokerPercent}
+                      onChange={(brokerPercent) => setForm((prev) => ({ ...prev, brokerPercent }))}
+                    />
+                    {/* Reserves the same height as Grunderwerbsteuer's helper line below,
+                        so every "*-kosten" row starts at the same y regardless of column. */}
+                    <div className="mt-1.5 h-5" aria-hidden="true" />
+                  </div>
                   <ReadOnlyField label="Maklerkosten" value={formatCurrency(computed.brokerAmount)} suffix="€" />
                 </div>
 
-                <div className="space-y-3">
-                  <ReadOnlyField label="Notar" value={formatPercent(notaryPercent)} suffix="%" />
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <ReadOnlyField label="Notar" value={formatPercent(notaryPercent)} suffix="%" />
+                    <div className="mt-1.5 h-5" aria-hidden="true" />
+                  </div>
                   <ReadOnlyField label="Notarkosten" value={formatCurrency(computed.notaryAmount)} suffix="€" />
                 </div>
 
-                <div className="space-y-3">
-                  <ReadOnlyField label="Grundbuchamt" value={formatPercent(landRegistryPercent)} suffix="%" />
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <ReadOnlyField label="Grundbuchamt" value={formatPercent(landRegistryPercent)} suffix="%" />
+                    <div className="mt-1.5 h-5" aria-hidden="true" />
+                  </div>
                   <ReadOnlyField label="Grundbuchamtkosten" value={formatCurrency(computed.landRegistryAmount)} suffix="€" />
                 </div>
 
-                <div className="space-y-3">
+                <div className="flex flex-col gap-3">
                   <ReadOnlyField
                     label="Grunderwerbsteuer"
                     value={formatPercent(propertyTransferTaxPercent)}
@@ -315,24 +326,25 @@ function AcquisitionCostsContent() {
                   />
                 </div>
               </div>
-            </section>
+            </div>
 
-            <CalculatedPanel title="Gesamtkosten" description="Aus Kaufpreis und Kaufnebenkosten automatisch ermittelt">
-              <div className="grid gap-4 md:grid-cols-2">
-                <ReadOnlyField
-                  label="Gesamtnebenkosten"
-                  value={formatCurrency(computed.totalAdditionalCosts)}
-                  suffix="€"
-                  emphasis
-                />
-                <ReadOnlyField
-                  label="Gesamt"
-                  value={formatCurrency(computed.totalCosts)}
-                  suffix="€"
-                  emphasis
-                />
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Gesamtkosten</SectionLabel>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Gesamtnebenkosten</p>
+                  <p className="mt-1 text-2xl font-semibold text-foreground">
+                    {formatCurrency(computed.totalAdditionalCosts)} <span className="text-base font-normal text-muted-foreground">€</span>
+                  </p>
+                </div>
+                <div className="rounded-lg border border-primary/30 bg-primary/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">Gesamtkaufpreis</p>
+                  <p className="mt-1 text-2xl font-semibold text-primary">
+                    {formatCurrency(computed.totalCosts)} <span className="text-base font-normal text-primary/70">€</span>
+                  </p>
+                </div>
               </div>
-            </CalculatedPanel>
+            </div>
           </div>
         )}
       </div>

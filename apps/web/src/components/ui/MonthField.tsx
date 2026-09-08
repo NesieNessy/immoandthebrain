@@ -47,7 +47,10 @@ export function MonthField({
     <div className="w-full">
       {/* Two controls share one visible label, so this is a labelled group
           rather than a <label> — a <label> with no `for` target is inert. */}
-      <span id={labelId} className="mb-2 block text-sm font-medium text-foreground">{label}</span>
+      <span id={labelId} className="mb-2 block text-sm font-medium text-foreground">
+        {label}
+        {optional && <span className="font-normal text-muted-foreground"> (optional)</span>}
+      </span>
       <div
         role="group"
         aria-labelledby={labelId}

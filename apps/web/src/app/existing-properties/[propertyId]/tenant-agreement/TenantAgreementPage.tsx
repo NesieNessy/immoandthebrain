@@ -94,13 +94,14 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                         <SectionLabel>Mietzeiten</SectionLabel>
                         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <CalendarField
-                                label="Einzugsdatum *"
+                                label="Einzugsdatum"
                                 value={data.persons[0]?.moveInDate}
                                 onChange={(date) => data.updatePerson(0, { moveInDate: date })}
                             />
                             <div>
                                 <CalendarField
                                     label="Auszugsdatum"
+                                    optional
                                     value={data.rentalForm.tenancyEndDate}
                                     onChange={(date) => data.setRentalForm((prev) => ({ ...prev, tenancyEndDate: date }))}
                                 />
@@ -113,7 +114,7 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                         <SectionLabel>Miete & Nebenkosten</SectionLabel>
                         <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <NumberField
-                                label="Netto-Mieteinnahmen *"
+                                label="Netto-Mieteinnahmen"
                                 unit="€"
                                 value={data.rentalForm.coldRent}
                                 onChange={(e) => data.setRentalForm((prev) => ({ ...prev, coldRent: e.target.value }))}
@@ -121,6 +122,7 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                             />
                             <NumberField
                                 label="Stellplatz"
+                                optional
                                 unit="€"
                                 value={data.rentalForm.parkingSpaceRent}
                                 onChange={(e) => data.setRentalForm((prev) => ({ ...prev, parkingSpaceRent: e.target.value }))}
@@ -128,6 +130,7 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                             />
                             <NumberField
                                 label="WEG"
+                                optional
                                 unit="€"
                                 value={data.rentalForm.houseMoney}
                                 onChange={(e) => data.setRentalForm((prev) => ({ ...prev, houseMoney: e.target.value }))}
@@ -224,11 +227,13 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <CalendarField
                                             label="Datum"
+                                            optional
                                             value={data.rentalForm.nextRentAdjustmentDate}
                                             onChange={(date) => data.setRentalForm((prev) => ({ ...prev, nextRentAdjustmentDate: date }))}
                                         />
                                         <NumberField
                                             label="Höhe"
+                                            optional
                                             unit="€"
                                             value={data.rentalForm.nextRentAdjustmentAmount}
                                             onChange={(e) => data.setRentalForm((prev) => ({ ...prev, nextRentAdjustmentAmount: e.target.value }))}
@@ -281,16 +286,19 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                         <CalendarField
                                             label="Start"
+                                            optional
                                             value={data.rentalForm.renovationAdjustmentStartDate}
                                             onChange={(date) => data.setRentalForm((prev) => ({ ...prev, renovationAdjustmentStartDate: date }))}
                                         />
                                         <CalendarField
                                             label="Abschluss"
+                                            optional
                                             value={data.rentalForm.renovationAdjustmentEndDate}
                                             onChange={(date) => data.setRentalForm((prev) => ({ ...prev, renovationAdjustmentEndDate: date }))}
                                         />
                                         <NumberField
                                             label="Höhe"
+                                            optional
                                             unit="€"
                                             value={data.rentalForm.renovationAdjustmentAmount}
                                             onChange={(e) => data.setRentalForm((prev) => ({ ...prev, renovationAdjustmentAmount: e.target.value }))}

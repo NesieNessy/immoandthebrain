@@ -17,7 +17,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 const ENERGY_OPTIONS = [
-    { value: '', label: '–' },
+    { value: '', label: 'Bitte wählen...' },
     ...Object.values(EnergyEfficient).map((v) => ({ value: v, label: v })),
 ];
 
@@ -297,17 +297,19 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                         <div className="grid grid-cols-2 sm:grid-cols-[repeat(20,minmax(0,1fr))] gap-3">
                             <div className="sm:col-span-10">
                                 <NumberField
-                                    label="Kaufpreis *"
+                                    label="Kaufpreis"
                                     placeholder="450.000"
                                     unit="€"
                                     value={form.kaufpreis}
                                     onChange={(e) => update({ kaufpreis: e.target.value })}
                                     min={0}
+                                    hideStepper
                                 />
                             </div>
                             <div className="sm:col-span-10">
                                 <CalendarField
                                     label="Kaufdatum"
+                                    optional
                                     value={form.kaufdatum ? parseISO(form.kaufdatum) : undefined}
                                     onChange={(date) => update({ kaufdatum: date ? format(date, 'yyyy-MM-dd') : '' })}
                                 />
@@ -345,6 +347,7 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                             <div className="sm:col-span-4">
                                 <TextField
                                     label="Bundesland"
+                                    optional
                                     placeholder="Bayern"
                                     value={form.bundesland}
                                     onChange={(e) => update({ bundesland: e.target.value })}
@@ -362,6 +365,7 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                                     placeholder="1980"
                                     value={form.baujahr}
                                     onChange={(e) => update({ baujahr: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                                    hideStepper
                                 />
                             </div>
                             <div className="sm:col-span-4">
@@ -372,11 +376,13 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                                     value={form.wohnflaeche}
                                     onChange={(e) => update({ wohnflaeche: e.target.value })}
                                     min={0}
+                                    hideStepper
                                 />
                             </div>
                             <div className="sm:col-span-4">
                                 <NumberField
                                     label="Anzahl Zimmer"
+                                    optional
                                     placeholder="3"
                                     value={form.anzahlZimmer}
                                     onChange={(e) => update({ anzahlZimmer: e.target.value })}
@@ -395,6 +401,7 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                             <div className="sm:col-span-4">
                                 <Dropdown
                                     label="Energieeffizienz"
+                                    optional
                                     options={ENERGY_OPTIONS}
                                     value={form.energieeffizienz}
                                     onChange={(e) => update({ energieeffizienz: e.target.value })}

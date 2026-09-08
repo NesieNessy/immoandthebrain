@@ -36,7 +36,7 @@ interface TenantMoveOutViewProps {
 }
 
 const ROOM_OPTIONS = [
-    { value: '', label: 'Bitte wählen…' },
+    { value: '', label: 'Bitte wählen...' },
     ...MOVE_OUT_ROOM_OPTIONS.map((room) => ({ value: room, label: room })),
 ];
 
@@ -148,7 +148,7 @@ export function TenantMoveOutView({ propertyId, property, unit, hasMultipleUnits
                         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <TextField label="Mieter" value={data.tenantDisplayName} disabled />
                             <CalendarField
-                                label="Auszugsdatum *"
+                                label="Auszugsdatum"
                                 value={data.moveOutDate}
                                 onChange={data.setMoveOutDate}
                             />

@@ -382,7 +382,7 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                     onChange={(e) => data.setUploadPersonIndex(Number(e.target.value))}
                 />
                 <div>
-                    <label className="block mb-2 text-sm text-foreground">Datei *</label>
+                    <label className="block mb-2 text-sm text-foreground">Datei</label>
                     <input
                         id="tenant-document-upload-file"
                         type="file"

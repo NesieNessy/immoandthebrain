@@ -3,7 +3,7 @@
 import { DetailFieldLegend, FixedOverlay, Header, PAGE_CONTAINER_CLASS, Stepper, StickyActionBar } from '@/components/ui';
 import { PropertyValuationSteps } from '@/constants/PropertyValuationUseCases';
 import { useRouter } from 'next/navigation';
-import { Children, isValidElement, useEffect, useMemo, useState } from 'react';
+import { Children, cloneElement, isValidElement, useEffect, useMemo, useState } from 'react';
 
 interface PropertyValuationLayoutProps {
   children: React.ReactNode;
@@ -15,6 +15,10 @@ interface PropertyValuationLayoutProps {
   actions?: React.ReactNode;
   /** Persists the current step before direct navigation through the stepper. */
   beforeStepChange?: () => Promise<boolean>;
+  /** Set by steps that render at least one calculated/taken-over (locked)
+   *  field — shows the lock-icon legend at the bottom of the page so it
+   *  only appears where it's actually relevant. */
+  showFieldLegend?: boolean;
 }
 
 export function PropertyValuationLayout({
@@ -23,6 +27,7 @@ export function PropertyValuationLayout({
   title,
   actions,
   beforeStepChange,
+  showFieldLegend,
 }: PropertyValuationLayoutProps) {
   const router = useRouter();
   const [maxReachedStep, setMaxReachedStep] = useState(currentStep);
@@ -75,11 +80,32 @@ export function PropertyValuationLayout({
     return () => window.cancelAnimationFrame(revealFrame);
   }, [currentStep, storageKey]);
 
+  // "Schritt X von N" + (where relevant) the locked-field legend — both live
+  // in the sticky bar's leftContent instead of taking up page-content space.
+  const stepProgressContent = (
+    <div className="flex items-center gap-3 text-sm text-muted-foreground">
+      <span>Schritt {currentStep + 1} von {stepperSteps.length}</span>
+      {showFieldLegend && (
+        <>
+          <span className="text-border" aria-hidden="true">|</span>
+          <DetailFieldLegend />
+        </>
+      )}
+    </div>
+  );
+
   const pageChildren: React.ReactNode[] = [];
   const fixedChildren: React.ReactNode[] = [];
-  Children.forEach(children, (child) => {
-    if (isValidElement(child) && (child.type === StickyActionBar || child.type === FixedOverlay)) {
-      fixedChildren.push(child);
+  Children.forEach(children, (child, index) => {
+    if (isValidElement(child) && child.type === StickyActionBar) {
+      fixedChildren.push(cloneElement(child as React.ReactElement<{ leftContent?: React.ReactNode }>, {
+        key: child.key ?? `fixed-${index}`,
+        leftContent: stepProgressContent,
+      }));
+    } else if (isValidElement(child) && child.type === FixedOverlay) {
+      fixedChildren.push(cloneElement(child, { key: child.key ?? `fixed-${index}` }));
+    } else if (isValidElement(child)) {
+      pageChildren.push(cloneElement(child, { key: child.key ?? `page-${index}` }));
     } else {
       pageChildren.push(child);
     }
@@ -125,12 +151,6 @@ export function PropertyValuationLayout({
           />
         </div>
 
-        {currentStep <= 6 && (
-          <div className="mb-7">
-            <DetailFieldLegend />
-          </div>
-        )}
-
         {/* Page Content */}
         <div
           key={`${currentStep}-${motionKey}`}
@@ -144,6 +164,7 @@ export function PropertyValuationLayout({
         >
           {pageChildren}
         </div>
+
         {fixedChildren}
       </main>
     </div>

@@ -2,13 +2,16 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { useFieldIds } from "./fieldIds";
+import { FieldLabel, useFieldIds } from "./fieldIds";
 
 interface TextFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   helperText?: string;
   suffix?: string;
+  /** Appends a muted "(optional)" to the label instead of the mandatory
+   *  default (no marker). */
+  optional?: boolean;
 }
 
 export function TextField({
@@ -16,6 +19,7 @@ export function TextField({
   error,
   helperText,
   suffix,
+  optional,
   className,
   readOnly,
   disabled,
@@ -33,9 +37,7 @@ export function TextField({
   return (
     <div className="w-full">
       {label && (
-        <label htmlFor={controlId} className="mb-2 block text-sm font-medium text-foreground">
-          {label}
-        </label>
+        <FieldLabel label={label} optional={optional} htmlFor={controlId} className="mb-2 block text-sm font-medium text-foreground" />
       )}
       <div className="relative">
         <input

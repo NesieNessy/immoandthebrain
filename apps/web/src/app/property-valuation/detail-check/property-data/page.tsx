@@ -1,6 +1,8 @@
 "use client";
 
-import { Dropdown, LoadingScreen, StickyActionBar, TextField } from '@/components/ui';
+import { Button, Dropdown, LoadingScreen, PillOptions, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
+import { PROPERTY_CATEGORY_CREATE_OPTIONS } from '@/components/features/PropertyDisplay';
+import { PortalImportSection } from '@/components/features/PortalImportSection';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
@@ -10,7 +12,6 @@ import { PropertyValuationLayout } from '../PropertyValuationLayout';
 
 type FormState = {
   propertyCategory: string;
-  dataEntrySource: string;
   tenancyType: string;
   sourceUrl: string;
   streetHouseNumber: string;
@@ -41,8 +42,7 @@ type PostalLookupStatus = 'idle' | 'loading' | 'resolved' | 'empty' | 'error';
 
 const EMPTY_FORM: FormState = {
   propertyCategory: 'EIGENTUMSWOHNUNG',
-  dataEntrySource: '',
-  tenancyType: '',
+  tenancyType: 'STANDARD',
   sourceUrl: '',
   streetHouseNumber: '',
   postalCode: '',
@@ -53,23 +53,15 @@ const EMPTY_FORM: FormState = {
   energyEfficiency: '',
 };
 
-const dataEntrySourceOptions = [
-  { value: '', label: 'Bitte wählen...' },
-  { value: 'PORTAL_IMPORT', label: 'Aus Immobilienportal importieren' },
-  { value: 'MANUELL', label: 'Manuelle Erfassung' },
-  { value: 'SCAN_EXPOSE', label: 'Scan Exposé (Ausbaustufe)', disabled: true },
-];
-
 const tenancyTypeOptions = [
-  { value: '', label: 'Bitte wählen...' },
   { value: 'STANDARD', label: 'Standard' },
-  { value: 'INDEXMIETE', label: 'Indexmiete (Ausbaustufe)', disabled: true },
-  { value: 'NIESSBRAUCH', label: 'Nießbrauch (Ausbaustufe)', disabled: true },
-  { value: 'ERBPACHT', label: 'Erbpacht (Ausbaustufe)', disabled: true },
-  { value: 'SONDERVERMIETUNG', label: 'Sondervermietung (Ausbaustufe)', disabled: true },
-  { value: 'GEWERBE', label: 'Gewerbe (Ausbaustufe)', disabled: true },
-  { value: 'ALTENHEIM', label: 'Altenheim (Ausbaustufe)', disabled: true },
-  { value: 'ZWANGSVERSTEIGERUNG', label: 'Zwangsversteigerung (Ausbaustufe)', disabled: true },
+  { value: 'INDEXMIETE', label: 'Indexmiete', disabled: true, title: 'Ausbaustufe' },
+  { value: 'NIESSBRAUCH', label: 'Nießbrauch', disabled: true, title: 'Ausbaustufe' },
+  { value: 'ERBPACHT', label: 'Erbpacht', disabled: true, title: 'Ausbaustufe' },
+  { value: 'SONDERVERMIETUNG', label: 'Sondervermietung', disabled: true, title: 'Ausbaustufe' },
+  { value: 'GEWERBE', label: 'Gewerbe', disabled: true, title: 'Ausbaustufe' },
+  { value: 'ALTENHEIM', label: 'Altenheim', disabled: true, title: 'Ausbaustufe' },
+  { value: 'ZWANGSVERSTEIGERUNG', label: 'Zwangsversteigerung', disabled: true, title: 'Ausbaustufe' },
 ];
 
 const parkingOptions = Array.from({ length: 11 }, (_, value) => ({
@@ -123,8 +115,7 @@ function PropertyDataContent() {
         setPostalCodeWasEdited(false);
         setForm({
           propertyCategory: data.propertyCategory || 'EIGENTUMSWOHNUNG',
-          dataEntrySource: data.dataEntrySource || '',
-          tenancyType: data.tenancyType || '',
+          tenancyType: data.tenancyType || 'STANDARD',
           sourceUrl: data.sourceUrl || '',
           streetHouseNumber: data.streetHouseNumber || '',
           postalCode: data.postalCode || '',
@@ -221,6 +212,26 @@ function PropertyDataContent() {
 
   const displayErrors = { ...liveErrors, ...fieldErrors };
 
+  // Mirrors validateBeforeSave's checks, without setting fieldErrors — used
+  // to keep "Weiter" disabled until every mandatory field is actually filled.
+  const isValid = useMemo(() => {
+    if (!form.propertyCategory) return false;
+    if (!form.tenancyType) return false;
+    if (form.sourceUrl.trim()) {
+      try {
+        new URL(form.sourceUrl);
+      } catch {
+        return false;
+      }
+    }
+    if (!form.city.trim()) return false;
+    const year = Number(form.yearOfConstruction);
+    if (!Number.isInteger(year) || year < 1000 || year > currentYear) return false;
+    const livingArea = parseDecimalInput(form.livingAreaM2);
+    if (livingArea <= 0 || livingArea > 10000) return false;
+    return true;
+  }, [form, currentYear]);
+
   const updateForm = (field: keyof FormState, value: string) => {
     setFieldErrors((prev) => {
       const next = { ...prev };
@@ -234,12 +245,7 @@ function PropertyDataContent() {
       setCityOptions([]);
     }
 
-    setForm((prev) => {
-      if (field === 'dataEntrySource') {
-        return { ...prev, dataEntrySource: value, tenancyType: '', sourceUrl: value === 'PORTAL_IMPORT' ? prev.sourceUrl : '' };
-      }
-      return { ...prev, [field]: value };
-    });
+    setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const cityHelperText = postalLookupStatus === 'loading'
@@ -259,9 +265,9 @@ function PropertyDataContent() {
     const year = Number(form.yearOfConstruction);
     const livingArea = parseDecimalInput(form.livingAreaM2);
 
-    if (!form.dataEntrySource) errors.dataEntrySource = 'Bitte wählen Sie eine Erfassungsquelle.';
+    if (!form.propertyCategory) errors.propertyCategory = 'Bitte wählen Sie eine Objektkategorie.';
     if (!form.tenancyType) errors.tenancyType = 'Bitte wählen Sie eine Miet-/Nutzungsart.';
-    if (form.dataEntrySource === 'PORTAL_IMPORT' && form.sourceUrl) {
+    if (form.sourceUrl.trim()) {
       try {
         new URL(form.sourceUrl);
       } catch {
@@ -293,7 +299,7 @@ function PropertyDataContent() {
           quickCheckId,
           workflowId,
           propertyCategory: form.propertyCategory,
-          dataEntrySource: form.dataEntrySource,
+          dataEntrySource: form.sourceUrl.trim() ? 'PORTAL_IMPORT' : 'MANUELL',
           tenancyType: form.tenancyType,
           sourceUrl: form.sourceUrl,
           streetHouseNumber: form.streetHouseNumber,
@@ -364,46 +370,58 @@ function PropertyDataContent() {
         {isLoading ? (
           <LoadingScreen message="Objektdaten werden geladen…" fullScreen={false} />
         ) : (
-          <div className="space-y-7">
-            <section>
-              <h2 className="mb-3 text-lg font-medium text-foreground">Erfassung</h2>
-              <div className="grid gap-4 md:grid-cols-2">
-                <Dropdown
-                  label="Erfassungsquelle"
-                  options={dataEntrySourceOptions}
-                  value={form.dataEntrySource}
-                  onChange={(event) => updateForm('dataEntrySource', event.target.value)}
-                  error={displayErrors.dataEntrySource}
-                />
-                <Dropdown
-                  label="Miet-/Nutzungsart"
-                  options={tenancyTypeOptions}
-                  value={form.tenancyType}
-                  onChange={(event) => updateForm('tenancyType', event.target.value)}
-                  disabled={!form.dataEntrySource}
-                  error={displayErrors.tenancyType}
-                />
-              </div>
-
-              {form.dataEntrySource === 'PORTAL_IMPORT' && (
-                <div className="mt-4 max-w-xl">
-                  <TextField
-                    label="Inserats-URL"
-                    placeholder="https://..."
-                    value={form.sourceUrl}
-                    onChange={(event) => updateForm('sourceUrl', event.target.value)}
-                    error={displayErrors.sourceUrl}
-                    helperText="Der Importdienst ist noch nicht angebunden; vorbefüllte Daten bleiben editierbar."
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <PortalImportSection
+                portalUrl={form.sourceUrl}
+                onPortalUrlChange={(value) => updateForm('sourceUrl', value)}
+                urlError={displayErrors.sourceUrl}
+                extraTrigger={
+                  <Button
+                    label={BUTTON_DETAILS.ScanExpose.label}
+                    icon={<BUTTON_DETAILS.ScanExpose.icon />}
+                    variant="outline"
+                    disabled
+                    title="Noch nicht verfügbar"
+                    className="w-full"
                   />
-                </div>
+                }
+              />
+              {form.sourceUrl.trim() && (
+                <p className="text-sm text-muted-foreground truncate -mt-1">Importiert von: {form.sourceUrl}</p>
               )}
-            </section>
+            </div>
 
-            <section>
-              <h2 className="mb-3 text-lg font-medium text-foreground">Adresse</h2>
-              <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,1fr)]">
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Objektkategorie</SectionLabel>
+              <PillOptions
+                options={PROPERTY_CATEGORY_CREATE_OPTIONS}
+                value={form.propertyCategory}
+                onChange={(value) => updateForm('propertyCategory', value)}
+              />
+              {displayErrors.propertyCategory && (
+                <p role="alert" className="text-sm text-destructive">{displayErrors.propertyCategory}</p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Miet-/Nutzungsart</SectionLabel>
+              <PillOptions
+                options={tenancyTypeOptions}
+                value={form.tenancyType}
+                onChange={(value) => updateForm('tenancyType', value)}
+              />
+              {displayErrors.tenancyType && (
+                <p role="alert" className="text-sm text-destructive">{displayErrors.tenancyType}</p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Adresse</SectionLabel>
+              <div className="grid grid-cols-1 sm:grid-cols-[1.4fr_0.8fr_1fr] gap-3">
                 <TextField
                   label="Straße + Hausnummer"
+                  optional
                   placeholder="Straße"
                   autoComplete="street-address"
                   value={form.streetHouseNumber}
@@ -412,6 +430,7 @@ function PropertyDataContent() {
                 />
                 <TextField
                   label="Postleitzahl"
+                  optional
                   placeholder="Postleitzahl"
                   inputMode="numeric"
                   autoComplete="postal-code"
@@ -436,10 +455,11 @@ function PropertyDataContent() {
                   </datalist>
                 )}
               </div>
-            </section>
+            </div>
 
-            <section>
-              <div className="grid gap-4 md:grid-cols-3">
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Objektdetails</SectionLabel>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <TextField
                   label="Wohnfläche"
                   placeholder="100"
@@ -464,18 +484,16 @@ function PropertyDataContent() {
                   onChange={(event) => updateForm('parkingSpaces', event.target.value)}
                   error={displayErrors.parkingSpaces}
                 />
+                <Dropdown
+                  label="Energieeffizienz"
+                  optional
+                  options={energyOptions}
+                  value={form.energyEfficiency}
+                  onChange={(event) => updateForm('energyEfficiency', event.target.value)}
+                  error={displayErrors.energyEfficiency}
+                />
               </div>
-            </section>
-
-            <section className="max-w-sm">
-              <Dropdown
-                label="Energieeffizienz"
-                options={energyOptions}
-                value={form.energyEfficiency}
-                onChange={(event) => updateForm('energyEfficiency', event.target.value)}
-                error={displayErrors.energyEfficiency}
-              />
-            </section>
+            </div>
           </div>
         )}
       </div>
@@ -487,7 +505,7 @@ function PropertyDataContent() {
         onGhost={handleBack}
         primaryLabel="Weiter"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
-        primaryDisabled={isLoading || isSaving}
+        primaryDisabled={isLoading || isSaving || !isValid}
         onPrimary={handleNext}
       />
     </PropertyValuationLayout>

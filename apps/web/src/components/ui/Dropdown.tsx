@@ -2,13 +2,16 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { useFieldIds } from "./fieldIds";
+import { FieldLabel, useFieldIds } from "./fieldIds";
 
 interface DropdownProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   error?: string;
   helperText?: string;
   options: { value: string; label: string; disabled?: boolean }[];
+  /** Appends a muted "(optional)" to the label instead of the mandatory
+   *  default (no marker). */
+  optional?: boolean;
 }
 
 export function Dropdown({
@@ -16,6 +19,7 @@ export function Dropdown({
   error,
   helperText,
   options,
+  optional,
   className,
   id,
   "aria-describedby": ariaDescribedBy,
@@ -31,9 +35,7 @@ export function Dropdown({
   return (
     <div className="w-full">
       {label && (
-        <label htmlFor={controlId} className="mb-2 block text-sm font-medium text-foreground">
-          {label}
-        </label>
+        <FieldLabel label={label} optional={optional} htmlFor={controlId} className="mb-2 block text-sm font-medium text-foreground" />
       )}
       <select
         id={controlId}

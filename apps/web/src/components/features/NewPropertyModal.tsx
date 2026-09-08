@@ -191,7 +191,7 @@ export function NewPropertyModal({ open, onClose }: NewPropertyModalProps) {
         <Dropdown
           label="Detailbewertung auswählen"
           options={[
-            { value: '', label: isLoading ? 'Wird geladen…' : '– Bitte auswählen –' },
+            { value: '', label: isLoading ? 'Wird geladen…' : 'Bitte wählen...' },
             ...options.map((opt) => ({ value: opt.workflowId, label: opt.label })),
           ]}
           value={workflowId}

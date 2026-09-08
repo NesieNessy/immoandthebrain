@@ -223,6 +223,7 @@ function DepreciationContent() {
       currentStep={4}
       title="Restnutzungsdauer in Jahren"
       beforeStepChange={persist}
+      showFieldLegend
       actions={
         <Button
           label="Überspringen"
@@ -284,7 +285,10 @@ function DepreciationContent() {
                 <div className="grid gap-3 md:grid-cols-[minmax(0,360px)_minmax(0,280px)_minmax(0,1fr)] md:items-center">
                   {MODERNIZATION_FIELDS.map(([field, label]) => (
                     <div key={field} className="contents">
-                      <label className="text-sm text-foreground">{label}</label>
+                      <label className="text-sm text-foreground">
+                        {label}
+                        <span className="font-normal text-muted-foreground"> (optional)</span>
+                      </label>
                       <Dropdown
                         options={MODERNIZATION_OPTIONS}
                         value={modernization[field]}
@@ -320,10 +324,10 @@ function DepreciationContent() {
 
               {priceSplitMode === 'INDIVIDUAL' && (
                 <div className="mb-8 grid gap-4 md:grid-cols-4">
-                  <TextField label="Grundstücksgröße" value={plotAreaM2} suffix="m²" inputMode="decimal" onChange={(e) => setPlotAreaM2(e.target.value)} />
-                  <TextField label="Bodenrichtwert" value={landReferenceValue} suffix="€" inputMode="decimal" onChange={(e) => setLandReferenceValue(e.target.value)} />
-                  <TextField label="Miteigentumsanteil Zähler" value={coOwnershipNumerator} inputMode="decimal" onChange={(e) => setCoOwnershipNumerator(e.target.value)} />
-                  <TextField label="Miteigentumsanteil Nenner" value={coOwnershipDenominator} inputMode="decimal" onChange={(e) => setCoOwnershipDenominator(e.target.value)} />
+                  <TextField label="Grundstücksgröße" optional value={plotAreaM2} suffix="m²" inputMode="decimal" onChange={(e) => setPlotAreaM2(e.target.value)} />
+                  <TextField label="Bodenrichtwert" optional value={landReferenceValue} suffix="€" inputMode="decimal" onChange={(e) => setLandReferenceValue(e.target.value)} />
+                  <TextField label="Miteigentumsanteil Zähler" optional value={coOwnershipNumerator} inputMode="decimal" onChange={(e) => setCoOwnershipNumerator(e.target.value)} />
+                  <TextField label="Miteigentumsanteil Nenner" optional value={coOwnershipDenominator} inputMode="decimal" onChange={(e) => setCoOwnershipDenominator(e.target.value)} />
                 </div>
               )}
 

@@ -49,3 +49,28 @@ export function useFieldIds({ id, error, helperText, describedBy }: FieldIdsOpti
     invalid: error ? true : undefined,
   };
 }
+
+/**
+ * Shared label renderer for the form field components — mandatory fields
+ * show just the plain label (no asterisk); optional ones get a muted
+ * "(optional)" suffix instead, so the two states read consistently
+ * everywhere instead of each page inventing its own marker.
+ */
+export function FieldLabel({
+  label,
+  optional,
+  htmlFor,
+  className,
+}: {
+  label: string;
+  optional?: boolean;
+  htmlFor: string;
+  className: string;
+}) {
+  return (
+    <label htmlFor={htmlFor} className={className}>
+      {label}
+      {optional && <span className="font-normal text-muted-foreground"> (optional)</span>}
+    </label>
+  );
+}

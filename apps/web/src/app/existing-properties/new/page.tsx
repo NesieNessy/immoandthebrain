@@ -30,7 +30,7 @@ function readFileAsRawBase64(file: File): Promise<string> {
 }
 
 const ENERGY_OPTIONS = [
-  { value: '', label: '–' },
+  { value: '', label: 'Bitte wählen...' },
   ...Object.values(EnergyEfficient).map((v) => ({ value: v, label: v })),
 ];
 
@@ -249,6 +249,7 @@ function NewPropertyPageContent() {
             <div className="grid grid-cols-2 gap-3 max-w-md">
               <NumberField
                 label="Kaufpreis"
+                optional
                 placeholder="450.000"
                 unit="€"
                 value={kaufpreis}
@@ -257,6 +258,7 @@ function NewPropertyPageContent() {
               />
               <CalendarField
                 label="Kaufdatum"
+                optional
                 value={kaufdatum}
                 onChange={setKaufdatum}
               />
@@ -286,6 +288,7 @@ function NewPropertyPageContent() {
               />
               <TextField
                 label="Bundesland"
+                optional
                 placeholder="Bayern"
                 value={bundesland}
                 onChange={(e) => setBundesland(e.target.value)}
@@ -313,6 +316,7 @@ function NewPropertyPageContent() {
               />
               <NumberField
                 label="Anzahl Zimmer"
+                optional
                 placeholder="3"
                 value={anzahlZimmer}
                 onChange={(e) => setAnzahlZimmer(e.target.value)}
@@ -327,6 +331,7 @@ function NewPropertyPageContent() {
               />
               <Dropdown
                 label="Energieeffizienz"
+                optional
                 options={ENERGY_OPTIONS}
                 value={energieeffizienz}
                 onChange={(e) => setEnergieeffizienz(e.target.value)}

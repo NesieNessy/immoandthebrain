@@ -5,7 +5,12 @@ import { randomUUID } from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
 
-const PROPERTY_CATEGORIES = new Set(['EIGENTUMSWOHNUNG', 'HOLZBAUWEISE', 'DENKMALGESCHUETZT']);
+// Mirrors PROPERTY_CATEGORY_CREATE_OPTIONS in components/features/PropertyDisplay.tsx —
+// the same categories the existing-properties creation form offers.
+const PROPERTY_CATEGORIES = new Set([
+  'EIGENTUMSWOHNUNG', 'EINFAMILIENHAUS', 'MEHRFAMILIENHAUS', 'DOPPELHAUS',
+  'GEWERBE', 'GRUNDSTUECK', 'HOLZBAUWEISE', 'DENKMALGESCHUETZT',
+]);
 const DATA_ENTRY_SOURCES = new Set(['PORTAL_IMPORT', 'MANUELL']);
 const TENANCY_TYPES = new Set(['STANDARD', 'INDEXMIETE']);
 const ENERGY_CLASSES = new Set(['A+', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']);

@@ -61,7 +61,7 @@ export const conditionVariant: Record<PropertyCondition, TagVariant> = {
 
 /** Dropdown options for the create/edit forms — includes a placeholder. */
 export const CONDITION_OPTIONS = [
-  { value: '', label: 'Bitte auswählen' },
+  { value: '', label: 'Bitte wählen...' },
   ...Object.values(PropertyCondition).map((v) => ({ value: v, label: v })),
 ];
 

@@ -2,18 +2,27 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { useFieldIds } from "./fieldIds";
+import { FieldLabel, useFieldIds } from "./fieldIds";
 
 interface NumberFieldProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> {
   label?: string;
   error?: string;
   unit?: string;
+  /** Hides the native up/down spin buttons — for fields (year, price, area)
+   *  where typing is the expected input and the tiny stepper arrows just
+   *  add visual clutter rather than a useful increment/decrement action. */
+  hideStepper?: boolean;
+  /** Appends a muted "(optional)" to the label instead of the mandatory
+   *  default (no marker). */
+  optional?: boolean;
 }
 
 export function NumberField({
   label,
   error,
   unit,
+  hideStepper,
+  optional,
   className,
   readOnly,
   disabled,
@@ -30,9 +39,7 @@ export function NumberField({
   return (
     <div className="w-full">
       {label && (
-        <label htmlFor={controlId} className="block mb-2 text-sm text-foreground">
-          {label}
-        </label>
+        <FieldLabel label={label} optional={optional} htmlFor={controlId} className="block mb-2 text-sm text-foreground" />
       )}
       <div className="relative">
         <input
@@ -48,6 +55,7 @@ export function NumberField({
             "disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:hover:border-border",
             unit && "pr-12",
             error && "border-destructive focus:ring-destructive/50",
+            hideStepper && "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
             className
           )}
           readOnly={readOnly}

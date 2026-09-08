@@ -2,18 +2,22 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { useFieldIds } from "./fieldIds";
+import { FieldLabel, useFieldIds } from "./fieldIds";
 
 interface TextAreaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
   error?: string;
   helperText?: string;
+  /** Appends a muted "(optional)" to the label instead of the mandatory
+   *  default (no marker). */
+  optional?: boolean;
 }
 
 export function TextArea({
   label,
   error,
   helperText,
+  optional,
   className,
   id,
   "aria-describedby": ariaDescribedBy,
@@ -29,9 +33,7 @@ export function TextArea({
   return (
     <div className="w-full">
       {label && (
-        <label htmlFor={controlId} className="mb-2 block text-sm font-medium text-foreground">
-          {label}
-        </label>
+        <FieldLabel label={label} optional={optional} htmlFor={controlId} className="mb-2 block text-sm font-medium text-foreground" />
       )}
       <textarea
         id={controlId}

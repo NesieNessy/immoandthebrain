@@ -377,6 +377,7 @@ function RenovationContent() {
       currentStep={5}
       title="Sanierungskosten"
       beforeStepChange={persistCurrent}
+      showFieldLegend
       actions={
         <Button
           label="Überspringen"
@@ -428,6 +429,7 @@ function RenovationContent() {
                 />
                 <TextArea
                   label="Beschreibung"
+                  optional
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                   maxLength={1500}
@@ -678,6 +680,7 @@ function RenovationContent() {
                               {financingMode === 'TEILWEISE' && (
                                 <TextField
                                   label="Fremdkapitalanteil"
+                                  optional
                                   value={financedAmount}
                                   onChange={(event) => setFinancedAmount(event.target.value)}
                                   inputMode="decimal"

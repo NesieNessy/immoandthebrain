@@ -59,7 +59,7 @@ const periodOptions = [
 ];
 
 const variantOptions = [
-  { value: '', label: '... treffen Sie eine Auswahl' },
+  { value: '', label: 'Bitte wählen...' },
   { value: 'OFFER', label: 'Angebot' },
   { value: 'INDIVIDUAL', label: 'Individuell' },
 ];
@@ -316,7 +316,7 @@ function FinancingContent() {
   };
 
   return (
-    <PropertyValuationLayout currentStep={3} title="Finanzierung" beforeStepChange={persist}>
+    <PropertyValuationLayout currentStep={3} title="Finanzierung" beforeStepChange={persist} showFieldLegend>
       <div className="pb-24">
 
         {error && (

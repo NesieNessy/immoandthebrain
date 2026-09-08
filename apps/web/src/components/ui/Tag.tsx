@@ -48,6 +48,8 @@ interface TagProps {
   label: string;
   variant?: TagVariant;
   size?: TagSize;
+  /** Adds a small leading dot in the tag's own color — for status pills. */
+  dot?: boolean;
   className?: string;
 }
 
@@ -55,16 +57,17 @@ interface TagProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export function Tag({ label, variant = "default", size = "sm", className }: TagProps) {
+export function Tag({ label, variant = "default", size = "sm", dot, className }: TagProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center font-medium rounded-full whitespace-nowrap",
+        "inline-flex items-center gap-1.5 font-medium rounded-full whitespace-nowrap",
         variantStyles[variant],
         sizeStyles[size],
         className
       )}
     >
+      {dot && <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />}
       {label}
     </span>
   );

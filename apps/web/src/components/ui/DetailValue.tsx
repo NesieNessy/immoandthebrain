@@ -1,20 +1,17 @@
-import { LockKeyhole, PencilLine } from 'lucide-react';
+import { LockKeyhole } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Icons } from '@/components/common';
 import { cn } from '@/lib/utils';
 
+/** Legend for the lock icon shown on this step's calculated/taken-over
+ *  fields — only rendered (inline, next to the step-progress text in the
+ *  sticky bar) on steps that actually have such fields. */
 export function DetailFieldLegend() {
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-border py-3 text-sm">
-      <span className="inline-flex items-center gap-2 font-medium text-primary">
-        <PencilLine size={16} aria-hidden="true" />
-        Bearbeitbar
-      </span>
-      <span className="inline-flex items-center gap-2 text-muted-foreground">
-        <LockKeyhole size={15} aria-hidden="true" />
-        Berechnet oder übernommen
-      </span>
-    </div>
+    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+      <LockKeyhole size={13} aria-hidden="true" />
+      Berechnet oder übernommen
+    </span>
   );
 }
 
@@ -45,7 +42,10 @@ export function ReadOnlyField({
       )}
       <div
         className={cn(
-          'flex min-h-11 items-center gap-3 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-foreground',
+          // px-4/py-2 match the editable fields' padding exactly (rather than
+          // a fixed min-height) so a read-only field sits at the same height
+          // as an editable one beside it, with no hover/focus state of its own.
+          'flex items-center gap-3 rounded-md border border-primary/20 bg-primary/5 px-4 py-2 text-foreground',
           align === 'right' && 'justify-end text-right',
           emphasis && 'font-semibold',
         )}

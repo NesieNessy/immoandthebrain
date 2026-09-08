@@ -194,19 +194,21 @@ export default function NewUnit({ propertyId }: { propertyId: string }) {
                         <SectionLabel>Bezeichnung</SectionLabel>
                         <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <TextField
-                                label="Bezeichnung *"
+                                label="Bezeichnung"
                                 placeholder="z.B. Whg. 1"
                                 value={unitLabel}
                                 onChange={(e) => setUnitLabel(e.target.value)}
                             />
                             <TextField
                                 label="Etage"
+                                optional
                                 placeholder="z.B. EG"
                                 value={floor}
                                 onChange={(e) => setFloor(e.target.value)}
                             />
                             <TextField
                                 label="Lage"
+                                optional
                                 placeholder="z.B. links"
                                 value={locationNote}
                                 onChange={(e) => setLocationNote(e.target.value)}
@@ -219,7 +221,7 @@ export default function NewUnit({ propertyId }: { propertyId: string }) {
                         <SectionLabel>Fläche & Details</SectionLabel>
                         <div className="mt-3 grid grid-cols-2 gap-3">
                             <NumberField
-                                label="Fläche *"
+                                label="Fläche"
                                 unit="m²"
                                 value={livingAreaM2}
                                 onChange={(e) => setLivingAreaM2(e.target.value)}
@@ -227,6 +229,7 @@ export default function NewUnit({ propertyId }: { propertyId: string }) {
                             />
                             <NumberField
                                 label="Zimmeranzahl"
+                                optional
                                 placeholder="–"
                                 value={numberOfRooms}
                                 onChange={(e) => setNumberOfRooms(e.target.value)}

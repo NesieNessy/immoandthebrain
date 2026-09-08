@@ -2,18 +2,26 @@
 
 import { Button, Modal, TextField } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
+import { cn } from '@/lib/utils';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 interface Props {
   portalUrl: string;
   onPortalUrlChange: (value: string) => void;
+  /** Extra trigger button(s) rendered next to "Aus Portal importieren" — e.g.
+   *  the detail-check flow's disabled "Expose scannen" placeholder. */
+  extraTrigger?: ReactNode;
+  /** Validation error for the Portal-URL field, e.g. "not a valid URL". */
+  urlError?: string;
 }
 
 /**
- * "Daten importieren" trigger + divider + the (currently stubbed) URL import
- * modal, shared between the quick-check creation form and the result/edit view.
+ * "Aus Portal importieren" trigger + divider + the (currently stubbed) URL
+ * import modal, shared between the quick-check creation form, its result/edit
+ * view, and the detail-check Objektdaten step.
  */
-export function QuickCheckImportSection({ portalUrl, onPortalUrlChange }: Props) {
+export function PortalImportSection({ portalUrl, onPortalUrlChange, extraTrigger, urlError }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
 
   return (
@@ -21,9 +29,9 @@ export function QuickCheckImportSection({ portalUrl, onPortalUrlChange }: Props)
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={BUTTON_DETAILS.ImportData.label}
+        title={BUTTON_DETAILS.ImportFromPortal.label}
         subtitle="Immobiliendaten aus einem Portal laden"
-        icon={<BUTTON_DETAILS.ImportData.icon />}
+        icon={<BUTTON_DETAILS.ImportFromPortal.icon />}
         footer={
           <>
             <Button
@@ -33,8 +41,8 @@ export function QuickCheckImportSection({ portalUrl, onPortalUrlChange }: Props)
               onClick={() => setModalOpen(false)}
             />
             <Button
-              label={BUTTON_DETAILS.ImportData.label}
-              icon={<BUTTON_DETAILS.ImportData.icon />}
+              label={BUTTON_DETAILS.ImportFromPortal.label}
+              icon={<BUTTON_DETAILS.ImportFromPortal.icon />}
               variant="primary"
               disabled
               title="URL-Import ist noch nicht verfügbar"
@@ -48,16 +56,20 @@ export function QuickCheckImportSection({ portalUrl, onPortalUrlChange }: Props)
           helperText="Unterstützte Portale: ImmobilienScout24, Immowelt, Immonet, Kleinanzeigen"
           value={portalUrl}
           onChange={(e) => onPortalUrlChange(e.target.value)}
+          error={urlError}
         />
       </Modal>
 
-      <Button
-        label={BUTTON_DETAILS.ImportData.label}
-        icon={<BUTTON_DETAILS.ImportData.icon />}
-        variant="outline"
-        onClick={() => setModalOpen(true)}
-        className="w-full mb-3"
-      />
+      <div className={cn("mb-3", extraTrigger ? "grid grid-cols-2 gap-2" : undefined)}>
+        <Button
+          label={BUTTON_DETAILS.ImportFromPortal.label}
+          icon={<BUTTON_DETAILS.ImportFromPortal.icon />}
+          variant="outline"
+          onClick={() => setModalOpen(true)}
+          className="w-full"
+        />
+        {extraTrigger}
+      </div>
 
       <div className="flex items-center gap-3 mb-3">
         <div className="flex-1 h-px bg-border" />

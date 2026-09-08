@@ -4,7 +4,7 @@ import { NoResult } from '@/components/common';
 import { KpfAssessmentCard } from '@/components/features/KpfAssessmentCard';
 import { MobileResultBanner } from '@/components/features/MobileResultBanner';
 import { CONDITION_OPTIONS, getQuickCheckFieldErrors } from '@/components/features/QuickCheckDisplay';
-import { QuickCheckImportSection } from '@/components/features/QuickCheckImportSection';
+import { PortalImportSection } from '@/components/features/PortalImportSection';
 import { Button, Dropdown, Header, LoadingScreen, NotFoundScreen, NumberField, PAGE_CONTAINER_CLASS, StickyActionBar, TextField, UnsavedChangesModal, useToast, type BreadcrumbItem } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { FieldLabels } from '@/constants/FieldLabels';
@@ -259,7 +259,7 @@ export function QuickCheckResultView({ id }: Props) {
                   Informationen zur Berechnung
                 </h2>
 
-                <QuickCheckImportSection portalUrl={portalUrl} onPortalUrlChange={setPortalUrl} />
+                <PortalImportSection portalUrl={portalUrl} onPortalUrlChange={setPortalUrl} />
 
                 <div className="flex flex-col gap-2 pt-1.5">
                   <TextField

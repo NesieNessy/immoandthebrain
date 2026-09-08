@@ -341,12 +341,10 @@
   from {
     color: var(--muted-foreground);
     background-color: var(--muted);
-    box-shadow: 0 0 0 0 transparent;
   }
   to {
     color: var(--primary-foreground);
     background-color: var(--primary);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 20%, transparent);
   }
 }
 
@@ -354,12 +352,10 @@
   from {
     color: var(--secondary-foreground);
     background-color: var(--secondary);
-    box-shadow: 0 0 0 0 transparent;
   }
   to {
     color: var(--primary-foreground);
     background-color: var(--primary);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 20%, transparent);
   }
 }
 

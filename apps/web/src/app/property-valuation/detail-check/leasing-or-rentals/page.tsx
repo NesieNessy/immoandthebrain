@@ -65,6 +65,7 @@ function MoneyField({
   readOnly,
   suffix = '€',
   helperText,
+  optional,
 }: {
   label: string;
   value: string;
@@ -74,10 +75,12 @@ function MoneyField({
   readOnly?: boolean;
   suffix?: string;
   helperText?: string;
+  optional?: boolean;
 }) {
   return (
     <TextField
       label={label}
+      optional={optional}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       onBlur={() => onChange(formatDecimalInput(value))}
@@ -401,6 +404,7 @@ function RentalContent() {
               <div className="grid gap-4 md:grid-cols-2">
                   <MoneyField
                     label="Kaltmiete"
+                    optional
                     value={form.coldRent}
                     error={amountErrors.coldRent}
                     onChange={(value) => updateMoney('coldRent', value)}
@@ -408,6 +412,7 @@ function RentalContent() {
                   />
                   <MoneyField
                     label="Stellplatz"
+                    optional
                     value={form.parkingRent}
                     error={amountErrors.parkingRent}
                     onChange={(value) => updateMoney('parkingRent', value)}
@@ -446,6 +451,7 @@ function RentalContent() {
                 {serviceChargeMode === 'TOTAL' && (
                   <MoneyField
                     label="NK gesamt"
+                    optional
                     value={form.serviceChargesTotal}
                     error={amountErrors.serviceChargesTotal}
                     onChange={(value) => updateServiceCharge('total', value)}
@@ -455,6 +461,7 @@ function RentalContent() {
                 )}
                 <MoneyField
                   label="NK umlagefähig"
+                  optional={serviceChargeMode !== 'TOTAL'}
                   value={form.serviceChargesAllocable}
                   error={amountErrors.serviceChargesAllocable}
                   onChange={(value) => updateServiceCharge('allocable', value)}
@@ -463,6 +470,7 @@ function RentalContent() {
                 />
                 <MoneyField
                   label="NK nicht umlagefähig"
+                  optional={serviceChargeMode !== 'TOTAL'}
                   value={form.serviceChargesNonAllocable}
                   error={amountErrors.serviceChargesNonAllocable}
                   onChange={(value) => updateServiceCharge('nonAllocable', value)}
