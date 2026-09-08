@@ -240,7 +240,7 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                                         />
                                         {!data.isArchived && (
                                             <Button
-                                                label="PDF generieren"
+                                                label="Word-Dokument generieren"
                                                 icon={<Icons.FileText className="w-4 h-4" />}
                                                 variant="primary"
                                                 disabled={data.tenancy == null}

@@ -19,6 +19,24 @@ export function formatDeDate(value: string | null | undefined): string {
 }
 
 /**
+ * Saves a generated Blob (docx, csv, …) to the user's device. Unlike
+ * `window.open(URL.createObjectURL(blob))` — which browsers handle
+ * inconsistently for mime types they can't render inline, sometimes just
+ * navigating the tab to a blank page instead of downloading — an anchor with
+ * a `download` attribute reliably triggers a save dialog for any blob type.
+ */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+/**
  * Converts a raw base64 image string (as stored in `image_base64` DB column)
  * to a usable `data:` URI for <img src>.
  * Returns null if the input is falsy.

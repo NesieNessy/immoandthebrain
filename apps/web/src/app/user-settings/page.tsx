@@ -3,7 +3,7 @@
 import { Header, Icons, LoadingScreen, PAGE_CONTAINER_CLASS, StickyActionBar, TextField, Tile, useToast } from '@/components/ui';
 import { authBypassUser, isAuthBypassEnabled } from '@/lib/auth/authBypass';
 import { supabase } from '@/lib/supabase/client.supabase';
-import { getPersonalData, upsertPersonalData } from '@/lib/supabase/personal_data.supabase';
+import { getPersonalData, PersonalDataSaveError, upsertPersonalData } from '@/lib/supabase/personal_data.supabase';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { getLabel } from '@/constants/FieldLabels';
 import type { PersonalData } from '@immonext/types';
@@ -24,6 +24,21 @@ const emptyForm = {
 };
 
 type FormData = typeof emptyForm;
+
+/** Maps the API's snake_case `missing` column names to FieldLabels keys, so a
+ *  validation failure can tell the user exactly which field is empty instead
+ *  of a generic "Fehler beim Speichern". */
+const MISSING_FIELD_LABEL_KEYS: Record<string, string> = {
+    last_name: 'LastName',
+    first_name: 'FirstName',
+    street: 'Street',
+    house_number: 'HouseNumber',
+    city: 'City',
+    postal_code: 'PostalCode',
+    phone_number: 'PhoneNumber',
+    email_address: 'EmailAddress',
+    tax_identification_number: 'taxIdentificationNumber',
+};
 
 function SettingsPageContent() {
     const { showToast } = useToast();
@@ -49,12 +64,19 @@ function SettingsPageContent() {
         taxIdentificationNumber: data.taxIdentificationNumber,
     });
 
-    const loadData = useCallback(async (uid: string) => {
+    const loadData = useCallback(async (uid: string, authEmail: string) => {
         setIsLoading(true);
         setError(null);
         const data = await getPersonalData(uid);
         if (data) {
             const form = toFormData(data);
+            setFormData(form);
+            setSavedData(form);
+        } else if (authEmail) {
+            // First-time save (no personal_data row yet) — prefill the email
+            // we already know from the logged-in Supabase user so it doesn't
+            // silently block the required-fields check on an empty value.
+            const form = { ...emptyForm, emailAddress: authEmail };
             setFormData(form);
             setSavedData(form);
         }
@@ -83,7 +105,7 @@ function SettingsPageContent() {
         supabase.auth.getUser().then(({ data }) => {
             if (data.user) {
                 setUser(data.user);
-                loadData(data.user.id);
+                loadData(data.user.id, data.user.email ?? '');
             } else {
                 setIsLoading(false);
             }
@@ -105,27 +127,34 @@ function SettingsPageContent() {
         if (!user) return;
         setIsSaving(true);
         setError(null);
-        const result = await upsertPersonalData({
-            userId: user.id,
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            emailAddress: formData.emailAddress,
-            phoneNumber: formData.phoneNumber || undefined,
-            street: formData.street,
-            houseNumber: formData.houseNumber,
-            postalCode: formData.postalCode,
-            city: formData.city,
-            taxIdentificationNumber: formData.taxIdentificationNumber,
-        });
-
-        if (result) {
+        try {
+            const result = await upsertPersonalData({
+                userId: user.id,
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                emailAddress: formData.emailAddress,
+                phoneNumber: formData.phoneNumber || undefined,
+                street: formData.street,
+                houseNumber: formData.houseNumber,
+                postalCode: formData.postalCode,
+                city: formData.city,
+                taxIdentificationNumber: formData.taxIdentificationNumber,
+            });
             const updated = toFormData(result);
             setSavedData(updated);
             setFormData(updated);
             setIsEditing(false);
             showToast('Einstellungen gespeichert.');
-        } else {
-            setError('Fehler beim Speichern. Bitte versuchen Sie es erneut.');
+        } catch (err) {
+            if (err instanceof PersonalDataSaveError && err.missing.length > 0) {
+                const fieldNames = err.missing
+                    .map((column) => MISSING_FIELD_LABEL_KEYS[column])
+                    .filter((key): key is string => !!key)
+                    .map((key) => getLabel('PersonalData', key, 'de'));
+                setError(`Bitte füllen Sie zunächst folgende Pflichtfelder aus: ${fieldNames.join(', ')}.`);
+            } else {
+                setError('Fehler beim Speichern. Bitte versuchen Sie es erneut.');
+            }
         }
         setIsSaving(false);
     };
