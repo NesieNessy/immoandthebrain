@@ -21,7 +21,7 @@ import { addAdjustmentHistoryEntry, getAdjustmentHistoryByTenancy } from '@/lib/
 import { uploadTenancyDocument } from '@/lib/supabase/tenancy_document.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
 import { createMaintenanceCosts, getMaintenanceCostsById, updateMaintenanceCosts } from '@/lib/supabase/maintenance_costs.supabase';
-import { formatDeDate } from '@/lib/utils';
+import { downloadBlob, formatDeDate } from '@/lib/utils';
 import { htmlToPdfBlob } from '@/lib/pdf/htmlToPdf';
 import { authFetch } from '@/lib/api/authFetch';
 import {
@@ -158,10 +158,16 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 setCostItems(items);
                 setOriginalSnapshot(loadedItems.length > 0 ? serializeCostItems(items, new Date(currentSettlement.periodStart), new Date(currentSettlement.periodEnd)) : '');
             } else {
-                const currentYear = new Date().getFullYear();
-                setPeriodStart(new Date(currentYear, 0, 1));
-                setPeriodEnd(new Date(currentYear, 11, 31));
-                setPeriodModeState('year');
+                // Default the period to the tenant's Mietauszug date when
+                // there is one — a settlement for a moved-out tenant almost
+                // always needs to end there, not run through Dec 31.
+                const moveOutDate = currentTenancy?.tenancyEndDate ? new Date(currentTenancy.tenancyEndDate) : null;
+                const periodYear = moveOutDate ? moveOutDate.getFullYear() : new Date().getFullYear();
+                const start = new Date(periodYear, 0, 1);
+                const end = moveOutDate ?? new Date(periodYear, 11, 31);
+                setPeriodStart(start);
+                setPeriodEnd(end);
+                setPeriodModeState(isFullCalendarYear(start, end) ? 'year' : 'custom');
                 setCostItems(defaultItems());
                 setOriginalSnapshot('');
             }
@@ -592,7 +598,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 tenancyPersonId: null,
                 documentType: 'Nebenkostenabrechnung',
             });
-            window.open(URL.createObjectURL(blob), '_blank', 'noopener,noreferrer');
+            downloadBlob(blob, file.name);
             showToast('Nebenkostenabrechnung als PDF erstellt.', 'success');
         } finally {
             setIsGeneratingPdf(false);

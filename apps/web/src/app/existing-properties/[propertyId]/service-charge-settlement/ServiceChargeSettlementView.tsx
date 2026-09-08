@@ -429,8 +429,8 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                         </span>
                                         <span title={!data.canGeneratePdf ? 'Bitte zuerst Mieterdaten und Abrechnungszeitraum hinterlegen' : undefined}>
                                             <Button
-                                                label="PDF generieren"
-                                                icon={<Icons.FileText className="w-4 h-4" />}
+                                                label={data.isGeneratingPdf ? 'Wird erstellt…' : 'PDF generieren'}
+                                                icon={data.isGeneratingPdf ? <Icons.Loader2 className="w-4 h-4 animate-spin" /> : <Icons.FileText className="w-4 h-4" />}
                                                 variant="primary"
                                                 disabled={!data.canGeneratePdf || data.isGeneratingPdf}
                                                 onClick={() => void data.handleGeneratePdf()}
