@@ -22,6 +22,7 @@ import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCas
 import type { Property, PropertyUnit } from '@immonext/types';
 import { useRouter } from 'next/navigation';
 import { useRef } from 'react';
+import { Sparkles } from 'lucide-react';
 
 import { euro, useServiceChargeSettlementData } from './useServiceChargeSettlementData';
 
@@ -154,6 +155,13 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                         }}
                     />
 
+                    {data.isExtractingSettlement && (
+                        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 flex items-center gap-3 text-sm text-foreground">
+                            <Icons.Loader2 className="w-4 h-4 animate-spin text-primary shrink-0" />
+                            Daten werden aus dem Dokument übernommen …
+                        </div>
+                    )}
+
                     {data.settlement?.sourceDocumentName ? (
                         <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
                             <div className="flex items-center gap-3 min-w-0">
@@ -175,13 +183,13 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                     icon={<Icons.RefreshCw className="w-4 h-4" />}
                                     variant="outline"
                                     size="sm"
-                                    disabled={data.isUploadingSource}
+                                    disabled={data.isUploadingSource || data.isExtractingSettlement}
                                     onClick={() => uploadInputRef.current?.click()}
                                 />
                                 <button
                                     type="button"
                                     onClick={() => void data.handleRemoveSourceDocument()}
-                                    disabled={data.isUploadingSource}
+                                    disabled={data.isUploadingSource || data.isExtractingSettlement}
                                     aria-label="Datei entfernen"
                                     className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
                                 >
@@ -195,10 +203,17 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                 label="Nebenkostenabrechnung hochladen"
                                 icon={<Icons.Upload className="w-4 h-4" />}
                                 variant="outline"
-                                disabled={data.isUploadingSource}
+                                disabled={data.isUploadingSource || data.isExtractingSettlement}
                                 onClick={() => uploadInputRef.current?.click()}
                                 className="w-full mb-3"
                             />
+                            <div className="flex items-start gap-2 -mt-2 mb-3 px-3 py-2 rounded-md bg-info/10 border border-info/30 text-xs text-info">
+                                <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                <span>
+                                    Automatische Übernahme von Kostenpositionen und Zeitraum per KI ist demnächst verfügbar.
+                                    Bitte die Werte nach dem Hochladen noch manuell erfassen.
+                                </span>
+                            </div>
                             <div className="flex items-center gap-3">
                                 <div className="flex-1 h-px bg-border" />
                                 <span className="text-xs text-muted-foreground shrink-0">oder manuell erfassen</span>

@@ -23,12 +23,14 @@ import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supaba
 import { createMaintenanceCosts, getMaintenanceCostsById, updateMaintenanceCosts } from '@/lib/supabase/maintenance_costs.supabase';
 import { formatDeDate } from '@/lib/utils';
 import { htmlToPdfBlob } from '@/lib/pdf/htmlToPdf';
+import { authFetch } from '@/lib/api/authFetch';
 import {
     compareBudgetCoverage,
     compareSettlementCoverage,
     prorateAnnualPrepayment,
     splitByAllocable,
 } from '@/lib/serviceCharge/settlementMath';
+import { mergeExtractedCostItems, type ExtractedSettlementData } from '@/lib/serviceCharge/settlementExtraction';
 import type {
     MaintenanceCosts,
     PersonalData,
@@ -44,6 +46,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { DEFAULT_COST_ITEMS, euro } from '../tenant-data/useTenantUnitData';
+import { readFileAsDataUrl } from '../tenant-data/DocumentGeneratorParts';
 import { formatUnitLabel } from '@/components/features/PropertyDisplay';
 import { serviceChargeStatementHtml } from './serviceChargeStatementLetter';
 
@@ -114,6 +117,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingSource, setIsUploadingSource] = useState(false);
+    const [isExtractingSettlement, setIsExtractingSettlement] = useState(false);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isApplyingPrepayment, setIsApplyingPrepayment] = useState(false);
     const [previewHtml, setPreviewHtml] = useState<string | null>(null);
@@ -354,7 +358,12 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         setIsApplyingPrepayment(true);
         setError(null);
         try {
-            const updatedTenancy = await updateTenancy(tenancy.tenancyId, { miscRent: newMonthlyPrepayment });
+            // warmRent is persisted (not just derived on the fly) because the
+            // generated Mietvertrag document reads tenancy.warmRent directly —
+            // without updating it here it would still show the old total rent
+            // after applying a new NK-Vorauszahlung.
+            const newWarmRent = Math.round(((tenancy.coldRent ?? 0) + newMonthlyPrepayment + (tenancy.parkingSpaceRent ?? 0)) * 100) / 100;
+            const updatedTenancy = await updateTenancy(tenancy.tenancyId, { miscRent: newMonthlyPrepayment, warmRent: newWarmRent });
             if (updatedTenancy) setTenancy(updatedTenancy);
 
             const effectiveDate = format(new Date(settlementYear + 1, 0, 1), 'yyyy-MM-dd');
@@ -422,6 +431,47 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         return created;
     };
 
+    // ── Automatic data takeover from the uploaded source document ───────────
+    // Documents vary wildly in layout (scan, photo, export from any property
+    // management tool), so a fixed template parser can't handle them — the
+    // file is sent to Claude with a structured-output tool call instead. The
+    // result only pre-fills the (still editable, still unsaved) form state;
+    // nothing is persisted until the user reviews it and hits "Abrechnung
+    // speichern", same as manual entry.
+    const extractSettlementDocument = async (file: File): Promise<ExtractedSettlementData | null> => {
+        const fileDataUrl = await readFileAsDataUrl(file);
+        const response = await authFetch('/api/settlement-extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileDataUrl, mimeType: file.type }),
+        });
+        if (!response.ok) return null;
+        return await response.json() as ExtractedSettlementData;
+    };
+
+    const applyExtractedData = (extracted: ExtractedSettlementData) => {
+        if (extracted.periodStart && extracted.periodEnd) {
+            const start = new Date(extracted.periodStart);
+            const end = new Date(extracted.periodEnd);
+            if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+                setPeriodStart(start);
+                setPeriodEnd(end);
+                setPeriodModeState(isFullCalendarYear(start, end) ? 'year' : 'custom');
+            }
+        }
+        if (extracted.costItems.length > 0) {
+            setCostItems((prev) => mergeExtractedCostItems(prev, extracted.costItems, (item) => ({
+                id: null,
+                label: item.label,
+                allocable: item.allocable,
+                actualAmount: item.actualAmount != null ? String(item.actualAmount) : '',
+                budgetAmount: item.budgetAmount != null ? String(item.budgetAmount) : '',
+                actualShareOverride: '',
+                budgetShareOverride: '',
+            })));
+        }
+    };
+
     const handleUploadSourceDocument = async (file: File) => {
         if (!user) return;
         setIsUploadingSource(true);
@@ -438,6 +488,21 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             if (updated) setSettlement(updated);
         } finally {
             setIsUploadingSource(false);
+        }
+
+        setIsExtractingSettlement(true);
+        try {
+            const extracted = await extractSettlementDocument(file);
+            if (extracted && (extracted.costItems.length > 0 || extracted.periodStart)) {
+                applyExtractedData(extracted);
+                showToast(`${extracted.costItems.length} Kostenposition(en) aus dem Dokument übernommen. Bitte prüfen und speichern.`, 'success');
+            } else {
+                showToast('Datei hochgeladen. Automatische Datenübernahme war nicht möglich – bitte Werte manuell erfassen.', 'error');
+            }
+        } catch {
+            showToast('Automatische Datenübernahme fehlgeschlagen – bitte Werte manuell erfassen.', 'error');
+        } finally {
+            setIsExtractingSettlement(false);
         }
     };
 
@@ -540,7 +605,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     return {
         // state
-        isLoading, isSaving, isUploadingSource, isGeneratingPdf, isApplyingPrepayment, error,
+        isLoading, isSaving, isUploadingSource, isExtractingSettlement, isGeneratingPdf, isApplyingPrepayment, error,
         settlement, periodStart, setPeriodStart, periodEnd, setPeriodEnd,
         periodMode, setPeriodMode, setSettlementYear,
         costItems, tenancy, landlord, useCaseMenuItems, backHref,

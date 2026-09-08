@@ -43,6 +43,11 @@ export function addMonthsSafe(date: Date, months: number): Date {
 export interface RentalForm {
     tenancyEndDate: Date | undefined;
     coldRent: string;
+    /** NK-Vorauszahlung — the tenant's monthly service-charge prepayment.
+     *  Also gets overwritten by the "NK-Vorauszahlung übernehmen" action on
+     *  the Nebenkostenabrechnung page; this is just the manual entry point
+     *  for it (e.g. the initial value on a new tenancy). */
+    miscRent: string;
     parkingSpaceRent: string;
     houseMoney: string;
     allocableCosts: string;
@@ -60,6 +65,7 @@ export interface RentalForm {
 const EMPTY_RENTAL_FORM: RentalForm = {
     tenancyEndDate: undefined,
     coldRent: '',
+    miscRent: '',
     parkingSpaceRent: '',
     houseMoney: '',
     allocableCosts: '',
@@ -272,6 +278,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                 const form: RentalForm = {
                     tenancyEndDate: found.tenancyEndDate ? new Date(found.tenancyEndDate) : undefined,
                     coldRent: found.coldRent != null ? String(found.coldRent) : '',
+                    miscRent: found.miscRent != null ? String(found.miscRent) : '',
                     parkingSpaceRent: found.parkingSpaceRent != null ? String(found.parkingSpaceRent) : '',
                     houseMoney: loadedMaintenanceCosts?.houseMoney != null ? String(loadedMaintenanceCosts.houseMoney) : '',
                     allocableCosts: loadedMaintenanceCosts?.allocableCosts != null ? String(loadedMaintenanceCosts.allocableCosts) : '',
@@ -591,6 +598,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
             const startDateValue = primaryMoveInDate ? format(primaryMoveInDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
             const endDateValue = rentalForm.tenancyEndDate ? format(rentalForm.tenancyEndDate, 'yyyy-MM-dd') : null;
             const coldRentValue = rentalForm.coldRent !== '' ? Number(rentalForm.coldRent) : null;
+            const miscRentValue = rentalForm.miscRent !== '' ? Number(rentalForm.miscRent) : null;
             const parkingSpaceRentValue = rentalForm.parkingSpaceRent !== '' ? Number(rentalForm.parkingSpaceRent) : null;
             const adjustmentFields = {
                 nextRentAdjustmentDate: rentalForm.nextRentAdjustmentDate ? format(rentalForm.nextRentAdjustmentDate, 'yyyy-MM-dd') : null,
@@ -625,7 +633,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                         tenancyUnits: null,
                         tenancyUnitsPrice: null,
                         parkingSpaceRent: parkingSpaceRentValue,
-                        miscRent: null,
+                        miscRent: miscRentValue,
                         warmRent: null,
                         coldRent: coldRentValue,
                         tenantFirstName: '',
@@ -650,7 +658,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                     tenancyUnits: null,
                     tenancyUnitsPrice: null,
                     parkingSpaceRent: parkingSpaceRentValue,
-                    miscRent: null,
+                    miscRent: miscRentValue,
                     warmRent: null,
                     coldRent: coldRentValue,
                     tenantFirstName: '',
@@ -665,6 +673,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                     tenancyStartDate: startDateValue,
                     tenancyEndDate: endDateValue,
                     coldRent: coldRentValue,
+                    miscRent: miscRentValue,
                     parkingSpaceRent: parkingSpaceRentValue,
                     ...adjustmentFields,
                 });

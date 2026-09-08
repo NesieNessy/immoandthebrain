@@ -112,7 +112,7 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
 
                     <div>
                         <SectionLabel>Miete & Nebenkosten</SectionLabel>
-                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                             <NumberField
                                 label="Netto-Mieteinnahmen"
                                 unit="€"
@@ -120,6 +120,17 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                                 onChange={(e) => data.setRentalForm((prev) => ({ ...prev, coldRent: e.target.value }))}
                                 min={0}
                             />
+                            <div>
+                                <NumberField
+                                    label="NK-Vorauszahlung"
+                                    optional
+                                    unit="€"
+                                    value={data.rentalForm.miscRent}
+                                    onChange={(e) => data.setRentalForm((prev) => ({ ...prev, miscRent: e.target.value }))}
+                                    min={0}
+                                />
+                                <p className="mt-1 text-xs text-muted-foreground">Wird auch von &bdquo;NK-Vorauszahlung übernehmen&ldquo; in der Nebenkostenabrechnung aktualisiert</p>
+                            </div>
                             <NumberField
                                 label="Stellplatz"
                                 optional
