@@ -7,14 +7,14 @@ import { Button, CalendarField, ConfirmDeleteModal, Dropdown, Header, Icons, Mod
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { formatDeDate } from '@/lib/utils';
 import type { Property, PropertyUnit, RentalTermsPetsAllowed, RentalTermsRedecorationClause, RentalTermsSubletAllowed } from '@immonext/types';
+import { useRentalAgreementGenerator } from '../tenant-data/rentalAgreementGenerator';
 import {
     PETS_OPTIONS,
     REDECORATION_OPTIONS,
     RENOVATION_ADJUSTMENT_OPTIONS,
     SUBLET_OPTIONS,
-    useRentalAgreementGenerator,
     type TriState,
-} from '../tenant-data/rentalAgreementGenerator';
+} from '../tenant-data/rentalAgreementLetter';
 import { euro, useTenantUnitData } from '../tenant-data/useTenantUnitData';
 
 interface TenantAgreementPageProps {

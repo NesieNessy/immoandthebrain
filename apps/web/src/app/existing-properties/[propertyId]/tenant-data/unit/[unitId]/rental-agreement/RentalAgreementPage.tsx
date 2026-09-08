@@ -9,15 +9,15 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { DataCard, Field, initials, Pill } from '../../../DocumentGeneratorParts';
+import { useRentalAgreementGenerator } from '../../../rentalAgreementGenerator';
 import {
     agreementBodyHtml,
     PETS_OPTIONS,
     REDECORATION_OPTIONS,
     RENOVATION_ADJUSTMENT_OPTIONS,
     SUBLET_OPTIONS,
-    useRentalAgreementGenerator,
     type TriState,
-} from '../../../rentalAgreementGenerator';
+} from '../../../rentalAgreementLetter';
 
 type View = 'review' | 'preview';
 

@@ -8,7 +8,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { DataCard, Field, initials, Pill } from '../../../DocumentGeneratorParts';
-import { certificateBodyHtml, isPersonComplete, useMieterbescheinigungGenerator } from '../../../mieterbescheinigungGenerator';
+import { useMieterbescheinigungGenerator } from '../../../mieterbescheinigungGenerator';
+import { certificateBodyHtml, isPersonComplete } from '../../../mieterbescheinigungLetter';
 
 type View = 'review' | 'preview';
 

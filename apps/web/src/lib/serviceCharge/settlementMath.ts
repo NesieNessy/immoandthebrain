@@ -1,5 +1,27 @@
 export type CoverageDirection = 'shortfall' | 'surplus' | 'balanced';
 
+/** A settlement period counts as "whole year" when it spans exactly Jan 1 –
+ *  Dec 31 of a single year — the common case, vs. a shorter custom range
+ *  (e.g. a tenant moved in/out mid-year). */
+export function isFullCalendarYear(start: Date, end: Date): boolean {
+    return start.getMonth() === 0 && start.getDate() === 1
+        && end.getMonth() === 11 && end.getDate() === 31
+        && start.getFullYear() === end.getFullYear();
+}
+
+/**
+ * Default Abrechnungszeitraum for a brand-new settlement: Jan 1 – Dec 31 of
+ * `currentYear`, unless the tenant has a move-out date, in which case the
+ * period instead runs Jan 1 – the move-out date of *that* date's year (a
+ * final settlement almost always needs to end at Mietauszug, not Dec 31).
+ */
+export function defaultSettlementPeriod(moveOutDate: Date | null, currentYear: number): { start: Date; end: Date } {
+    const periodYear = moveOutDate ? moveOutDate.getFullYear() : currentYear;
+    const start = new Date(periodYear, 0, 1);
+    const end = moveOutDate ?? new Date(periodYear, 11, 31);
+    return { start, end };
+}
+
 /** Compares (1) the unit's apartment share of actual allocable costs against (2) the annual prepayment total. */
 export function compareSettlementCoverage(apartmentShare: number, annualPrepayment: number): CoverageDirection {
     if (apartmentShare > annualPrepayment) return 'shortfall';

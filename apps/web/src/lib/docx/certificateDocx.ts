@@ -26,10 +26,10 @@ const PRIMARY = '224B96';
 const PRIMARY_BG = 'E9EDF4';
 
 /** Splits a `data:image/png;base64,....` URL into what ImageRun needs. */
-function parseImageDataUrl(dataUrl: string): { type: 'png' | 'jpg'; base64: string } | null {
+export function parseImageDataUrl(dataUrl: string): { type: 'png' | 'jpg'; base64: string } | null {
     const match = /^data:image\/(png|jpe?g);base64,(.+)$/i.exec(dataUrl);
     if (!match) return null;
-    return { type: match[1].toLowerCase().startsWith('jpe') ? 'jpg' : 'png', base64: match[2] };
+    return { type: match[1].toLowerCase().startsWith('jp') ? 'jpg' : 'png', base64: match[2] };
 }
 
 /**

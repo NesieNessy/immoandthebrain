@@ -27,6 +27,8 @@ import { authFetch } from '@/lib/api/authFetch';
 import {
     compareBudgetCoverage,
     compareSettlementCoverage,
+    defaultSettlementPeriod,
+    isFullCalendarYear,
     prorateAnnualPrepayment,
     splitByAllocable,
 } from '@/lib/serviceCharge/settlementMath';
@@ -84,15 +86,6 @@ function serializeCostItems(items: CostItemForm[], periodStart: Date | undefined
             actualShareOverride: i.actualShareOverride, budgetShareOverride: i.budgetShareOverride,
         })),
     });
-}
-
-/** A settlement period counts as "whole year" when it spans exactly Jan 1 –
- *  Dec 31 of a single year — the common case, vs. a shorter custom range
- *  (e.g. a tenant moved in/out mid-year). */
-function isFullCalendarYear(start: Date, end: Date): boolean {
-    return start.getMonth() === 0 && start.getDate() === 1
-        && end.getMonth() === 11 && end.getDate() === 31
-        && start.getFullYear() === end.getFullYear();
 }
 
 export { euro };
@@ -162,9 +155,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 // there is one — a settlement for a moved-out tenant almost
                 // always needs to end there, not run through Dec 31.
                 const moveOutDate = currentTenancy?.tenancyEndDate ? new Date(currentTenancy.tenancyEndDate) : null;
-                const periodYear = moveOutDate ? moveOutDate.getFullYear() : new Date().getFullYear();
-                const start = new Date(periodYear, 0, 1);
-                const end = moveOutDate ?? new Date(periodYear, 11, 31);
+                const { start, end } = defaultSettlementPeriod(moveOutDate, new Date().getFullYear());
                 setPeriodStart(start);
                 setPeriodEnd(end);
                 setPeriodModeState(isFullCalendarYear(start, end) ? 'year' : 'custom');
