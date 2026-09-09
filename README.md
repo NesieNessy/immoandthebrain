@@ -1,4 +1,4 @@
-# ImmoNext - Real Estate Management Platform
+# ImmoAndTheBrain - Real Estate Management Platform
 
 Real estate property management and valuation platform built with Next.js and Supabase.
 
@@ -24,8 +24,8 @@ See [docs/architecture.md](docs/architecture.md) for details.
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/NesieNessy/immonext.git
-   cd immonext
+   git clone https://github.com/NesieNessy/immoandthebrain.git
+   cd immoandthebrain
    ```
 
 2. **Set up environment variables**
@@ -50,7 +50,7 @@ See [docs/getting-started.md](docs/getting-started.md) for the full walkthrough,
 ## 📁 Project Structure
 
 ```
-immonext/
+immoandthebrain/
 ├── apps/
 │   └── web/           # Next.js frontend
 ├── supabase/          # Database & migrations

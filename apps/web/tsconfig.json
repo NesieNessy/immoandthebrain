@@ -26,7 +26,7 @@
       "@/*": [
         "./src/*"
       ],
-      "@immonext/types": [
+      "@immoandthebrain/types": [
         "../../packages/types/src/index.ts"
       ]
     }

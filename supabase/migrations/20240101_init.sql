@@ -1,4 +1,4 @@
--- Initial schema for Immonext
+-- Initial schema for ImmoAndTheBrain
 -- Create extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 

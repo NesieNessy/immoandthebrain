@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext - CREATE TABLE: quick_check
+-- ImmoAndTheBrain - CREATE TABLE: quick_check
 --
 -- Flow:
 --   INSERT   -> user fills QuickCheckPage. Inputs stored in snapshot fields.

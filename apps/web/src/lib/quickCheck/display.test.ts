@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PropertyCondition } from '@immonext/types';
+import { PropertyCondition } from '@immoandthebrain/types';
 import type { QuickCheckOverview } from '@/lib/supabase/quick_check.supabase';
 import {
   CONDITION_FILTER_OPTIONS,

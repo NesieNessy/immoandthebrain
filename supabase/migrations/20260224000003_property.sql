@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: property
+-- ImmoAndTheBrain – CREATE TABLE: property
 -- Depends on: personal_data (user_id), city (city_id)
 -- ==============================================================================
 

@@ -1,7 +1,7 @@
-# Immonext Architecture
+# ImmoAndTheBrain Architecture
 
 ## Overview
-Immonext is a monorepo application for real estate property management and valuation, built with Next.js and Supabase.
+ImmoAndTheBrain is a monorepo application for real estate property management and valuation, built with Next.js and Supabase.
 
 ## Technology Stack
 
@@ -63,7 +63,7 @@ Two consequences follow from this design:
 ## Project Structure
 
 ```
-immonext/
+immoandthebrain/
 ├── apps/
 │   └── web/               # Next.js frontend
 │       ├── src/

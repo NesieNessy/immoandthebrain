@@ -10,7 +10,7 @@ import { createParkingSpace } from '@/lib/supabase/parking_space.supabase';
 import { createProperty } from '@/lib/supabase/property.supabase';
 import { createPropertyAcquisition } from '@/lib/supabase/property_acquisition.supabase';
 import { base64ToDataUri } from '@/lib/utils';
-import { EnergyEfficient } from '@immonext/types';
+import { EnergyEfficient } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useRef, useState } from 'react';

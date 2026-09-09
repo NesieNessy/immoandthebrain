@@ -1,6 +1,6 @@
 import { jsonRequest, propertyResourceRequest } from '@/lib/api/propertyResources';
 import { supabase } from '@/lib/supabase/client.supabase';
-import type { ServiceChargeSettlement, ServiceChargeSettlementInsert, ServiceChargeSettlementUpdate } from '@immonext/types';
+import type { ServiceChargeSettlement, ServiceChargeSettlementInsert, ServiceChargeSettlementUpdate } from '@immoandthebrain/types';
 
 /** Reuses the tenancy-documents bucket for the settlement's optional source
  *  document (the property-management/utility invoice this settlement was

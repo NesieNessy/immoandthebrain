@@ -4,7 +4,7 @@ import type {
     ParkingSpaceInsert,
     ParkingSpaceType,
     ParkingSpaceUpdate,
-} from '@immonext/types';
+} from '@immoandthebrain/types';
 
 function toParkingSpace(row: Record<string, unknown>): ParkingSpace {
   return {

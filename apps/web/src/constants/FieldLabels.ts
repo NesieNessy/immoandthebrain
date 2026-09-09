@@ -1,5 +1,5 @@
 // ==============================================================================
-// ImmoNext – Frontend Field Labels (i18n: English & German)
+// ImmoAndTheBrain – Frontend Field Labels (i18n: English & German)
 // All IDs are excluded (handled separately).
 //
 // Usage:

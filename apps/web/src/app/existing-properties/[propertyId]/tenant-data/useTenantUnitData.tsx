@@ -25,7 +25,7 @@ import { createUseCaseMenuItems } from '@/lib/propertyUseCaseMenu';
 import { cn, deCurrencyFormatter, formatDeDate } from '@/lib/utils';
 import { renovationAdjustmentLetterHtml, rentIncreaseLetterHtml } from './adjustmentLetters';
 import { htmlToPdfBlob } from '@/lib/pdf/htmlToPdf';
-import type { MaintenanceCostItem, MaintenanceCosts, PersonalData, Property, PropertyUnit, Tenancy, TenancyAdjustmentHistoryEntry, TenancyAdjustmentType, TenancyDocument, TenancyDocumentType } from '@immonext/types';
+import type { MaintenanceCostItem, MaintenanceCosts, PersonalData, Property, PropertyUnit, Tenancy, TenancyAdjustmentHistoryEntry, TenancyAdjustmentType, TenancyDocument, TenancyDocumentType } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';

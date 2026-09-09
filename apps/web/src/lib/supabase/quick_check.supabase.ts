@@ -1,5 +1,5 @@
 // ==============================================================================
-// ImmoNext – Supabase Client: quick_check
+// ImmoAndTheBrain – Supabase Client: quick_check
 //
 // Journey:
 //   createQuickCheck()   → INSERT — saves form data, status = ACTIVE
@@ -15,7 +15,7 @@
 // the fixed classifyKpf() scale in lib/quickCheck/kpf.ts), so that param is unused.
 // ==============================================================================
 
-import type { PropertyCondition } from '@immonext/types';
+import type { PropertyCondition } from '@immoandthebrain/types';
 import { authFetch } from '../api/authFetch';
 
 // ── Types ─────────────────────────────────────────────────────────────────────

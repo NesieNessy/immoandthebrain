@@ -1,9 +1,9 @@
 // ==============================================================================
-// ImmoNext – Supabase Client: maintenance_costs
+// ImmoAndTheBrain – Supabase Client: maintenance_costs
 // ==============================================================================
 import { authFetch } from '@/lib/api/authFetch';
 import { supabase } from '@/lib/supabase/client.supabase';
-import type { MaintenanceCosts, MaintenanceCostsInsert, MaintenanceCostsUpdate, MaintenanceCostItem } from '@immonext/types';
+import type { MaintenanceCosts, MaintenanceCostsInsert, MaintenanceCostsUpdate, MaintenanceCostItem } from '@immoandthebrain/types';
 
 function toMaintenanceCosts(row: Record<string, unknown>): MaintenanceCosts {
   return {

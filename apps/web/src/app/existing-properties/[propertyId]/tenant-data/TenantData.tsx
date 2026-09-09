@@ -10,7 +10,7 @@ import { deletePropertyUnit, getPropertyUnitsByProperty } from '@/lib/supabase/p
 import { getCurrentTenancyByUnit } from '@/lib/supabase/tenancy.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
 import { deCurrencyFormatter, formatDeDate } from '@/lib/utils';
-import type { Property, PropertyUnit } from '@immonext/types';
+import type { Property, PropertyUnit } from '@immoandthebrain/types';
 import { useRouter } from 'next/navigation';
 
 import { CurrentTenantPage } from './CurrentTenantPage';

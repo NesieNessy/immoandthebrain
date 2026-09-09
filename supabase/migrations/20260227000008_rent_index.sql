@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: rent_index
+-- ImmoAndTheBrain – CREATE TABLE: rent_index
 -- Depends on: city (city_id)
 -- ==============================================================================
 

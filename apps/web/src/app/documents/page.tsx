@@ -7,7 +7,7 @@ import { getProperties } from '@/lib/supabase/property.supabase';
 import { getAllQuickChecks, type QuickCheckOverview } from '@/lib/supabase/quick_check.supabase';
 import { deleteTenancyDocument, getTenancyDocumentsByUser, getTenancyDocumentUrl } from '@/lib/supabase/tenancy_document.supabase';
 import { cn } from '@/lib/utils';
-import type { DocumentCategory, Property } from '@immonext/types';
+import type { DocumentCategory, Property } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { FileImage, FileSpreadsheet, type LucideIcon, Tags } from 'lucide-react';

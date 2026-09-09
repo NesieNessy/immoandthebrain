@@ -11,7 +11,7 @@
 import type { TagVariant } from '@/components/ui';
 import type { QuickCheckOverview } from '@/lib/supabase/quick_check.supabase';
 import { isValidConstructionYear } from './validation';
-import { PropertyCondition } from '@immonext/types';
+import { PropertyCondition } from '@immoandthebrain/types';
 
 export interface QuickCheckEntry extends Record<string, unknown> {
   id: number;

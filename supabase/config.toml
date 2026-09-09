@@ -1,5 +1,5 @@
 # Supabase local development configuration
-project_id = "immonext"
+project_id = "immoandthebrain"
 
 [api]
 enabled = true

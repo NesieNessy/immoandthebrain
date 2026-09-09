@@ -14,15 +14,15 @@ const connectionString =
   process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:54322/postgres';
 
 const globalForDb = globalThis as typeof globalThis & {
-  immonextPgPool?: Pool;
+  immoandthebrainPgPool?: Pool;
 };
 
 export const db =
-  globalForDb.immonextPgPool ??
+  globalForDb.immoandthebrainPgPool ??
   new Pool({
     connectionString,
   });
 
 if (process.env.NODE_ENV !== 'production') {
-  globalForDb.immonextPgPool = db;
+  globalForDb.immoandthebrainPgPool = db;
 }

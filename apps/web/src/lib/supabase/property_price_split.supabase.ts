@@ -1,5 +1,5 @@
 import { jsonRequest, propertyResourceRequest } from '@/lib/api/propertyResources';
-import type { PropertyPriceSplit, PropertyPriceSplitInsert } from '@immonext/types';
+import type { PropertyPriceSplit, PropertyPriceSplitInsert } from '@immoandthebrain/types';
 
 function toPropertyPriceSplit(row: Record<string, unknown>): PropertyPriceSplit {
   return {

@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: subscription
+-- ImmoAndTheBrain – CREATE TABLE: subscription
 -- Depends on: personal_data (user_id)
 -- ==============================================================================
 

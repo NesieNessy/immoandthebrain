@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: legal_requirements
+-- ImmoAndTheBrain – CREATE TABLE: legal_requirements
 -- Depends on: city (city_id)
 -- ==============================================================================
 

@@ -21,7 +21,7 @@ import {
   type RenovationTiming,
 } from '@/lib/detailCheck/renovation';
 import { getDocumentsByUser, getDocumentUrl, uploadDocument } from '@/lib/supabase/document.supabase';
-import type { UserDocument } from '@immonext/types';
+import type { UserDocument } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { AlertTriangle, Eye, FileText, Upload } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';

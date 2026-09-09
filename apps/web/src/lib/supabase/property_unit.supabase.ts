@@ -1,5 +1,5 @@
 import { jsonRequest, propertyResourceRequest } from '@/lib/api/propertyResources';
-import type { EnergyEfficient, PropertyUnit, PropertyUnitInsert, PropertyUnitUpdate, UnitUsageType } from '@immonext/types';
+import type { EnergyEfficient, PropertyUnit, PropertyUnitInsert, PropertyUnitUpdate, UnitUsageType } from '@immoandthebrain/types';
 
 function toPropertyUnit(row: Record<string, unknown>): PropertyUnit {
   return {

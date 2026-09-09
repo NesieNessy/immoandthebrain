@@ -1,5 +1,5 @@
 import { jsonRequest, propertyResourceRequest } from '@/lib/api/propertyResources';
-import type { TenancyAdjustmentHistoryEntry, TenancyAdjustmentHistoryInsert } from '@immonext/types';
+import type { TenancyAdjustmentHistoryEntry, TenancyAdjustmentHistoryInsert } from '@immoandthebrain/types';
 
 function toHistoryEntry(row: Record<string, unknown>): TenancyAdjustmentHistoryEntry {
     return {

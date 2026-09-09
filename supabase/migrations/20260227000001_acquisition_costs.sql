@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: acquisition_costs
+-- ImmoAndTheBrain – CREATE TABLE: acquisition_costs
 -- Depends on: property (property_id), parking_space (parking_space_id)
 -- ==============================================================================
 

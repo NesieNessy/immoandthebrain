@@ -1,4 +1,4 @@
-const SESSION_KEY = 'immonext_login_time';
+const SESSION_KEY = 'immoandthebrain_login_time';
 const SESSION_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 export function recordLoginTime(): void {

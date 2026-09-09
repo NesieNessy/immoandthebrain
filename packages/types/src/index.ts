@@ -1,4 +1,4 @@
-// Shared TypeScript types for Immonext
+// Shared TypeScript types for ImmoAndTheBrain
 
 // ----------------------------------------------------------------------------
 // City

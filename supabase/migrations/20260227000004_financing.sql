@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: financing
+-- ImmoAndTheBrain – CREATE TABLE: financing
 -- Depends on: property (property_id)
 -- ==============================================================================
 

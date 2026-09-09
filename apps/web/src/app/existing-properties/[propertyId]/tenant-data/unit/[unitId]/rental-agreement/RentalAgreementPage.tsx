@@ -3,7 +3,7 @@
 import { PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
 import { CalendarField, Dropdown, Header, Icons, NumberField, PAGE_CONTAINER_CLASS, StickyActionBar, TextArea, type BreadcrumbItem } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
-import type { RentalTermsPetsAllowed, RentalTermsRedecorationClause, RentalTermsSubletAllowed } from '@immonext/types';
+import type { RentalTermsPetsAllowed, RentalTermsRedecorationClause, RentalTermsSubletAllowed } from '@immoandthebrain/types';
 import { PenLine } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';

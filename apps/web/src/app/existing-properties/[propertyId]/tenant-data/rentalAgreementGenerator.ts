@@ -6,7 +6,7 @@ import { htmlToPdfBlob } from '@/lib/pdf/htmlToPdf';
 import { updateTenancy } from '@/lib/supabase/tenancy.supabase';
 import { uploadTenancyDocument } from '@/lib/supabase/tenancy_document.supabase';
 import { deCurrencyFormatter, downloadBlob, formatDeDate } from '@/lib/utils';
-import type { RentalTermsPetsAllowed, RentalTermsRedecorationClause, RentalTermsSubletAllowed, TenancyPerson } from '@immonext/types';
+import type { RentalTermsPetsAllowed, RentalTermsRedecorationClause, RentalTermsSubletAllowed, TenancyPerson } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { useEffect, useRef, useState } from 'react';
 import { readFileAsDataUrl } from './DocumentGeneratorParts';

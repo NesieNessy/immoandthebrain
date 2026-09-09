@@ -20,7 +20,7 @@ const LOGO_SRC = "/logo-mark.svg";
 const ASPECT_RATIO = 1688 / 1024;
 const VIEW_BOX = "8 8 422 256";
 
-/** The ImmoNext monogram (source of truth: public/logo-mark.svg). */
+/** The ImmoAndTheBrain monogram (source of truth: public/logo-mark.svg). */
 export function LogoMark({ size = 24, className, tone = "brand", animated = false }: LogoMarkProps) {
   const numericSize = typeof size === "number" ? size : parseFloat(size) || 24;
   const width = numericSize * ASPECT_RATIO;
@@ -29,7 +29,7 @@ export function LogoMark({ size = 24, className, tone = "brand", animated = fals
     return (
       <span
         role="img"
-        aria-label="ImmoNext"
+        aria-label="ImmoAndTheBrain"
         className={cn("inline-block shrink-0 bg-current", className)}
         style={{
           width,
@@ -56,7 +56,7 @@ export function LogoMark({ size = 24, className, tone = "brand", animated = fals
         viewBox={VIEW_BOX}
         preserveAspectRatio="xMidYMid meet"
         role="img"
-        aria-label="ImmoNext"
+        aria-label="ImmoAndTheBrain"
         className={className}
       >
         <g className="logo-reveal-i">
@@ -88,7 +88,7 @@ export function LogoMark({ size = 24, className, tone = "brand", animated = fals
   return (
     <img
       src={LOGO_SRC}
-      alt="ImmoNext"
+      alt="ImmoAndTheBrain"
       width={width}
       height={numericSize}
       className={className}

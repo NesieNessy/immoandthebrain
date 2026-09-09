@@ -1,5 +1,5 @@
 import { jsonRequest, propertyResourceRequest } from '@/lib/api/propertyResources';
-import type { ServiceChargeCostItem, ServiceChargeCostItemInsert, ServiceChargeCostItemUpdate } from '@immonext/types';
+import type { ServiceChargeCostItem, ServiceChargeCostItemInsert, ServiceChargeCostItemUpdate } from '@immoandthebrain/types';
 
 function toCostItem(row: Record<string, unknown>): ServiceChargeCostItem {
     return {

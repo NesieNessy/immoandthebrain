@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – KPF ranges: table + RPC
+-- ImmoAndTheBrain – KPF ranges: table + RPC
 -- KPF = Kaufpreisfaktor (purchase price factor / gross yield multiplier)
 --
 -- Sections:

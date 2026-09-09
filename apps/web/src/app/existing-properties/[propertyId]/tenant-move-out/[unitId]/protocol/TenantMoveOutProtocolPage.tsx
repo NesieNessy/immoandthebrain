@@ -6,7 +6,7 @@ import { Header, Icons, LoadingScreen, PAGE_CONTAINER_CLASS, StickyActionBar, ty
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
 import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
-import type { Property, PropertyUnit } from '@immonext/types';
+import type { Property, PropertyUnit } from '@immoandthebrain/types';
 import { useRouter } from 'next/navigation';
 
 import { useTenantMoveOutData } from '../../useTenantMoveOutData';

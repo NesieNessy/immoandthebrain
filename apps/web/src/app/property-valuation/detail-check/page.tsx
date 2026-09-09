@@ -10,7 +10,7 @@ import { createAcquisitionCosts } from '@/lib/supabase/acquisition_costs.supabas
 import { createParkingSpace } from '@/lib/supabase/parking_space.supabase';
 import { createProperty } from '@/lib/supabase/property.supabase';
 import { cn } from '@/lib/utils';
-import type { EnergyEfficient } from '@immonext/types';
+import type { EnergyEfficient } from '@immoandthebrain/types';
 import { MoreVertical, Building2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';

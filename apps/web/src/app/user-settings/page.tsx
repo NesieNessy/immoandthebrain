@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase/client.supabase';
 import { getPersonalData, PersonalDataSaveError, upsertPersonalData } from '@/lib/supabase/personal_data.supabase';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { getLabel } from '@/constants/FieldLabels';
-import type { PersonalData } from '@immonext/types';
+import type { PersonalData } from '@immoandthebrain/types';
 import { Save } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
@@ -88,15 +88,15 @@ function SettingsPageContent() {
             setUser(authBypassUser);
             setFormData({
                 ...emptyForm,
-                firstName: 'ImmoNext',
+                firstName: 'ImmoAndTheBrain',
                 lastName: 'Dev User',
-                emailAddress: authBypassUser.email ?? 'dev@immonext.local',
+                emailAddress: authBypassUser.email ?? 'dev@immoandthebrain.local',
             });
             setSavedData({
                 ...emptyForm,
-                firstName: 'ImmoNext',
+                firstName: 'ImmoAndTheBrain',
                 lastName: 'Dev User',
-                emailAddress: authBypassUser.email ?? 'dev@immonext.local',
+                emailAddress: authBypassUser.email ?? 'dev@immoandthebrain.local',
             });
             setIsLoading(false);
             return;
@@ -170,7 +170,7 @@ function SettingsPageContent() {
 
                 {isOnboarding && (
                     <div className="p-4 bg-info/10 border border-info/30 rounded-lg text-info text-sm">
-                        Bitte vervollständigen Sie zunächst Ihre Benutzereinstellungen, bevor Sie ImmoNext nutzen können.
+                        Bitte vervollständigen Sie zunächst Ihre Benutzereinstellungen, bevor Sie ImmoAndTheBrain nutzen können.
                     </div>
                 )}
 

@@ -18,7 +18,7 @@ import {
 import { cn } from '@/lib/utils';
 import { calcKpf } from '@/lib/quickCheck/kpf';
 import { isValidConstructionYear } from '@/lib/quickCheck/validation';
-import { PropertyCondition } from '@immonext/types';
+import { PropertyCondition } from '@immoandthebrain/types';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 

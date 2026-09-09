@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: development_tomorrow_metrics
+-- ImmoAndTheBrain – CREATE TABLE: development_tomorrow_metrics
 -- Depends on: development_tomorrow (development_tomorrow_id)
 -- ==============================================================================
 

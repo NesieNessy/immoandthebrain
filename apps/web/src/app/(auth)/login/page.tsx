@@ -36,7 +36,7 @@ export default function LoginPage() {
       <div className="text-center">
         <h1 className="text-3xl font-bold text-gray-900">Willkommen zurück</h1>
         <p className="mt-2 text-sm text-gray-600">
-          Melden Sie sich bei Ihrem ImmoNext-Konto an
+          Melden Sie sich bei Ihrem ImmoAndTheBrain-Konto an
         </p>
       </div>
 

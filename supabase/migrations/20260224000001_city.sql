@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: city
+-- ImmoAndTheBrain – CREATE TABLE: city
 -- Reference / lookup table — not user-owned.
 -- All authenticated users can read; only admins/service role can write.
 -- ==============================================================================

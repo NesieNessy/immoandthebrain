@@ -4,9 +4,9 @@ import { ToastProvider } from '@/components/ui';
 import "../styles/index.css";
 
 export const metadata: Metadata = {
-  title: "ImmoNext - Real Estate Management Platform",
+  title: "ImmoAndTheBrain - Real Estate Management Platform",
   description: "Modern real estate management platform for customers and properties",
-  keywords: ["real estate", "property management", "immonext"],
+  keywords: ["real estate", "property management", "immoandthebrain"],
 };
 
 export default function RootLayout({

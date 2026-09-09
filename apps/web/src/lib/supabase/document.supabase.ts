@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/client.supabase';
 import { authFetch } from '@/lib/api/authFetch';
-import type { DocumentCategory, UserDocument, UserDocumentInsert } from '@immonext/types';
+import type { DocumentCategory, UserDocument, UserDocumentInsert } from '@immoandthebrain/types';
 
 const BUCKET = 'documents';
 

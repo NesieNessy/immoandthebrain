@@ -3,7 +3,7 @@ import type {
     PropertyAcquisition,
     PropertyAcquisitionInsert,
     PropertyAcquisitionUpdate,
-} from '@immonext/types';
+} from '@immoandthebrain/types';
 
 function toPropertyAcquisition(row: Record<string, unknown>): PropertyAcquisition {
   return {

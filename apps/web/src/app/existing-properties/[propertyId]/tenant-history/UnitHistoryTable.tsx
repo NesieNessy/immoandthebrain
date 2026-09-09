@@ -9,7 +9,7 @@ import { deleteTenancy, getCurrentTenancyByUnit, getTenanciesByUnit, updateTenan
 import { deleteTenancyDocument, getTenancyDocumentsByTenancy, getTenancyDocumentUrl } from '@/lib/supabase/tenancy_document.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
 import { formatDeDate } from '@/lib/utils';
-import type { Property, PropertyUnit, Tenancy, TenancyDocument, TenancyPerson } from '@immonext/types';
+import type { Property, PropertyUnit, Tenancy, TenancyDocument, TenancyPerson } from '@immoandthebrain/types';
 import { differenceInCalendarMonths, format } from 'date-fns';
 import { Circle, RotateCcw } from 'lucide-react';
 import { useRouter } from 'next/navigation';

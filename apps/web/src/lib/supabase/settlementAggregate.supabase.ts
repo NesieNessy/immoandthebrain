@@ -5,7 +5,7 @@ import type {
   ServiceChargeSettlement,
   ServiceChargeCostItem,
   Tenancy,
-} from '@immonext/types';
+} from '@immoandthebrain/types';
 
 function toPropertyUnit(row: Record<string, unknown>): PropertyUnit {
   return {

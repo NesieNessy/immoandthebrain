@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "================================"
-echo "Immonext Development Setup"
+echo "ImmoAndTheBrain Development Setup"
 echo "================================"
 echo ""
 

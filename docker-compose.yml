@@ -1,7 +1,7 @@
 services:
   db:
     image: supabase/postgres:15.1.0.147
-    container_name: immonext-db
+    container_name: immoandthebrain-db
     ports:
       - "54322:5432"
     environment:
@@ -25,7 +25,7 @@ services:
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-local-dev-anon-key}
         NEXT_PUBLIC_AUTH_BYPASS: ${NEXT_PUBLIC_AUTH_BYPASS:-true}
         DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/postgres}
-    container_name: immonext-web
+    container_name: immoandthebrain-web
     ports:
       - "3000:3000"
     environment:
@@ -40,7 +40,7 @@ services:
 
   adminer:
     image: adminer:4
-    container_name: immonext-adminer
+    container_name: immoandthebrain-adminer
     ports:
       - "8081:8080"
     depends_on:

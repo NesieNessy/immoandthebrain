@@ -1,1 +1,1 @@
-export { DataEntryTypeValues } from '@immonext/types';
+export { DataEntryTypeValues } from '@immoandthebrain/types';
