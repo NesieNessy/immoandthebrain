@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Icons, LoadingScreen, Modal, MonthField, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
+import { Button, Icons, LoadingScreen, Modal, MonthField, PillOptions, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { authFetch } from '@/lib/api/authFetch';
@@ -42,6 +42,16 @@ type RentalResponse = {
 
 type ServiceChargeMode = 'TOTAL' | 'SPLIT';
 type AmountPeriod = 'MONTH' | 'YEAR';
+
+const amountPeriodOptions = [
+  { value: 'MONTH', label: 'Monatlich' },
+  { value: 'YEAR', label: 'Jährlich' },
+];
+
+const serviceChargeModeOptions = [
+  { value: 'SPLIT', label: 'NK-Aufteilung bekannt' },
+  { value: 'TOTAL', label: 'NK gesamt' },
+];
 
 function valueString(value: number | string | null | undefined): string {
   if (value == null) return '';
@@ -384,17 +394,19 @@ function RentalContent() {
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-2">
               <SectionLabel>Bewertungsstichtag</SectionLabel>
-              <div className="grid gap-4 md:grid-cols-[minmax(0,260px)_auto] md:items-start md:justify-start">
+              <PillOptions
+                size="md"
+                options={amountPeriodOptions}
+                value={amountPeriod}
+                onChange={(value) => changeAmountPeriod(value as AmountPeriod)}
+              />
+              <div className="max-w-[260px]">
                 <MonthField
                   label="Mieteinnahmen Bewertungs-Stichtag"
                   value={form.valuationMonth}
                   helperText="* Erste Vermietung ab Kauf"
                   onChange={(value) => setForm((prev) => ({ ...prev, valuationMonth: value }))}
                 />
-                <div className="inline-flex w-fit rounded-md border border-border bg-muted p-1 md:mt-7">
-                  <button type="button" className={`rounded px-3 py-1.5 text-sm ${amountPeriod === 'MONTH' ? 'bg-card font-semibold shadow-sm' : 'text-muted-foreground'}`} onClick={() => changeAmountPeriod('MONTH')}>Monatlich</button>
-                  <button type="button" className={`rounded px-3 py-1.5 text-sm ${amountPeriod === 'YEAR' ? 'bg-card font-semibold shadow-sm' : 'text-muted-foreground'}`} onClick={() => changeAmountPeriod('YEAR')}>Jährlich</button>
-                </div>
               </div>
             </div>
 
@@ -423,20 +435,26 @@ function RentalContent() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <SectionLabel>Nebenkosten</SectionLabel>
+              <SectionLabel>
+                <span className="inline-flex items-center gap-1.5">
+                  Nebenkosten
+                  <button
+                    type="button"
+                    onClick={() => setInfoOpen(true)}
+                    aria-label="Informationen zu Nebenkosten"
+                    className="text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                  >
+                    <Icons.Info className="w-3.5 h-3.5" />
+                  </button>
+                </span>
+              </SectionLabel>
 
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="inline-flex rounded-md border border-border bg-muted p-1">
-                  <button type="button" className={`rounded px-3 py-1.5 text-sm ${serviceChargeMode === 'TOTAL' ? 'bg-card font-semibold shadow-sm' : 'text-muted-foreground'}`} onClick={() => changeServiceChargeMode('TOTAL')}>NK gesamt</button>
-                  <button type="button" className={`rounded px-3 py-1.5 text-sm ${serviceChargeMode === 'SPLIT' ? 'bg-card font-semibold shadow-sm' : 'text-muted-foreground'}`} onClick={() => changeServiceChargeMode('SPLIT')}>NK-Aufteilung bekannt</button>
-                </div>
-                <Button
-                  iconOnly
-                  icon={<Icons.Info className="w-4 h-4" />}
-                  variant="outline"
-                  size="sm"
-                  aria-label="Informationen zu Nebenkosten"
-                  onClick={() => setInfoOpen(true)}
+              <div className="mb-2">
+                <PillOptions
+                  size="md"
+                  options={serviceChargeModeOptions}
+                  value={serviceChargeMode}
+                  onChange={(value) => changeServiceChargeMode(value as ServiceChargeMode)}
                 />
               </div>
 
