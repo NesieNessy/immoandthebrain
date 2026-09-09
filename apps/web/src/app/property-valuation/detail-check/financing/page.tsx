@@ -420,7 +420,7 @@ function FinancingContent() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <SectionLabel>Womit möchten Sie weiter rechnen?</SectionLabel>
+              <SectionLabel>Womit möchtest du weiter rechnen?</SectionLabel>
               <PillOptions
                 size="md"
                 options={variantOptions}

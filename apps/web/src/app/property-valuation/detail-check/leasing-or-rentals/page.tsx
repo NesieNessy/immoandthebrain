@@ -376,7 +376,7 @@ function RentalContent() {
         }
       >
         <p className="text-sm text-muted-foreground">
-          Ihre eingetragenen Werte unter Nebenkosten sind nicht plausibel. Möchten Sie dennoch damit weiter bewerten?
+          Deine eingetragenen Werte unter Nebenkosten sind nicht plausibel. Möchtest du dennoch damit weiter bewerten?
         </p>
       </Modal>
 
@@ -460,7 +460,7 @@ function RentalContent() {
 
               {nkMismatch && (
                 <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
-                  Ihre eingetragenen Werte unter Nebenkosten sind nicht plausibel. Sie können trotzdem weiter bewerten.
+                  Deine eingetragenen Werte unter Nebenkosten sind nicht plausibel. Du kannst trotzdem weiter bewerten.
                 </div>
               )}
 
@@ -516,7 +516,7 @@ function RentalContent() {
             <div className="flex flex-col gap-2">
               <SectionLabel>Nebenkostenabrechnung</SectionLabel>
               <p className="text-sm text-muted-foreground">
-                Falls vorhanden, können Sie hier die letzte Nebenkostenabrechnung hochladen. Sie erscheint anschließend auch auf der Dokumente-Seite.
+                Falls vorhanden, kannst du hier die letzte Nebenkostenabrechnung hochladen. Sie erscheint anschließend auch auf der Dokumente-Seite.
               </p>
 
               <input
