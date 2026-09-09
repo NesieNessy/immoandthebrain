@@ -2,14 +2,12 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { buildPropertyUseCaseBreadcrumb, formatUnitLabel, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
-import { Button, Header, Icons, PAGE_CONTAINER_CLASS, Table, Tag, TextFieldWithIcon, type SortDirection, type TableColumn } from '@/components/ui';
-import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
+import { Header, Icons, PAGE_CONTAINER_CLASS, Table, Tag, TextFieldWithIcon, type SortDirection, type TableColumn } from '@/components/ui';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
 import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
 import { getCurrentTenancyByUnit } from '@/lib/supabase/tenancy.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
-import { createUseCaseMenuItems } from '@/lib/propertyUseCaseMenu';
 import type { Property, PropertyUnit } from '@immonext/types';
 import { useRouter } from 'next/navigation';
 
@@ -84,10 +82,6 @@ export default function TenantMoveOut({ propertyId }: { propertyId: string }) {
         setColumnFilters((prev) => ({ ...prev, [key]: value }));
     };
 
-    const useCaseMenuItems = createUseCaseMenuItems(propertyId, 'TenantMoveOut', (route) => {
-        router.push(route);
-    });
-
     if (isLoading) return <PropertyLoadingPage />;
     if (!property) return <PropertyNotFoundPage />;
 
@@ -160,15 +154,7 @@ export default function TenantMoveOut({ propertyId }: { propertyId: string }) {
         <div className="min-h-screen bg-background pb-12">
             <main className={PAGE_CONTAINER_CLASS}>
                 <Header
-                    items={buildPropertyUseCaseBreadcrumb(property, propertyId, ExistingPropertiesUseCases.TenantMoveOut)}                    actions={
-                        <Button
-                            label={BUTTON_DETAILS.UseCases.label}
-                            icon={<BUTTON_DETAILS.UseCases.icon />}
-                            variant="outline"
-                            hideLabelOnMobile
-                            menuItems={useCaseMenuItems}
-                        />
-                    }
+                    items={buildPropertyUseCaseBreadcrumb(property, propertyId, ExistingPropertiesUseCases.TenantMoveOut)}
                 />
 
                 <div className="space-y-3">

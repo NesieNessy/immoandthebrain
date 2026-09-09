@@ -1,14 +1,13 @@
 "use client";
 
 import { PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
-import { Button, Header, Icons, NumberField, PAGE_CONTAINER_CLASS, PillOptions, SectionLabel, StickyActionBar, UnsavedChangesModal, useToast } from '@/components/ui';
+import { Header, Icons, NumberField, PAGE_CONTAINER_CLASS, PillOptions, SectionLabel, StickyActionBar, UnsavedChangesModal, useToast } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import { computePriceSplitIndividual, computePriceSplitStandard } from '@/lib/detailCheck/depreciation';
 import { getCityPurchasePriceSplit } from '@/lib/supabase/city_purchase_price_split.supabase';
 import { getPropertyOverviewById, type PropertyOverview } from '@/lib/supabase/property.supabase';
 import { getPropertyPriceSplitByProperty, upsertPropertyPriceSplit } from '@/lib/supabase/property_price_split.supabase';
-import { createUseCaseMenuItems } from '@/lib/propertyUseCaseMenu';
 import { deCurrencyFormatter, deNumberFormatter } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -112,13 +111,6 @@ export default function AdjustDistribution({ propertyId }: { propertyId: string 
 
     const selectedSplit = splitMode === 'STANDARD' ? standardSplit : individualSplit;
 
-    const useCaseMenuItems = useMemo(() =>
-        createUseCaseMenuItems(propertyId, 'SplitPurchasePrice', (route) => {
-            goTo(route);
-        }),
-        [propertyId, isEditing] // eslint-disable-line react-hooks/exhaustive-deps
-    );
-
     const handleSave = async () => {
         setIsSaving(true);
         try {
@@ -168,15 +160,7 @@ export default function AdjustDistribution({ propertyId }: { propertyId: string 
                             onClick: (e) => { if (isEditing) { e.preventDefault(); goTo(`/existing-properties/${propertyId}`); } },
                         },
                         { label: ExistingPropertiesUseCases.SplitPurchasePrice },
-                    ]}                    actions={
-                        <Button
-                            label={BUTTON_DETAILS.UseCases.label}
-                            icon={<BUTTON_DETAILS.UseCases.icon />}
-                            variant="outline"
-                            hideLabelOnMobile
-                            menuItems={useCaseMenuItems}
-                        />
-                    }
+                    ]}
                 />
 
                 <div className="space-y-6">

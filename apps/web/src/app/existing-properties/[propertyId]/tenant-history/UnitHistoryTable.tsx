@@ -8,7 +8,6 @@ import { getAdjustmentHistoryByTenancy } from '@/lib/supabase/tenancy_adjustment
 import { deleteTenancy, getCurrentTenancyByUnit, getTenanciesByUnit, updateTenancy } from '@/lib/supabase/tenancy.supabase';
 import { deleteTenancyDocument, getTenancyDocumentsByTenancy, getTenancyDocumentUrl } from '@/lib/supabase/tenancy_document.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
-import { createUseCaseMenuItems } from '@/lib/propertyUseCaseMenu';
 import { formatDeDate } from '@/lib/utils';
 import type { Property, PropertyUnit, Tenancy, TenancyDocument, TenancyPerson } from '@immonext/types';
 import { differenceInCalendarMonths, format } from 'date-fns';
@@ -110,8 +109,6 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
             { label: `${property.street} ${property.houseNumber}, ${property.postalCode} ${property.city}`, href: `/existing-properties/${propertyId}` },
             { label: 'Mieterhistorie' },
         ];
-
-    const useCaseMenuItems = createUseCaseMenuItems(propertyId, 'TenantHistory', (route) => router.push(route));
 
     const handleColumnFilterChange = (key: string, value: string) => {
         setColumnFilters((prev) => ({ ...prev, [key]: value }));
@@ -336,15 +333,7 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
         <div className="min-h-screen bg-background pb-24">
             <main className={PAGE_CONTAINER_CLASS}>
                 <Header
-                    items={breadcrumbItems}                    actions={
-                        <Button
-                            label={BUTTON_DETAILS.UseCases.label}
-                            icon={<BUTTON_DETAILS.UseCases.icon />}
-                            variant="outline"
-                            hideLabelOnMobile
-                            menuItems={useCaseMenuItems}
-                        />
-                    }
+                    items={breadcrumbItems}
                 />
 
                 <div className="space-y-3">

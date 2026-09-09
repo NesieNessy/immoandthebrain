@@ -1,7 +1,7 @@
 "use client";
 
 import { PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
-import { Button, ComingSoonButton, Dropdown, Header, PAGE_CONTAINER_CLASS, PillOptions, SectionLabel, StickyActionBar, UnsavedChangesModal, useToast } from '@/components/ui';
+import { ComingSoonButton, Dropdown, Header, PAGE_CONTAINER_CLASS, PillOptions, SectionLabel, StickyActionBar, UnsavedChangesModal, useToast } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import {
@@ -12,7 +12,6 @@ import {
 } from '@/lib/detailCheck/depreciation';
 import { getPropertyRndByProperty, upsertPropertyRnd } from '@/lib/supabase/property_rnd.supabase';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
-import { createUseCaseMenuItems } from '@/lib/propertyUseCaseMenu';
 import { cn, deNumberFormatter } from '@/lib/utils';
 import type { Property, RndMode } from '@immonext/types';
 import { useRouter } from 'next/navigation';
@@ -96,13 +95,6 @@ export default function AdjustRnd({ propertyId }: { propertyId: string }) {
         setPendingHref(null);
     };
 
-    const useCaseMenuItems = useMemo(() =>
-        createUseCaseMenuItems(propertyId, 'RND', (route) => {
-            goTo(route);
-        }),
-        [propertyId, isEditing] // eslint-disable-line react-hooks/exhaustive-deps
-    );
-
     const individualRnd = useMemo(() => {
         if (!property) return null;
         return computeRemainingUsefulLife({
@@ -179,15 +171,7 @@ export default function AdjustRnd({ propertyId }: { propertyId: string }) {
                             onClick: (e) => { if (isEditing) { e.preventDefault(); goTo(`/existing-properties/${propertyId}`); } },
                         },
                         { label: ExistingPropertiesUseCases.RND },
-                    ]}                    actions={
-                        <Button
-                            label={BUTTON_DETAILS.UseCases.label}
-                            icon={<BUTTON_DETAILS.UseCases.icon />}
-                            variant="outline"
-                            hideLabelOnMobile
-                            menuItems={useCaseMenuItems}
-                        />
-                    }
+                    ]}
                 />
 
                 <div>

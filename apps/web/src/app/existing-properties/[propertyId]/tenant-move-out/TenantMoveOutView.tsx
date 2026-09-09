@@ -124,15 +124,7 @@ export function TenantMoveOutView({ propertyId, property, unit, hasMultipleUnits
         <div className="min-h-screen bg-background pb-24">
             <main className={PAGE_CONTAINER_CLASS}>
                 <Header
-                    items={breadcrumbItems}                    actions={
-                        <Button
-                            label={BUTTON_DETAILS.UseCases.label}
-                            icon={<BUTTON_DETAILS.UseCases.icon />}
-                            variant="outline"
-                            hideLabelOnMobile
-                            menuItems={data.useCaseMenuItems}
-                        />
-                    }
+                    items={breadcrumbItems}
                 />
 
                 <div className="space-y-6">
