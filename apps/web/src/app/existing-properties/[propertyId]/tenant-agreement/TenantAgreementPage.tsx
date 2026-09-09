@@ -146,7 +146,7 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                                     onChange={(e) => data.setRentalForm((prev) => ({ ...prev, miscRent: e.target.value }))}
                                     min={0}
                                 />
-                                <p className="mt-1 text-xs text-muted-foreground">Wird auch von &bdquo;NK-Vorauszahlung übernehmen&ldquo; in der Nebenkostenabrechnung aktualisiert</p>
+                                <p className="mt-1 text-xs text-muted-foreground">Auch aus der Nebenkostenabrechnung aktualisierbar</p>
                             </div>
                             <NumberField
                                 label="Stellplatz"

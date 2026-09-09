@@ -23,6 +23,15 @@ const DETAIL_CHECK_TABLES = [
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  const url = new URL(request.url);
+  const quickCheckId = url.searchParams.get('quickCheckId');
+  // Scopes the list to one specific workflow — used by the step pages to
+  // check which steps already have saved data (so the Stepper can unlock
+  // them), as opposed to the unfiltered call the overview page makes.
+  const workflowId = quickCheckId ? `quick-check:${quickCheckId}` : url.searchParams.get('workflowId');
+  const filterClause = workflowId ? 'AND pd.workflow_id = $2' : '';
+  const values = workflowId ? [userId, workflowId] : [userId];
+
   const { rows } = await db.query(
     `
       SELECT
@@ -68,11 +77,11 @@ export async function GET(request: Request) {
         ON comp.user_id = pd.user_id AND comp.workflow_id = pd.workflow_id
       LEFT JOIN detail_check_recommendation rec
         ON rec.user_id = pd.user_id AND rec.workflow_id = pd.workflow_id
-      WHERE pd.user_id = $1
+      WHERE pd.user_id = $1 ${filterClause}
       ORDER BY updated_at DESC
       LIMIT 100
     `,
-    [userId],
+    values,
   );
 
   return NextResponse.json(rows);
