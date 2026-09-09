@@ -5,7 +5,7 @@ import { KpfAssessmentCard } from '@/components/features/KpfAssessmentCard';
 import { MobileResultBanner } from '@/components/features/MobileResultBanner';
 import { CONDITION_OPTIONS, getQuickCheckFieldErrors } from '@/components/features/QuickCheckDisplay';
 import { PortalImportSection } from '@/components/features/PortalImportSection';
-import { Button, Dropdown, Header, LoadingScreen, NotFoundScreen, NumberField, PAGE_CONTAINER_CLASS, StickyActionBar, TextField, UnsavedChangesModal, useToast, type BreadcrumbItem } from '@/components/ui';
+import { Dropdown, Header, LoadingScreen, NotFoundScreen, NumberField, PAGE_CONTAINER_CLASS, StickyActionBar, TextField, UnsavedChangesModal, useToast, type BreadcrumbItem } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { FieldLabels } from '@/constants/FieldLabels';
 import { useQuickCheckById } from '@/hooks/useQuickCheckById';
@@ -237,16 +237,6 @@ export function QuickCheckResultView({ id }: Props) {
               } satisfies BreadcrumbItem,
               { label: editForm.street || 'Immobilien-Ersteinschätzung' },
             ]}
-            actions={
-              <Button
-                label={BUTTON_DETAILS.StartDetailCheck.label}
-                icon={<BUTTON_DETAILS.StartDetailCheck.icon />}
-                variant="outline"
-                hideLabelOnMobile
-                disabled={isBusy}
-                onClick={() => void handleStartDetailCheck()}
-              />
-            }
           />
 
           <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
@@ -363,6 +353,10 @@ export function QuickCheckResultView({ id }: Props) {
           ghostIcon={<BUTTON_DETAILS.Back.icon />}
           ghostDisabled={isBusy}
           onGhost={handleDiscard}
+          secondaryLabel={BUTTON_DETAILS.StartDetailCheck.label}
+          secondaryIcon={<BUTTON_DETAILS.StartDetailCheck.icon />}
+          secondaryDisabled={isBusy}
+          onSecondary={() => void handleStartDetailCheck()}
           primaryLabel="Ersteinschätzung speichern"
           primaryIcon={<BUTTON_DETAILS.Save.icon />}
           primaryDisabled={!isEditValid || isBusy || !hasChanges}

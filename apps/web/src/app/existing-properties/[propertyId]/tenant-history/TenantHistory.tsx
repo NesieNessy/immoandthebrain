@@ -2,14 +2,12 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { buildPropertyUseCaseBreadcrumb, formatUnitLabel, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
-import { Button, Header, PAGE_CONTAINER_CLASS, Table, type TableColumn } from '@/components/ui';
-import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
+import { Header, PAGE_CONTAINER_CLASS, Table, type TableColumn } from '@/components/ui';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
 import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
 import { getCurrentTenancyByUnit, getTenanciesByUnit } from '@/lib/supabase/tenancy.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
-import { createUseCaseMenuItems } from '@/lib/propertyUseCaseMenu';
 import { formatDeDate } from '@/lib/utils';
 import type { Property, PropertyUnit } from '@immonext/types';
 import { useRouter } from 'next/navigation';
@@ -69,10 +67,6 @@ export default function TenantHistory({ propertyId }: { propertyId: string }) {
         void load();
     }, [load]);
 
-    const useCaseMenuItems = createUseCaseMenuItems(propertyId, 'TenantHistory', (route) => {
-        router.push(route);
-    });
-
     if (isLoading) return <PropertyLoadingPage />;
     if (!property) return <PropertyNotFoundPage />;
 
@@ -122,15 +116,7 @@ export default function TenantHistory({ propertyId }: { propertyId: string }) {
         <div className="min-h-screen bg-background pb-12">
             <main className={PAGE_CONTAINER_CLASS}>
                 <Header
-                    items={buildPropertyUseCaseBreadcrumb(property, propertyId, ExistingPropertiesUseCases.TenantHistory)}                    actions={
-                        <Button
-                            label={BUTTON_DETAILS.UseCases.label}
-                            icon={<BUTTON_DETAILS.UseCases.icon />}
-                            variant="outline"
-                            hideLabelOnMobile
-                            menuItems={useCaseMenuItems}
-                        />
-                    }
+                    items={buildPropertyUseCaseBreadcrumb(property, propertyId, ExistingPropertiesUseCases.TenantHistory)}
                 />
 
                 <div>

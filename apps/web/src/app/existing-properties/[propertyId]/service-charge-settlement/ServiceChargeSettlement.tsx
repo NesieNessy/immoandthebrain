@@ -2,12 +2,10 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { buildPropertyUseCaseBreadcrumb, formatUnitLabel, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
-import { Button, Header, PAGE_CONTAINER_CLASS, Table, type TableColumn } from '@/components/ui';
-import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
+import { Header, PAGE_CONTAINER_CLASS, Table, type TableColumn } from '@/components/ui';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
 import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
-import { createUseCaseMenuItems } from '@/lib/propertyUseCaseMenu';
 import type { Property, PropertyUnit } from '@immonext/types';
 import { useRouter } from 'next/navigation';
 
@@ -34,9 +32,6 @@ export default function ServiceChargeSettlement({ propertyId }: { propertyId: st
         void load();
     }, [load]);
 
-    const useCaseMenuItems = createUseCaseMenuItems(propertyId, 'ServiceChargeSettlement', (route) => {
-        router.push(route);
-    });
 
     if (isLoading) return <PropertyLoadingPage />;
     if (!property) return <PropertyNotFoundPage />;
@@ -77,15 +72,7 @@ export default function ServiceChargeSettlement({ propertyId }: { propertyId: st
         <div className="min-h-screen bg-background pb-12">
             <main className={PAGE_CONTAINER_CLASS}>
                 <Header
-                    items={buildPropertyUseCaseBreadcrumb(property, propertyId, ExistingPropertiesUseCases.ServiceChargeSettlement)}                    actions={
-                        <Button
-                            label={BUTTON_DETAILS.UseCases.label}
-                            icon={<BUTTON_DETAILS.UseCases.icon />}
-                            variant="outline"
-                            hideLabelOnMobile
-                            menuItems={useCaseMenuItems}
-                        />
-                    }
+                    items={buildPropertyUseCaseBreadcrumb(property, propertyId, ExistingPropertiesUseCases.ServiceChargeSettlement)}
                 />
 
                 <div>

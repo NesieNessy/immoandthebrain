@@ -2,7 +2,7 @@
 
 import { PROPERTY_CATEGORY_CREATE_OPTIONS, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
 import { PropertyImageGallery } from '@/components/features/PropertyImageGallery';
-import { Button, CalendarField, Dropdown, Header, NumberField, PAGE_CONTAINER_CLASS, PillOptions, SectionLabel, StickyActionBar, TextField, UnsavedChangesModal, useToast } from '@/components/ui';
+import { CalendarField, Dropdown, Header, NumberField, PAGE_CONTAINER_CLASS, PillOptions, SectionLabel, StickyActionBar, TextField, UnsavedChangesModal, useToast } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import { getLabel } from '@/constants/FieldLabels';
@@ -10,11 +10,10 @@ import { createAcquisitionCosts, getAcquisitionCosts, updateAcquisitionCosts } f
 import { createParkingSpace, deleteParkingSpace, getParkingSpacesByProperty, updateParkingSpace } from '@/lib/supabase/parking_space.supabase';
 import { getPropertyById, updateProperty } from '@/lib/supabase/property.supabase';
 import { getPropertyAcquisitionByProperty, upsertPropertyAcquisition } from '@/lib/supabase/property_acquisition.supabase';
-import { createUseCaseMenuItems } from '@/lib/propertyUseCaseMenu';
 import { EnergyEfficient, type AcquisitionCosts, type ParkingSpace, type Property } from '@immonext/types';
 import { format, parseISO } from 'date-fns';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const ENERGY_OPTIONS = [
     { value: '', label: 'Bitte wählen...' },
@@ -231,14 +230,6 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
         }
     };
 
-    // Create menu items for all use cases
-    const useCaseMenuItems = useMemo(() =>
-        createUseCaseMenuItems(propertyId, 'PropertyData', (route) => {
-            goTo(route);
-        }),
-        [propertyId, isEditing] // eslint-disable-line react-hooks/exhaustive-deps
-    );
-
     if (isLoading) return <PropertyLoadingPage />;
 
     if (!property) return <PropertyNotFoundPage />;
@@ -260,15 +251,6 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                         },
                         { label: ExistingPropertiesUseCases.PropertyData },
                     ]}
-                    actions={
-                        <Button
-                            label={BUTTON_DETAILS.UseCases.label}
-                            icon={<BUTTON_DETAILS.UseCases.icon />}
-                            variant="outline"
-                            hideLabelOnMobile
-                            menuItems={useCaseMenuItems}
-                        />
-                    }
                 />
 
                 <div className="flex flex-col gap-6">

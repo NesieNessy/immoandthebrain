@@ -55,7 +55,7 @@ export function MonthField({
         role="group"
         aria-labelledby={labelId}
         aria-describedby={describedBy}
-        className={`flex min-h-10 items-center rounded-md border-2 bg-card shadow-sm transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 ${error ? "border-destructive" : "border-primary/30 hover:border-primary/55"}`}
+        className={`flex min-h-10 items-center rounded-md border bg-card shadow-sm transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 ${error ? "border-destructive" : "border-primary/30 hover:border-primary/55"}`}
       >
         <CalendarDays className="ml-3 shrink-0 text-muted-foreground" size={17} aria-hidden="true" />
         <select

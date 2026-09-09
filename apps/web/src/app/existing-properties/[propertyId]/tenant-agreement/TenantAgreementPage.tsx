@@ -80,15 +80,7 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
         <div className="min-h-screen bg-background pb-24">
             <main className={PAGE_CONTAINER_CLASS}>
                 <Header
-                    items={breadcrumbItems}                    actions={
-                        <Button
-                            label={BUTTON_DETAILS.UseCases.label}
-                            icon={<BUTTON_DETAILS.UseCases.icon />}
-                            variant="outline"
-                            hideLabelOnMobile
-                            menuItems={data.useCaseMenuItems}
-                        />
-                    }
+                    items={breadcrumbItems}
                 />
 
                 <div className="space-y-6">
@@ -146,7 +138,7 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                                     onChange={(e) => data.setRentalForm((prev) => ({ ...prev, miscRent: e.target.value }))}
                                     min={0}
                                 />
-                                <p className="mt-1 text-xs text-muted-foreground">Wird auch von &bdquo;NK-Vorauszahlung übernehmen&ldquo; in der Nebenkostenabrechnung aktualisiert</p>
+                                <p className="mt-1 text-xs text-muted-foreground">Auch aus der Nebenkostenabrechnung aktualisierbar</p>
                             </div>
                             <NumberField
                                 label="Stellplatz"

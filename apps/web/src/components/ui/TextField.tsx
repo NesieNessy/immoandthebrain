@@ -9,6 +9,9 @@ interface TextFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: string;
   helperText?: string;
   suffix?: string;
+  /** Renders the suffix as a small rounded badge instead of plain muted
+   *  text — for fields where the unit deserves more visual weight. */
+  pillSuffix?: boolean;
   /** Appends a muted "(optional)" to the label instead of the mandatory
    *  default (no marker). */
   optional?: boolean;
@@ -19,6 +22,7 @@ export function TextField({
   error,
   helperText,
   suffix,
+  pillSuffix,
   optional,
   className,
   readOnly,
@@ -59,9 +63,15 @@ export function TextField({
           {...props}
         />
         {suffix && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
-            {suffix}
-          </span>
+          pillSuffix ? (
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground pointer-events-none">
+              {suffix}
+            </span>
+          ) : (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+              {suffix}
+            </span>
+          )
         )}
       </div>
       {error && (

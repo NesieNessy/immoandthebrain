@@ -48,13 +48,17 @@ export function Button({
   // so give mobile icon-only buttons a fallback accessible name.
   const resolvedAriaLabel = ariaLabel ?? (hideLabelOnMobile && label ? label : undefined);
 
+  // Every variant carries the same border-2 (transparent where there's no
+  // visible border) so a button's height never depends on which variant it
+  // is — an outline button next to a primary one used to sit 4px taller
+  // purely because it was the only variant with an actual border.
   const variants = {
-    primary: "bg-primary text-primary-foreground hover:bg-primary/90",
-    secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/90",
-    accent: "bg-accent text-accent-foreground hover:bg-accent/90",
+    primary: "border-2 border-transparent bg-primary text-primary-foreground hover:bg-primary/90",
+    secondary: "border-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/90",
+    accent: "border-2 border-transparent bg-accent text-accent-foreground hover:bg-accent/90",
     outline: "border-2 border-primary text-primary bg-transparent hover:bg-primary hover:text-primary-foreground",
-    ghost: "bg-transparent text-foreground hover:bg-muted",
-    dark: "bg-brand-navy text-brand-navy-foreground hover:bg-brand-navy/90",
+    ghost: "border-2 border-transparent bg-transparent text-foreground hover:bg-muted",
+    dark: "border-2 border-transparent bg-brand-navy text-brand-navy-foreground hover:bg-brand-navy/90",
   };
 
   // Different padding for icon-only vs regular buttons; hideLabelOnMobile

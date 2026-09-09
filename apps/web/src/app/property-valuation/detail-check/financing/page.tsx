@@ -1,6 +1,6 @@
 "use client";
 
-import { Dropdown, LoadingScreen, ReadOnlyField, StickyActionBar, TextField } from '@/components/ui';
+import { Dropdown, Icons, LoadingScreen, PillOptions, ReadOnlyField, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { formatDecimalInput, parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
@@ -59,9 +59,8 @@ const periodOptions = [
 ];
 
 const variantOptions = [
-  { value: '', label: 'Bitte wählen...' },
-  { value: 'OFFER', label: 'Angebot' },
-  { value: 'INDIVIDUAL', label: 'Individuell' },
+  { value: 'OFFER', label: 'Angebot verwenden' },
+  { value: 'INDIVIDUAL', label: 'Individuell verwenden' },
 ];
 
 function valueString(value: number | string | null | undefined): string {
@@ -328,100 +327,114 @@ function FinancingContent() {
         {isLoading ? (
           <LoadingScreen message="Finanzierung wird geladen…" fullScreen={false} />
         ) : (
-          <div className="space-y-7">
-            <section>
-              <div className="mb-4 flex items-center gap-4">
-                <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                  Finanzierungsparameter
-                </h2>
-                <div className="h-px flex-1 bg-border" />
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Finanzierungsparameter</SectionLabel>
+              <div className="w-full sm:w-48">
                 <TextField
                   label="Tilgungssatz p.a."
                   value={repaymentRateInput}
                   inputMode="decimal"
                   suffix="%"
+                  pillSuffix
                   error={repaymentRateError}
-                  helperText="Gemeinsame Annahme für Angebot und individuelle Finanzierung."
                   onChange={(event) => setRepaymentRateInput(event.target.value)}
                 />
-                <Dropdown
-                  label="Womit möchten Sie weiter kalkulieren?"
-                  options={variantOptions}
-                  value={selectedVariant}
-                  onChange={(event) => setSelectedVariant(event.target.value as FinancingVariant)}
-                />
               </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-                  Die gewählte Spalte wird in den Folgeschritten für Gesamtkosten, Eigenkapital, Darlehen, Zins und Kapitaldienst verwendet.
+              <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded bg-primary/10 text-primary">
+                    <Icons.Calculator className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Berechnungsgrundlage</span>
                 </div>
-                <div className="rounded-lg border border-border px-4 py-3 text-sm text-muted-foreground">
-                  Kapitaldienst pro Monat = Darlehenssumme × (Zins + Tilgungssatz) / 12.
+                <p className="font-mono text-sm text-foreground">
+                  Kapitaldienst / Monat = <span className="font-semibold text-primary">Darlehenssumme</span> × ( <span className="font-semibold text-primary">Zins</span> + <span className="font-semibold text-primary">Tilgungssatz</span> ) ÷ 12
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Angebot &amp; individuelle Kalkulation</SectionLabel>
+              <div className="rounded-lg border border-border bg-card p-4 sm:p-6">
+                <div className="grid grid-cols-[minmax(140px,220px)_minmax(0,1fr)_minmax(0,1fr)] gap-x-4 gap-y-3">
+                  <div />
+                  <div className="pb-2 border-b border-border text-center text-sm font-semibold uppercase tracking-wide text-muted-foreground">Angebot</div>
+                  <div className="pb-2 border-b border-border text-center text-sm font-semibold uppercase tracking-wide text-muted-foreground">Individuell</div>
+
+                  <div className="self-center font-semibold text-foreground">Ermittelte Gesamtkosten</div>
+                  <ReadOnlyMoney value={offerComputed.totalCosts} bold />
+                  <ReadOnlyMoney value={individualComputed.totalCosts} bold />
+
+                  <div className="self-center pl-4 text-sm text-muted-foreground">Kaufpreis</div>
+                  <ReadOnlyMoney value={offerValues.purchasePrice} />
+                  <MoneyInput value={individual.purchasePrice} onChange={(value) => updateIndividual('purchasePrice', value)} />
+
+                  <div className="self-center pl-4 text-sm text-muted-foreground">Stellplatz / Stellplätze</div>
+                  <ReadOnlyMoney value={offerValues.parkingPrice} />
+                  <MoneyInput value={individual.parkingPrice} onChange={(value) => updateIndividual('parkingPrice', value)} />
+
+                  <div className="self-center pl-4 text-sm text-muted-foreground">Kaufnebenkosten gesamt</div>
+                  <ReadOnlyMoney value={offerValues.additionalCosts} />
+                  <ReadOnlyMoney value={individualValues.additionalCosts} />
+
+                  <div className="self-center pl-4 text-sm text-muted-foreground">Sanierungskosten</div>
+                  <MoneyInput value={offer.renovationCosts} onChange={(value) => updateOffer('renovationCosts', value)} />
+                  <MoneyInput value={individual.renovationCosts} onChange={(value) => updateIndividual('renovationCosts', value)} />
+
+                  <div className="col-span-3 mt-1 pt-3 border-t border-border" />
+
+                  <div className="self-center font-semibold text-foreground">Anteil Eigenkapital</div>
+                  <MoneyInput value={offer.equity} onChange={(value) => updateOffer('equity', value)} />
+                  <MoneyInput value={individual.equity} onChange={(value) => updateIndividual('equity', value)} />
+
+                  <div className="self-center text-sm text-muted-foreground">Darlehenssumme</div>
+                  <ReadOnlyMoney value={offerComputed.loanAmount} />
+                  <ReadOnlyMoney value={individualComputed.loanAmount} />
+
+                  <div className="self-center text-sm text-muted-foreground">Darlehensquote</div>
+                  <ReadOnlyPercent value={offerComputed.loanToCostPercent} />
+                  <ReadOnlyPercent value={individualComputed.loanToCostPercent} />
+
+                  <div className="self-center text-sm text-muted-foreground">Zinsbindung</div>
+                  <Dropdown
+                    options={periodOptions}
+                    value={offer.interestPeriodYears}
+                    onChange={(event) => updateOffer('interestPeriodYears', event.target.value)}
+                  />
+                  <Dropdown
+                    options={periodOptions}
+                    value={individual.interestPeriodYears}
+                    onChange={(event) => updateIndividual('interestPeriodYears', event.target.value)}
+                  />
+
+                  <div className="self-center text-sm text-muted-foreground">Ermittelter Zins (geschätzt)</div>
+                  <ReadOnlyPercent value={offerComputed.interestRate} />
+                  <ReadOnlyPercent value={individualComputed.interestRate} />
+
+                  <div className="self-center text-sm text-muted-foreground">Kapitaldienst Monat (geschätzt)</div>
+                  <ReadOnlyMoney value={offerComputed.monthlyDebtService} />
+                  <ReadOnlyMoney value={individualComputed.monthlyDebtService} />
                 </div>
               </div>
-            </section>
+            </div>
 
-            <section>
-              <div className="grid grid-cols-[minmax(180px,220px)_minmax(0,1fr)_minmax(0,1fr)] gap-x-4 gap-y-3">
-                <div />
-                <h2 className="text-center text-lg font-semibold text-foreground">Angebot</h2>
-                <h2 className="text-center text-lg font-semibold text-foreground">Individuell</h2>
-
-                <div className="self-center font-semibold text-foreground">Ermittelte Gesamtkosten:</div>
-                <ReadOnlyMoney value={offerComputed.totalCosts} bold />
-                <ReadOnlyMoney value={individualComputed.totalCosts} bold />
-
-                <div className="self-center pl-4 text-foreground">Kaufpreis:</div>
-                <ReadOnlyMoney value={offerValues.purchasePrice} />
-                <MoneyInput value={individual.purchasePrice} onChange={(value) => updateIndividual('purchasePrice', value)} />
-
-                <div className="self-center pl-4 text-foreground">Stellplatz / Stellplätze:</div>
-                <ReadOnlyMoney value={offerValues.parkingPrice} />
-                <MoneyInput value={individual.parkingPrice} onChange={(value) => updateIndividual('parkingPrice', value)} />
-
-                <div className="self-center pl-4 text-foreground">Kaufnebenkosten gesamt:</div>
-                <ReadOnlyMoney value={offerValues.additionalCosts} />
-                <ReadOnlyMoney value={individualValues.additionalCosts} />
-
-                <div className="self-center pl-4 text-foreground">Sanierungskosten:</div>
-                <MoneyInput value={offer.renovationCosts} onChange={(value) => updateOffer('renovationCosts', value)} />
-                <MoneyInput value={individual.renovationCosts} onChange={(value) => updateIndividual('renovationCosts', value)} />
-
-                <div className="mt-6 self-center font-medium text-foreground">Anteil Eigenkapital:</div>
-                <div className="mt-6"><MoneyInput value={offer.equity} onChange={(value) => updateOffer('equity', value)} /></div>
-                <div className="mt-6"><MoneyInput value={individual.equity} onChange={(value) => updateIndividual('equity', value)} /></div>
-
-                <div className="self-center font-medium text-foreground">Darlehenssumme €:</div>
-                <ReadOnlyMoney value={offerComputed.loanAmount} />
-                <ReadOnlyMoney value={individualComputed.loanAmount} />
-
-                <div className="self-center font-medium text-foreground">Darlehenssumme %:</div>
-                <ReadOnlyPercent value={offerComputed.loanToCostPercent} />
-                <ReadOnlyPercent value={individualComputed.loanToCostPercent} />
-
-                <div className="self-center font-medium text-foreground">Zinsbindung:</div>
-                <Dropdown
-                  options={periodOptions}
-                  value={offer.interestPeriodYears}
-                  onChange={(event) => updateOffer('interestPeriodYears', event.target.value)}
-                />
-                <Dropdown
-                  options={periodOptions}
-                  value={individual.interestPeriodYears}
-                  onChange={(event) => updateIndividual('interestPeriodYears', event.target.value)}
-                />
-
-                <div className="self-center font-medium text-foreground">Ermittelter Zins (geschätzt):</div>
-                <ReadOnlyPercent value={offerComputed.interestRate} />
-                <ReadOnlyPercent value={individualComputed.interestRate} />
-
-                <div className="self-center font-medium text-foreground">Kapitaldienst Monat (geschätzt):</div>
-                <ReadOnlyMoney value={offerComputed.monthlyDebtService} />
-                <ReadOnlyMoney value={individualComputed.monthlyDebtService} />
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Womit möchtest du weiter rechnen?</SectionLabel>
+              <PillOptions
+                size="md"
+                options={variantOptions}
+                value={selectedVariant}
+                onChange={(value) => setSelectedVariant(value as FinancingVariant)}
+              />
+              <div className="flex items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
+                <Icons.Info className="w-4 h-4 shrink-0 text-primary mt-0.5" />
+                <p>
+                  Die gewählte Spalte wird in den Folgeschritten für Gesamtkosten, Eigenkapital, Darlehen,
+                  Zins und Kapitaldienst verwendet.
+                </p>
               </div>
-            </section>
+            </div>
           </div>
         )}
       </div>

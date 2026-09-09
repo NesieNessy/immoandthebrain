@@ -16,6 +16,13 @@ interface StickyActionBarProps {
     primaryDisabled?: boolean;
     /** e.g. a "Schritt 1 von 2" label, shown at the start of the bar. */
     leftContent?: React.ReactNode;
+    /** Optional third button, rendered between ghost and primary — for a
+     *  secondary action (e.g. "Detailbewertung starten") that doesn't fit
+     *  either the "leave" (ghost) or "confirm" (primary) role. */
+    onSecondary?: () => void;
+    secondaryLabel?: string;
+    secondaryIcon?: React.ReactNode;
+    secondaryDisabled?: boolean;
 }
 
 export function StickyActionBar({
@@ -29,6 +36,10 @@ export function StickyActionBar({
     ghostDisabled = false,
     primaryDisabled = false,
     leftContent,
+    onSecondary,
+    secondaryLabel,
+    secondaryIcon,
+    secondaryDisabled = false,
 }: StickyActionBarProps) {
     if (!show) return null;
 
@@ -44,6 +55,15 @@ export function StickyActionBar({
                         icon={ghostIcon}
                         disabled={ghostDisabled}
                     />
+                    {onSecondary && secondaryLabel && (
+                        <Button
+                            variant="outline"
+                            onClick={onSecondary}
+                            label={secondaryLabel}
+                            icon={secondaryIcon}
+                            disabled={secondaryDisabled}
+                        />
+                    )}
                     <Button
                         variant="primary"
                         onClick={onPrimary}

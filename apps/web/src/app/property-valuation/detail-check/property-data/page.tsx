@@ -251,7 +251,7 @@ function PropertyDataContent() {
   const cityHelperText = postalLookupStatus === 'loading'
     ? 'Ort wird automatisch ermittelt...'
     : postalLookupStatus === 'resolved' && cityOptions.length === 1
-      ? 'Automatisch aus der Postleitzahl ermittelt. Der Ort bleibt änderbar.'
+      ? undefined
       : postalLookupStatus === 'resolved'
         ? 'Mehrere Orte gefunden. Bitte einen Vorschlag auswählen.'
         : postalLookupStatus === 'empty'

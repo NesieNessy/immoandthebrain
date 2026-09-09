@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, LoadingScreen, Modal, MonthField, StickyActionBar, TextField } from '@/components/ui';
+import { Button, Icons, LoadingScreen, Modal, MonthField, PillOptions, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { authFetch } from '@/lib/api/authFetch';
@@ -15,9 +15,8 @@ import {
 } from '@/lib/detailCheck/rental';
 import { uploadDocument } from '@/lib/supabase/document.supabase';
 import { format } from 'date-fns';
-import { Info, Upload } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
 
 type RentalForm = {
@@ -44,10 +43,15 @@ type RentalResponse = {
 type ServiceChargeMode = 'TOTAL' | 'SPLIT';
 type AmountPeriod = 'MONTH' | 'YEAR';
 
-const currencyFormatter = new Intl.NumberFormat('de-DE', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+const amountPeriodOptions = [
+  { value: 'MONTH', label: 'Monatlich' },
+  { value: 'YEAR', label: 'Jährlich' },
+];
+
+const serviceChargeModeOptions = [
+  { value: 'SPLIT', label: 'NK-Aufteilung bekannt' },
+  { value: 'TOTAL', label: 'NK gesamt' },
+];
 
 function valueString(value: number | string | null | undefined): string {
   if (value == null) return '';
@@ -123,6 +127,7 @@ function RentalContent() {
   const [parkingSpaces, setParkingSpaces] = useState(0);
   const [serviceChargeMode, setServiceChargeMode] = useState<ServiceChargeMode>('SPLIT');
   const [amountPeriod, setAmountPeriod] = useState<AmountPeriod>('MONTH');
+  const serviceChargeInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -327,7 +332,7 @@ function RentalContent() {
         onClose={() => setInfoOpen(false)}
         title="Nebenkosten"
         subtitle="Umlagefähige und nicht umlagefähige Positionen"
-        icon={<Info />}
+        icon={<Icons.Info className="w-5 h-5" />}
         maxWidth="max-w-3xl"
       >
         <div className="max-h-[65vh] overflow-y-auto text-sm leading-6 text-foreground">
@@ -371,7 +376,7 @@ function RentalContent() {
         }
       >
         <p className="text-sm text-muted-foreground">
-          Ihre eingetragenen Werte unter Nebenkosten sind nicht plausibel. Möchten Sie dennoch damit weiter bewerten?
+          Deine eingetragenen Werte unter Nebenkosten sind nicht plausibel. Möchtest du dennoch damit weiter bewerten?
         </p>
       </Modal>
 
@@ -386,64 +391,83 @@ function RentalContent() {
         {isLoading ? (
           <LoadingScreen message="Vermietungsdaten werden geladen…" fullScreen={false} />
         ) : (
-          <div className="space-y-7">
-            <section className="grid gap-4 md:grid-cols-[minmax(0,260px)_auto] md:items-start md:justify-start">
-              <MonthField
-                label="Mieteinnahmen Bewertungs-Stichtag"
-                value={form.valuationMonth}
-                helperText="* Erste Vermietung ab Kauf"
-                onChange={(value) => setForm((prev) => ({ ...prev, valuationMonth: value }))}
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Bewertungsstichtag</SectionLabel>
+              <PillOptions
+                size="md"
+                options={amountPeriodOptions}
+                value={amountPeriod}
+                onChange={(value) => changeAmountPeriod(value as AmountPeriod)}
               />
-              <div className="inline-flex w-fit rounded-md border border-border bg-muted p-1 md:mt-7">
-                <button type="button" className={`rounded px-3 py-1.5 text-sm ${amountPeriod === 'MONTH' ? 'bg-card font-semibold shadow-sm' : 'text-muted-foreground'}`} onClick={() => changeAmountPeriod('MONTH')}>Monatlich</button>
-                <button type="button" className={`rounded px-3 py-1.5 text-sm ${amountPeriod === 'YEAR' ? 'bg-card font-semibold shadow-sm' : 'text-muted-foreground'}`} onClick={() => changeAmountPeriod('YEAR')}>Jährlich</button>
+              <div className="max-w-[260px]">
+                <MonthField
+                  label="Mieteinnahmen Bewertungs-Stichtag"
+                  value={form.valuationMonth}
+                  helperText="* Erste Vermietung ab Kauf"
+                  onChange={(value) => setForm((prev) => ({ ...prev, valuationMonth: value }))}
+                />
               </div>
-            </section>
+            </div>
 
-            <section>
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Mieteinnahmen</SectionLabel>
               <div className="grid gap-4 md:grid-cols-2">
-                  <MoneyField
-                    label="Kaltmiete"
-                    optional
-                    value={form.coldRent}
-                    error={amountErrors.coldRent}
-                    onChange={(value) => updateMoney('coldRent', value)}
-                    suffix={amountPeriod === 'YEAR' ? '€/Jahr' : '€/Monat'}
-                  />
-                  <MoneyField
-                    label="Stellplatz"
-                    optional
-                    value={form.parkingRent}
-                    error={amountErrors.parkingRent}
-                    onChange={(value) => updateMoney('parkingRent', value)}
-                    disabled={parkingSpaces === 0}
-                    suffix={amountPeriod === 'YEAR' ? '€/Jahr' : '€/Monat'}
-                    helperText={parkingSpaces === 0 ? 'In den Objektdaten sind keine Stellplätze erfasst.' : undefined}
-                  />
+                <MoneyField
+                  label="Kaltmiete"
+                  optional
+                  value={form.coldRent}
+                  error={amountErrors.coldRent}
+                  onChange={(value) => updateMoney('coldRent', value)}
+                  suffix={amountPeriod === 'YEAR' ? '€/Jahr' : '€/Monat'}
+                />
+                <MoneyField
+                  label="Stellplatz"
+                  optional
+                  value={form.parkingRent}
+                  error={amountErrors.parkingRent}
+                  onChange={(value) => updateMoney('parkingRent', value)}
+                  disabled={parkingSpaces === 0}
+                  suffix={amountPeriod === 'YEAR' ? '€/Jahr' : '€/Monat'}
+                  helperText={parkingSpaces === 0 ? 'In den Objektdaten sind keine Stellplätze erfasst.' : undefined}
+                />
               </div>
-            </section>
+            </div>
 
-            <section>
-              <div className="mb-3 flex items-center gap-2">
-                <h2 className="text-lg font-medium text-foreground">Nebenkosten</h2>
-                <button
-                  type="button"
-                  onClick={() => setInfoOpen(true)}
-                  aria-label="Informationen zu Nebenkosten"
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                >
-                  <Info size={16} />
-                </button>
-              </div>
+            <div className="flex flex-col gap-2">
+              <SectionLabel>
+                <span className="inline-flex items-center gap-1.5">
+                  Nebenkosten
+                  <button
+                    type="button"
+                    onClick={() => setInfoOpen(true)}
+                    aria-label="Informationen zu Nebenkosten"
+                    className="text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                  >
+                    <Icons.Info className="w-3.5 h-3.5" />
+                  </button>
+                </span>
+              </SectionLabel>
 
-              <div className="mb-4 inline-flex rounded-md border border-border bg-muted p-1">
-                <button type="button" className={`rounded px-3 py-1.5 text-sm ${serviceChargeMode === 'TOTAL' ? 'bg-card font-semibold shadow-sm' : 'text-muted-foreground'}`} onClick={() => changeServiceChargeMode('TOTAL')}>NK gesamt</button>
-                <button type="button" className={`rounded px-3 py-1.5 text-sm ${serviceChargeMode === 'SPLIT' ? 'bg-card font-semibold shadow-sm' : 'text-muted-foreground'}`} onClick={() => changeServiceChargeMode('SPLIT')}>NK-Aufteilung bekannt</button>
+              <div className="mb-2">
+                <PillOptions
+                  size="md"
+                  options={serviceChargeModeOptions}
+                  value={serviceChargeMode}
+                  onChange={(value) => changeServiceChargeMode(value as ServiceChargeMode)}
+                />
               </div>
 
               {nkMismatch && (
-                <div className="mb-4 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
-                  Ihre eingetragenen Werte unter Nebenkosten sind nicht plausibel. Sie können trotzdem weiter bewerten.
+                <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+                  Deine eingetragenen Werte unter Nebenkosten sind nicht plausibel. Du kannst trotzdem weiter bewerten.
+                </div>
+              )}
+
+              {serviceChargeMode === 'TOTAL' && (
+                <div className="flex items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
+                  <Icons.Info className="w-4 h-4 shrink-0 text-primary mt-0.5" />
+                  <p>Umlagefähig und nicht umlagefähig werden automatisch im Verhältnis 60/40 aufgeteilt.</p>
                 </div>
               )}
 
@@ -456,7 +480,6 @@ function RentalContent() {
                     error={amountErrors.serviceChargesTotal}
                     onChange={(value) => updateServiceCharge('total', value)}
                     suffix={amountPeriod === 'YEAR' ? '€/Jahr' : '€/Monat'}
-                    helperText="Umlagefähig und nicht umlagefähig werden automatisch im Verhältnis 60/40 aufgeteilt."
                   />
                 )}
                 <MoneyField
@@ -488,52 +511,58 @@ function RentalContent() {
                   />
                 )}
               </div>
-            </section>
+            </div>
 
-            <section className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,260px)] md:items-center">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Falls vorhanden, können Sie hier die letzte Nebenkostenabrechnung hochladen. Sie erscheint anschließend auch auf der Dokumente-Seite.
-                </p>
-                {serviceChargeFileName && (
-                  <p className="mt-1 text-xs text-primary">Hochgeladen: {serviceChargeFileName}</p>
-                )}
-                {serviceChargeUploadError && (
-                  <p className="mt-1 text-xs text-destructive">{serviceChargeUploadError}</p>
-                )}
-              </div>
-              <div>
-                <input
-                  id="service-charge-upload"
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
-                  className="sr-only"
-                  disabled={!quickCheckId || isUploadingServiceCharge}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    event.target.value = '';
-                    if (file) void handleUploadServiceCharge(file);
-                  }}
-                />
-                <label htmlFor="service-charge-upload">
-                  <span
-                    title={!quickCheckId ? 'Bitte zuerst speichern' : undefined}
-                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-primary text-primary text-sm font-medium transition-colors ${
-                      !quickCheckId || isUploadingServiceCharge
-                        ? 'opacity-50 pointer-events-none cursor-not-allowed'
-                        : 'cursor-pointer hover:bg-primary hover:text-primary-foreground'
-                    }`}
-                  >
-                    <Upload className="w-4 h-4" />
-                    Upload
-                  </span>
-                </label>
-              </div>
-            </section>
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Nebenkostenabrechnung</SectionLabel>
+              <p className="text-sm text-muted-foreground">
+                Falls vorhanden, kannst du hier die letzte Nebenkostenabrechnung hochladen. Sie erscheint anschließend auch auf der Dokumente-Seite.
+              </p>
 
-            <p className="text-xs text-muted-foreground">
-              Aktuelle Nebenkosten-Summe: {currencyFormatter.format(values.serviceChargesAllocable + values.serviceChargesNonAllocable)} €
-            </p>
+              <input
+                ref={serviceChargeInputRef}
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                className="sr-only"
+                disabled={!quickCheckId || isUploadingServiceCharge}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  if (file) void handleUploadServiceCharge(file);
+                }}
+              />
+
+              {serviceChargeFileName ? (
+                <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Icons.FileText className="w-5 h-5 text-success shrink-0" />
+                    <p className="text-sm font-medium text-foreground truncate">{serviceChargeFileName}</p>
+                  </div>
+                  <Button
+                    label="Ersetzen"
+                    icon={<Icons.RefreshCw className="w-4 h-4" />}
+                    variant="outline"
+                    size="sm"
+                    disabled={isUploadingServiceCharge}
+                    onClick={() => serviceChargeInputRef.current?.click()}
+                  />
+                </div>
+              ) : (
+                <span title={!quickCheckId ? 'Bitte zuerst speichern' : undefined} className="w-fit">
+                  <Button
+                    label={isUploadingServiceCharge ? 'Wird hochgeladen…' : 'Nebenkostenabrechnung hochladen'}
+                    icon={isUploadingServiceCharge ? <Icons.Loader2 className="w-4 h-4 animate-spin" /> : <Icons.Upload className="w-4 h-4" />}
+                    variant="outline"
+                    disabled={!quickCheckId || isUploadingServiceCharge}
+                    onClick={() => serviceChargeInputRef.current?.click()}
+                  />
+                </span>
+              )}
+
+              {serviceChargeUploadError && (
+                <p className="text-xs text-destructive">{serviceChargeUploadError}</p>
+              )}
+            </div>
           </div>
         )}
       </div>

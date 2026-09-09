@@ -18,6 +18,12 @@ interface StepperProps {
   maxClickableStep?: number;
   onStepClick?: (stepIndex: number) => void;
   className?: string;
+  /** Which steps actually have saved data, keyed by index — shown with the
+   *  checkmark regardless of where `currentStep` currently is. Falls back to
+   *  "everything before currentStep" when omitted (e.g. before that data has
+   *  loaded), so a step you've since navigated *back* past still reads as
+   *  done instead of reverting to a plain number. */
+  completedSteps?: boolean[];
 }
 
 /**
@@ -50,6 +56,7 @@ function MobileStepper({
   expanded,
   onToggle,
   className,
+  completedSteps,
 }: {
   steps: Step[];
   currentStep: number;
@@ -58,6 +65,7 @@ function MobileStepper({
   expanded: boolean;
   onToggle: () => void;
   className?: string;
+  completedSteps?: boolean[];
 }) {
   const current = steps[currentStep];
   const next = steps[currentStep + 1];
@@ -97,7 +105,7 @@ function MobileStepper({
       {expanded && (
         <div className="flex flex-col gap-0.5 border-t border-border p-2">
           {steps.map((step, index) => {
-            const isCompleted = index < currentStep;
+            const isCompleted = completedSteps ? Boolean(completedSteps[index]) : index < currentStep;
             const isCurrent = index === currentStep;
             const isClickable = Boolean(onStepClick) && index <= maxClickableStep;
             const Row = isClickable ? "button" : "div";
@@ -148,6 +156,7 @@ export function Stepper({
   maxClickableStep = currentStep,
   onStepClick,
   className,
+  completedSteps,
 }: StepperProps) {
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const animatedSegmentCount = Math.abs(progressStep - previousStep);
@@ -165,6 +174,7 @@ export function Stepper({
         expanded={mobileExpanded}
         onToggle={() => setMobileExpanded((value) => !value)}
         className={className}
+        completedSteps={completedSteps}
       />
 
       {/* --step-r matches half of the circle's diameter (h-8/w-8 → sm:h-10/w-10)
@@ -219,7 +229,7 @@ export function Stepper({
         })}
 
         {steps.map((step, index) => {
-          const isCompleted = index < currentStep;
+          const isCompleted = completedSteps ? Boolean(completedSteps[index]) : index < currentStep;
           const isCurrent = index === currentStep;
           const isArriving = isCurrent
             && progressDirection !== 'none'
