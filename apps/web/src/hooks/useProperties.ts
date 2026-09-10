@@ -1,6 +1,6 @@
 'use client';
 
-import { deleteProperty, getPropertiesOverview, type PropertyOverview } from '@/lib/supabase/property.supabase';
+import { archiveProperty, deleteProperty, getPropertiesOverview, type PropertyOverview } from '@/lib/supabase/property.supabase';
 import { useCallback, useEffect, useState } from 'react';
 
 export interface UsePropertiesResult {
@@ -9,6 +9,7 @@ export interface UsePropertiesResult {
     error: string | null;
     refetch: () => void;
     deleteSelected: (id: number) => Promise<void>;
+    archiveSelected: (id: number) => Promise<void>;
 }
 
 /**
@@ -45,11 +46,18 @@ export function useProperties(userId: string | undefined): UsePropertiesResult {
         setData((prev) => prev.filter((row) => row.propertyId !== id));
     }, []);
 
+    const archiveSelected = useCallback(async (id: number) => {
+        const archived = await archiveProperty(id);
+        if (!archived) throw new Error('Archivieren fehlgeschlagen');
+        setData((prev) => prev.map((row) => row.propertyId === id ? { ...row, archivedAt: archived.archivedAt } : row));
+    }, []);
+
     return {
         data,
         isLoading,
         error,
         refetch: fetch,
         deleteSelected,
+        archiveSelected,
     };
 }

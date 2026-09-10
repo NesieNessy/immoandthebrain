@@ -20,6 +20,7 @@ function toProperty(row: Record<string, unknown>): Property {
     propertyCategory: (row.property_category as string | null) ?? null,
     imageUrl: row.image_base64 as string | null,
     numberOfUnits: row.number_of_units as number,
+    archivedAt: (row.archived_at as string | null) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -169,4 +170,10 @@ export async function deleteProperty(propertyId: number): Promise<boolean> {
   const response = await authFetch(`/api/properties?id=${encodeURIComponent(propertyId)}`, { method: 'DELETE' });
   invalidatePropertyCache(propertyId);
   return response.ok;
+}
+
+/** Archives a property instead of deleting it — hidden from the default
+ *  Bestandsobjekte list, still reachable via "Verlauf". */
+export async function archiveProperty(propertyId: number): Promise<Property | null> {
+  return updateProperty(propertyId, { archivedAt: new Date().toISOString() });
 }

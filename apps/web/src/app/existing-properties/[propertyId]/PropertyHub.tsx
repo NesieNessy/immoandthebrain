@@ -1,8 +1,9 @@
 "use client";
 
 import { BESTANDSOBJEKTE_BREADCRUMB_ROOT, formatUnitLabel, PROPERTY_CATEGORY_LABEL, PropertyLoadingPage } from '@/components/features/PropertyDisplay';
-import { ConfirmDeleteModal, Header, Icons, NotFoundScreen, PAGE_CONTAINER_CLASS, SectionLabel, Tag, type BreadcrumbItem } from '@/components/ui';
-import { deleteProperty, getPropertyOverviewById, type PropertyOverview } from '@/lib/supabase/property.supabase';
+import { Button, ConfirmDeleteModal, Header, Icons, Modal, NotFoundScreen, PAGE_CONTAINER_CLASS, SectionLabel, Tag, useToast, type BreadcrumbItem } from '@/components/ui';
+import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
+import { archiveProperty, deleteProperty, getPropertyOverviewById, type PropertyOverview } from '@/lib/supabase/property.supabase';
 import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
 import { cn } from '@/lib/utils';
 import type { PropertyUnit } from '@immoandthebrain/types';
@@ -188,11 +189,14 @@ function HubCardTile({ card, propertyId, unitId }: { card: HubCard; propertyId: 
 
 export default function PropertyHub({ propertyId, unitId }: { propertyId: string; unitId: string | null }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [property, setProperty] = useState<PropertyOverview | null>(null);
   const [units, setUnits] = useState<PropertyUnit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
 
   useEffect(() => {
     const id = parseInt(propertyId, 10);
@@ -209,6 +213,18 @@ export default function PropertyHub({ propertyId, unitId }: { propertyId: string
     setIsDeleting(false);
     if (success) {
       router.push('/existing-properties');
+    }
+  };
+
+  const handleConfirmArchive = async () => {
+    setIsArchiving(true);
+    const archived = await archiveProperty(parseInt(propertyId, 10));
+    setIsArchiving(false);
+    if (archived) {
+      showToast('Objekt archiviert.');
+      router.push('/existing-properties');
+    } else {
+      showToast('Objekt konnte nicht archiviert werden.', 'error');
     }
   };
 
@@ -243,6 +259,19 @@ export default function PropertyHub({ propertyId, unitId }: { propertyId: string
 
   const weitereAktionen: HubCard[] = [
     ...WEITERE_AKTIONEN,
+    // Already-archived properties have nothing left to archive.
+    ...(!property.archivedAt
+      ? [{
+          key: 'archive-property',
+          title: 'Archivieren',
+          description: 'Objekt aus der Bestandsobjekte-Übersicht ausblenden',
+          route: '',
+          scope: 'property' as const,
+          icon: Icons.Archive,
+          colorClass: 'bg-muted text-muted-foreground',
+          onClick: () => setArchiveModalOpen(true),
+        }]
+      : []),
     {
       key: 'delete-property',
       title: 'Löschung',
@@ -323,6 +352,24 @@ export default function PropertyHub({ propertyId, unitId }: { propertyId: string
           {property.postalCode} {property.city} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
         </p>
       </ConfirmDeleteModal>
+
+      <Modal
+        open={archiveModalOpen}
+        onClose={() => setArchiveModalOpen(false)}
+        title="Objekt archivieren?"
+        icon={<Icons.Archive className="w-5 h-5" />}
+        footer={
+          <>
+            <Button label={BUTTON_DETAILS.Cancel.label} variant="outline" disabled={isArchiving} onClick={() => setArchiveModalOpen(false)} />
+            <Button label="Archivieren" variant="primary" disabled={isArchiving} onClick={() => void handleConfirmArchive()} />
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{property.street} {property.houseNumber}</span>,{' '}
+          {property.postalCode} {property.city} wird aus der Bestandsobjekte-Übersicht ausgeblendet, bleibt aber über den Verlauf erreichbar.
+        </p>
+      </Modal>
     </div>
   );
 }

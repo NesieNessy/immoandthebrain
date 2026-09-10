@@ -6,6 +6,7 @@ export { Checkbox } from "./Checkbox";
 export { ComingSoonButton } from "./ComingSoonButton";
 export { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 export { Diagram } from "./Diagram";
+export { FilePickerButton } from "./FilePickerButton";
 export { FixedOverlay } from "./FixedOverlay";
 export { CalculatedPanel, DetailFieldLegend, MetricCard, ReadOnlyField } from "./DetailValue";
 export { Dropdown } from "./Dropdown";

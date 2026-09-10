@@ -22,6 +22,7 @@ function mapProperty(row: Record<string, unknown>) {
     imageUrl: row.image_base64 ?? null,
     propertyCategory: row.property_category ?? null,
     numberOfUnits: Number(row.number_of_units ?? 1),
+    archivedAt: row.archived_at == null ? null : String(row.archived_at),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
     ...(Object.hasOwn(row, 'is_rented') ? { isRented: Boolean(row.is_rented) } : {}),
@@ -117,6 +118,7 @@ const UPDATE_COLUMNS = {
   imageUrl: 'image_base64',
   propertyCategory: 'property_category',
   numberOfUnits: 'number_of_units',
+  archivedAt: 'archived_at',
 } as const;
 
 export async function PATCH(request: Request) {

@@ -86,6 +86,7 @@ export function PropertyCard({ property, colorIndex, menuItems, onClick }: Prope
             />
           )}
           <Tag label={property.isRented ? 'Vermietet' : 'Unvermietet'} variant={property.isRented ? 'success' : 'warning'} size="md" />
+          {property.archivedAt && <Tag label="Archiviert" variant="muted" size="md" />}
         </div>
       </div>
     </div>
