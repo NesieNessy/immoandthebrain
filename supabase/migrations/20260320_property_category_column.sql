@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext - property.property_category (direct column)
+-- ImmoAndTheBrain - property.property_category (direct column)
 --
 -- property_overview (20260319) originally derived property_category only via
 -- the accepted quick_check -> detail_check_property_data chain. That leaves

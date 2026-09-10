@@ -10,7 +10,7 @@ import { createAcquisitionCosts, getAcquisitionCosts, updateAcquisitionCosts } f
 import { createParkingSpace, deleteParkingSpace, getParkingSpacesByProperty, updateParkingSpace } from '@/lib/supabase/parking_space.supabase';
 import { getPropertyById, updateProperty } from '@/lib/supabase/property.supabase';
 import { getPropertyAcquisitionByProperty, upsertPropertyAcquisition } from '@/lib/supabase/property_acquisition.supabase';
-import { EnergyEfficient, type AcquisitionCosts, type ParkingSpace, type Property } from '@immonext/types';
+import { EnergyEfficient, type AcquisitionCosts, type ParkingSpace, type Property } from '@immoandthebrain/types';
 import { format, parseISO } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';

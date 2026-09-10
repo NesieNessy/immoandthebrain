@@ -5,7 +5,7 @@ import { buildPropertyUseCaseBreadcrumb, PropertyLoadingPage, PropertyNotFoundPa
 import { Header, PAGE_CONTAINER_CLASS, Tile } from '@/components/ui';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
-import type { Property } from '@immonext/types';
+import type { Property } from '@immoandthebrain/types';
 
 export default function Sale({ propertyId }: { propertyId: string }) {
     const [property, setProperty] = useState<Property | null>(null);

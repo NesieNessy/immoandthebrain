@@ -1,8 +1,8 @@
 {
-  "name": "immonext-monorepo",
+  "name": "immoandthebrain-monorepo",
   "version": "1.0.0",
   "private": true,
-  "description": "ImmoNext - Real Estate Management Platform Monorepo",
+  "description": "ImmoAndTheBrain - Real Estate Management Platform Monorepo",
   "scripts": {
     "dev": "npm run dev --workspace=apps/web",
     "build": "npm run build --workspace=apps/web",

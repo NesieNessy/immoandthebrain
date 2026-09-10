@@ -1,5 +1,5 @@
 import { authFetch } from '@/lib/api/authFetch';
-import type { PersonalData, PersonalDataInsert, PersonalDataUpdate } from '@immonext/types';
+import type { PersonalData, PersonalDataInsert, PersonalDataUpdate } from '@immoandthebrain/types';
 
 /** Thrown by `upsertPersonalData`/`updatePersonalData` when the API rejects the
  *  request — carries the raw `missing` column names (snake_case) from the API

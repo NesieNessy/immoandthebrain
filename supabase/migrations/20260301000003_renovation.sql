@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: renovation
+-- ImmoAndTheBrain – CREATE TABLE: renovation
 -- Depends on: property (property_id), legal_requirements (legal_requirements_id)
 -- ==============================================================================
 

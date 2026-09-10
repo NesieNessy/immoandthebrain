@@ -1,5 +1,5 @@
 import { authFetch } from '@/lib/api/authFetch';
-import type { TenancyPerson, TenancyPersonInsert, TenancyPersonUpdate } from '@immonext/types';
+import type { TenancyPerson, TenancyPersonInsert, TenancyPersonUpdate } from '@immoandthebrain/types';
 
 function toTenancyPerson(row: Record<string, unknown>): TenancyPerson {
   return {

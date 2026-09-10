@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – Row-Level Security for the Detailbewertung tables
+-- ImmoAndTheBrain – Row-Level Security for the Detailbewertung tables
 --
 -- Every detail_check_* table was created without RLS. Supabase grants anon and
 -- authenticated access to tables in `public` by default, so a table with RLS

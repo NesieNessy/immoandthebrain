@@ -12,7 +12,7 @@ import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { createQuickCheck } from '@/lib/supabase/quick_check.supabase';
 import { calcKpf } from '@/lib/quickCheck/kpf';
 import { isValidConstructionYear } from '@/lib/quickCheck/validation';
-import { PropertyCondition } from '@immonext/types';
+import { PropertyCondition } from '@immoandthebrain/types';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 

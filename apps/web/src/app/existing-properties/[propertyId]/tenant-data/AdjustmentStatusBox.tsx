@@ -3,7 +3,7 @@
 import { Button, Icons } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { cn, deCurrencyFormatter } from '@/lib/utils';
-import type { TenancyAdjustmentHistoryEntry, TenancyAdjustmentType } from '@immonext/types';
+import type { TenancyAdjustmentHistoryEntry, TenancyAdjustmentType } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { Bell } from 'lucide-react';
 

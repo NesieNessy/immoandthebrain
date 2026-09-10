@@ -8,7 +8,7 @@ import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabas
 import { getCurrentTenancyByUnit } from '@/lib/supabase/tenancy.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
 import { deCurrencyFormatter, formatDeDate } from '@/lib/utils';
-import type { Property, PropertyUnit } from '@immonext/types';
+import type { Property, PropertyUnit } from '@immoandthebrain/types';
 import { useRouter } from 'next/navigation';
 
 import PropertyHub from './PropertyHub';

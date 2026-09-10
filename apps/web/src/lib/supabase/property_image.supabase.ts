@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase/client.supabase';
 import { authFetch } from '@/lib/api/authFetch';
 import { invalidatePropertyCache } from '@/lib/supabase/property.supabase';
-import type { PropertyImage } from '@immonext/types';
+import type { PropertyImage } from '@immoandthebrain/types';
 
 const BUCKET = 'property-images';
 

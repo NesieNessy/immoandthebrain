@@ -7,7 +7,7 @@ import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCas
 import { getPropertyById } from '@/lib/supabase/property.supabase';
 import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
-import type { Property, PropertyUnit, TenancyPerson } from '@immonext/types';
+import type { Property, PropertyUnit, TenancyPerson } from '@immoandthebrain/types';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';

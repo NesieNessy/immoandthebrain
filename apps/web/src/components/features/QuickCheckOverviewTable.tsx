@@ -18,7 +18,7 @@ import { FieldLabels } from '@/constants/FieldLabels';
 import { useQuickChecks } from '@/hooks/useQuickChecks';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { cn } from '@/lib/utils';
-import { PropertyCondition } from '@immonext/types';
+import { PropertyCondition } from '@immoandthebrain/types';
 import Link from 'next/link';
 import { useCallback, useMemo, useRef, useState } from 'react';
 

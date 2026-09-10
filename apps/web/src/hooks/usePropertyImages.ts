@@ -8,7 +8,7 @@ import {
   setCoverPropertyImage,
   uploadPropertyImage,
 } from '@/lib/supabase/property_image.supabase';
-import type { PropertyImage } from '@immonext/types';
+import type { PropertyImage } from '@immoandthebrain/types';
 
 /** Must match the `property-images` Storage bucket's `allowed_mime_types`
  *  (supabase/migrations/20260828000001_property_image.sql) — checked here

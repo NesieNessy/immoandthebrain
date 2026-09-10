@@ -8,7 +8,7 @@ import { Header, Icons, NumberField, PAGE_CONTAINER_CLASS, PillOptions, SectionL
 import { getPropertyById } from '@/lib/supabase/property.supabase';
 import { createPropertyUnit, getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
 import { deNumberFormatter } from '@/lib/utils';
-import { type Property, UnitUsageType } from '@immonext/types';
+import { type Property, UnitUsageType } from '@immoandthebrain/types';
 import { Car, MoreHorizontal } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 

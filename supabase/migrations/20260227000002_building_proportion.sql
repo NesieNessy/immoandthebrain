@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: building_proportion
+-- ImmoAndTheBrain – CREATE TABLE: building_proportion
 -- Depends on: property (property_id), acquisition_costs (acquisition_costs_id)
 -- ==============================================================================
 

@@ -1,1 +1,1 @@
-export { PropertyTypeValues } from '@immonext/types';
+export { PropertyTypeValues } from '@immoandthebrain/types';

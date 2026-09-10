@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/client.supabase';
 import { authFetch } from '@/lib/api/authFetch';
-import type { Property, PropertyInsert, PropertyUpdate, PropertyWithCity } from '@immonext/types';
+import type { Property, PropertyInsert, PropertyUpdate, PropertyWithCity } from '@immoandthebrain/types';
 
 function toProperty(row: Record<string, unknown>): Property {
   return {

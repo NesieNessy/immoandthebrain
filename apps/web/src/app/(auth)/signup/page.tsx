@@ -53,7 +53,7 @@ export default function SignupPage() {
       <div className="text-center">
         <h1 className="text-3xl font-bold text-gray-900">Konto erstellen</h1>
         <p className="mt-2 text-sm text-gray-600">
-          Verwalten Sie Ihr Immobilienportfolio mit ImmoNext
+          Verwalten Sie Ihr Immobilienportfolio mit ImmoAndTheBrain
         </p>
       </div>
 

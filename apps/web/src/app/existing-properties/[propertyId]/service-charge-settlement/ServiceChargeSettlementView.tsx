@@ -19,7 +19,7 @@ import {
 } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
-import type { Property, PropertyUnit } from '@immonext/types';
+import type { Property, PropertyUnit } from '@immoandthebrain/types';
 import { useRouter } from 'next/navigation';
 import { useRef } from 'react';
 import { Sparkles } from 'lucide-react';

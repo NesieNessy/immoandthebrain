@@ -1,5 +1,5 @@
 import { jsonRequest, propertyResourceRequest } from '@/lib/api/propertyResources';
-import type { PropertyRnd, PropertyRndInsert } from '@immonext/types';
+import type { PropertyRnd, PropertyRndInsert } from '@immoandthebrain/types';
 
 function toPropertyRnd(row: Record<string, unknown>): PropertyRnd {
   return {

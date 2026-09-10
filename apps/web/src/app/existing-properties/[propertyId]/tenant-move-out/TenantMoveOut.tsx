@@ -8,7 +8,7 @@ import { getPropertyById } from '@/lib/supabase/property.supabase';
 import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
 import { getCurrentTenancyByUnit } from '@/lib/supabase/tenancy.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
-import type { Property, PropertyUnit } from '@immonext/types';
+import type { Property, PropertyUnit } from '@immoandthebrain/types';
 import { useRouter } from 'next/navigation';
 
 import { TenantMoveOutView } from './TenantMoveOutView';

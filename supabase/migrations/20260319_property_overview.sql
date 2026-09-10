@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext - VIEW: property_overview
+-- ImmoAndTheBrain - VIEW: property_overview
 --
 -- Enriches `property` with three derived, non-persisted fields for the
 -- Bestandsobjekte overview page:

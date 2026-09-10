@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/client.supabase';
 import { authFetch } from '@/lib/api/authFetch';
-import type { TenancyDocument, TenancyDocumentInsert, TenancyDocumentType } from '@immonext/types';
+import type { TenancyDocument, TenancyDocumentInsert, TenancyDocumentType } from '@immoandthebrain/types';
 
 const BUCKET = 'tenancy-documents';
 

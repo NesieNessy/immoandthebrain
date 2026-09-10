@@ -17,7 +17,7 @@ import {
 } from '@/lib/supabase/tenancy_move_out.supabase';
 import { htmlToPdfBlob } from '@/lib/pdf/htmlToPdf';
 import { formatDeDate } from '@/lib/utils';
-import type { MoveOutDamage, MoveOutMeterReading, PersonalData, Property, PropertyUnit, Tenancy, TenancyDocument, TenancyMoveOut, TenancyPerson } from '@immonext/types';
+import type { MoveOutDamage, MoveOutMeterReading, PersonalData, Property, PropertyUnit, Tenancy, TenancyDocument, TenancyMoveOut, TenancyPerson } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';

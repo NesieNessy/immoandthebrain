@@ -1,4 +1,4 @@
-import type { RentalTermsPetsAllowed, RentalTermsRedecorationClause, RentalTermsSubletAllowed } from '@immonext/types';
+import type { RentalTermsPetsAllowed, RentalTermsRedecorationClause, RentalTermsSubletAllowed } from '@immoandthebrain/types';
 
 export type TriState = '' | 'true' | 'false';
 

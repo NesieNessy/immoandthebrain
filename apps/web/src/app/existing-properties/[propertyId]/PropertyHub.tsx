@@ -5,7 +5,7 @@ import { ConfirmDeleteModal, Header, Icons, NotFoundScreen, PAGE_CONTAINER_CLASS
 import { deleteProperty, getPropertyOverviewById, type PropertyOverview } from '@/lib/supabase/property.supabase';
 import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
 import { cn } from '@/lib/utils';
-import type { PropertyUnit } from '@immonext/types';
+import type { PropertyUnit } from '@immoandthebrain/types';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 

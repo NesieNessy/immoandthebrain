@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – property_overview.is_rented: date-aware instead of the stored flag
+-- ImmoAndTheBrain – property_overview.is_rented: date-aware instead of the stored flag
 --
 -- is_rented previously checked tenancy.is_rented = TRUE, a column that's only
 -- ever set explicitly (on tenancy creation, and by the tenant-history page's

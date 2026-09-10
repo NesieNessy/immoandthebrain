@@ -6,7 +6,7 @@ import { DataCard } from '../tenant-data/DocumentGeneratorParts';
 import { Button, CalendarField, ConfirmDeleteModal, Dropdown, Header, Icons, Modal, NumberField, PAGE_CONTAINER_CLASS, SectionLabel, StickyActionBar, Switch, Tag, TextArea, UnsavedChangesModal, type BreadcrumbItem } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { formatDeDate } from '@/lib/utils';
-import type { Property, PropertyUnit, RentalTermsPetsAllowed, RentalTermsRedecorationClause, RentalTermsSubletAllowed } from '@immonext/types';
+import type { Property, PropertyUnit, RentalTermsPetsAllowed, RentalTermsRedecorationClause, RentalTermsSubletAllowed } from '@immoandthebrain/types';
 import { useRentalAgreementGenerator } from '../tenant-data/rentalAgreementGenerator';
 import {
     PETS_OPTIONS,

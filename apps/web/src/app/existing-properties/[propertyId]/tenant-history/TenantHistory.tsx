@@ -9,7 +9,7 @@ import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabas
 import { getCurrentTenancyByUnit, getTenanciesByUnit } from '@/lib/supabase/tenancy.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
 import { formatDeDate } from '@/lib/utils';
-import type { Property, PropertyUnit } from '@immonext/types';
+import type { Property, PropertyUnit } from '@immoandthebrain/types';
 import { useRouter } from 'next/navigation';
 
 import { UnitHistoryTable } from './UnitHistoryTable';

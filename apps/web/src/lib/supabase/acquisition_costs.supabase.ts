@@ -1,8 +1,8 @@
 // ==============================================================================
-// ImmoNext – Supabase Client: acquisition_costs
+// ImmoAndTheBrain – Supabase Client: acquisition_costs
 // ==============================================================================
 import { jsonRequest, propertyResourceRequest } from '@/lib/api/propertyResources';
-import type { AcquisitionCosts, AcquisitionCostsInsert, AcquisitionCostsUpdate } from '@immonext/types';
+import type { AcquisitionCosts, AcquisitionCostsInsert, AcquisitionCostsUpdate } from '@immoandthebrain/types';
 
 function toAcquisitionCosts(row: Record<string, unknown>): AcquisitionCosts {
   return {

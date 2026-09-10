@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: depreciation
+-- ImmoAndTheBrain – CREATE TABLE: depreciation
 -- Merged from: Depreciation (AfA) + DepreciationCalculation (AfA)
 -- Depends on: property (property_id), system_config (config_id)
 -- ==============================================================================

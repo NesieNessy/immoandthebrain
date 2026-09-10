@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: system_config
+-- ImmoAndTheBrain – CREATE TABLE: system_config
 -- Key/value configuration table — replaces single-row SystemData
 -- ==============================================================================
 
@@ -39,7 +39,7 @@ CREATE TRIGGER system_config_updated_at BEFORE UPDATE ON system_config FOR EACH 
 
 
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: notifications
+-- ImmoAndTheBrain – CREATE TABLE: notifications
 -- Depends on: personal_data (user_id), property (property_id)
 -- ==============================================================================
 

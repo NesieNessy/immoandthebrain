@@ -10,7 +10,7 @@ interface LoadingScreenProps {
   className?: string;
 }
 
-/** The app-wide loading state — the ImmoNext mark's three glyphs (i, n, b)
+/** The app-wide loading state — the ImmoAndTheBrain mark's three glyphs (i, n, b)
  *  revealing in sequence, looping, in place of a generic spinner or
  *  "Wird geladen…" text. */
 export function LoadingScreen({ message = "Wird geladen…", fullScreen = true, className }: LoadingScreenProps) {

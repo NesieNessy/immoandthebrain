@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – VIEW: metrics_today
+-- ImmoAndTheBrain – VIEW: metrics_today
 -- Aggregates key metrics from tenancy, maintenance_costs, financing,
 -- depreciation and personal_data per property.
 -- No table — computed on demand.

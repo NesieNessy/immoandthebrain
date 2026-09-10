@@ -9,7 +9,7 @@ export const authBypassUser = {
   id: LOCAL_BYPASS_USER_ID,
   email: LOCAL_BYPASS_EMAIL,
   user_metadata: {
-    full_name: 'ImmoNext Dev User',
+    full_name: 'ImmoAndTheBrain Dev User',
   },
   app_metadata: {},
   aud: 'authenticated',

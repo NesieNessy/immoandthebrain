@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/client.supabase';
 import { authFetch } from '@/lib/api/authFetch';
-import type { TenancyMoveOut, TenancyMoveOutInsert, TenancyMoveOutUpdate } from '@immonext/types';
+import type { TenancyMoveOut, TenancyMoveOutInsert, TenancyMoveOutUpdate } from '@immoandthebrain/types';
 
 const BUCKET = 'tenancy-documents';
 

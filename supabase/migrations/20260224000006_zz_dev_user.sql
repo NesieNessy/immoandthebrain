@@ -5,8 +5,8 @@
 INSERT INTO auth.users (id, email, raw_user_meta_data)
 VALUES (
     '00000000-0000-4000-8000-000000000001',
-    'dev@immonext.local',
-    '{"full_name": "ImmoNext Dev User"}'::jsonb
+    'dev@immoandthebrain.local',
+    '{"full_name": "ImmoAndTheBrain Dev User"}'::jsonb
 )
 ON CONFLICT (id) DO UPDATE
 SET email = EXCLUDED.email,
@@ -28,13 +28,13 @@ INSERT INTO personal_data (
 VALUES (
     '00000000-0000-4000-8000-000000000001',
     'User',
-    'ImmoNext Dev',
+    'ImmoAndTheBrain Dev',
     'Dev Street',
     '1',
     'Berlin',
     '10115',
     NULL,
-    'dev@immonext.local',
+    'dev@immoandthebrain.local',
     '00000000000'
 )
 ON CONFLICT (user_id) DO UPDATE

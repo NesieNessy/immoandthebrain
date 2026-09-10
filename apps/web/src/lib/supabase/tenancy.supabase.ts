@@ -7,7 +7,7 @@ import type {
     TenancyInsert,
     TenancyTypeValues,
     TenancyUpdate,
-} from '@immonext/types';
+} from '@immoandthebrain/types';
 
 function toTenancy(row: Record<string, unknown>): Tenancy {
     return {

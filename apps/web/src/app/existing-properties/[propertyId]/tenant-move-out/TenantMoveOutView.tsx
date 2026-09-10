@@ -22,7 +22,7 @@ import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { DataCard } from '../tenant-data/DocumentGeneratorParts';
 import { MOVE_OUT_ROOM_OPTIONS } from '@/lib/tenantMoveOut/rooms';
 import { deCurrencyFormatter } from '@/lib/utils';
-import type { Property, PropertyUnit } from '@immonext/types';
+import type { Property, PropertyUnit } from '@immoandthebrain/types';
 import { useRouter } from 'next/navigation';
 import { useRef } from 'react';
 

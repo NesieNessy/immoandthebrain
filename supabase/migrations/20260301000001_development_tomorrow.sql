@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: development_tomorrow
+-- ImmoAndTheBrain – CREATE TABLE: development_tomorrow
 -- Depends on: property, tenancy, city, legal_requirements, rent_index, financing
 -- ==============================================================================
 

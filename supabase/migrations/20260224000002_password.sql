@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: password
+-- ImmoAndTheBrain – CREATE TABLE: password
 -- Depends on: personal_data (user_id)
 -- ==============================================================================
 

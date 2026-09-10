@@ -1,6 +1,6 @@
-# Getting Started with Immonext
+# Getting Started with ImmoAndTheBrain
 
-This guide will help you set up the development environment for Immonext.
+This guide will help you set up the development environment for ImmoAndTheBrain.
 
 ## Prerequisites Installation
 
@@ -19,8 +19,8 @@ This guide will help you set up the development environment for Immonext.
 
 ```bash
 # Clone repository
-git clone https://github.com/NesieNessy/immonext.git
-cd immonext
+git clone https://github.com/NesieNessy/immoandthebrain.git
+cd immoandthebrain
 
 # Copy environment template
 cp .env.example .env

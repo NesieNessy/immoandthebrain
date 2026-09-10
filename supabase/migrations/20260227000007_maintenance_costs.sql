@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ImmoNext – CREATE TABLE: maintenance_costs
+-- ImmoAndTheBrain – CREATE TABLE: maintenance_costs
 -- Depends on: property (property_id)
 -- ==============================================================================
 

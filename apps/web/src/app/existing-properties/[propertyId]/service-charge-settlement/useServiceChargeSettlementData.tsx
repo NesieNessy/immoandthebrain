@@ -42,7 +42,7 @@ import type {
     ServiceChargeSettlement,
     Tenancy,
     TenancyAdjustmentHistoryEntry,
-} from '@immonext/types';
+} from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
