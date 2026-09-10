@@ -6,7 +6,7 @@ import { NewPropertyModal } from '@/components/features/NewPropertyModal';
 import { PropertyCard } from '@/components/features/PropertyCard';
 import { PropertyListRow } from '@/components/features/PropertyListRow';
 import type { MenuItem } from '@/components/ui';
-import { Button, ConfirmDeleteModal, Header, Icons, LoadingScreen, PAGE_CONTAINER_CLASS, TextFieldWithIcon } from '@/components/ui';
+import { Button, ConfirmDeleteModal, Header, Icons, LoadingScreen, PAGE_CONTAINER_CLASS, Switch, TextFieldWithIcon } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useProperties } from '@/hooks/useProperties';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
@@ -61,7 +61,7 @@ function FilterPill({
 export default function ExistingPropertiesPage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useRequireAuth();
-  const { data: properties, isLoading, error, deleteSelected } = useProperties(user?.id);
+  const { data: properties, isLoading, error, deleteSelected, archiveSelected } = useProperties(user?.id);
 
   const [search, setSearch] = useState('');
   const [objektTyp, setObjektTyp] = useState('');
@@ -70,8 +70,12 @@ export default function ExistingPropertiesPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(24);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [archivingId, setArchivingId] = useState<number | null>(null);
   const [propertyToDelete, setPropertyToDelete] = useState<PropertyOverview | null>(null);
   const [newPropertyModalOpen, setNewPropertyModalOpen] = useState(false);
+  // Archived properties are hidden by default — every "current" overview
+  // elsewhere in the app only ever shows active properties too.
+  const [showHistory, setShowHistory] = useState(false);
 
   const handlePropertyClick = (propertyId: number) => {
     router.push(`/existing-properties/${propertyId}`);
@@ -89,12 +93,31 @@ export default function ExistingPropertiesPage() {
     }
   };
 
+  const handleArchive = async (property: PropertyOverview) => {
+    setArchivingId(property.propertyId);
+    try {
+      await archiveSelected(property.propertyId);
+    } finally {
+      setArchivingId(null);
+    }
+  };
+
   const buildMenuItems = (property: PropertyOverview): MenuItem[] => [
     {
       label: BUTTON_DETAILS.Edit.label,
       icon: <BUTTON_DETAILS.Edit.icon />,
       onClick: () => handlePropertyClick(property.propertyId),
     },
+    // Already-archived properties (shown via "Verlauf") have nothing left
+    // to archive — only current ones offer the action.
+    ...(!property.archivedAt
+      ? [{
+          label: 'Archivieren',
+          icon: <Icons.Archive className="w-4 h-4" />,
+          disabled: archivingId === property.propertyId,
+          onClick: () => void handleArchive(property),
+        }]
+      : []),
     {
       label: BUTTON_DETAILS.Delete.label,
       icon: <BUTTON_DETAILS.Delete.icon />,
@@ -107,13 +130,14 @@ export default function ExistingPropertiesPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return properties.filter((p) => {
+      if (!showHistory && p.archivedAt) return false;
       if (q && !`${p.street} ${p.houseNumber} ${p.city} ${p.postalCode} ${p.propertyAbbreviation}`.toLowerCase().includes(q)) return false;
       if (objektTyp && p.propertyCategory !== objektTyp) return false;
       if (vermietung === 'vermietet' && !p.isRented) return false;
       if (vermietung === 'unvermietet' && p.isRented) return false;
       return true;
     });
-  }, [properties, search, objektTyp, vermietung]);
+  }, [properties, search, objektTyp, vermietung, showHistory]);
 
   const hasActiveFilters = search.trim() !== '' || objektTyp !== '' || vermietung !== '';
   const handleResetFilters = () => {
@@ -170,6 +194,12 @@ export default function ExistingPropertiesPage() {
             value={vermietung}
             options={RENTAL_STATUS_FILTER_OPTIONS}
             onChange={setVermietung}
+          />
+
+          <Switch
+            label="Verlauf"
+            checked={showHistory}
+            onCheckedChange={setShowHistory}
           />
 
           <div className="hidden md:inline-flex items-center rounded-lg border border-border p-0.5 ml-auto">

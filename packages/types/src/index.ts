@@ -144,6 +144,9 @@ export interface Property {
   propertyCategory: string | null;
   /** How many rentable Wohneinheiten this property has. */
   numberOfUnits: number;
+  /** Non-null once archived from the Bestandsobjekte overview — hidden from
+   *  the default list, still reachable via "Verlauf". */
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -160,6 +163,94 @@ export interface PropertyImage {
   publicUrl: string;
   isCover: boolean;
   createdAt: string;
+}
+
+// ----------------------------------------------------------------------------
+// PropertySaleListing
+// ----------------------------------------------------------------------------
+
+export type SaleListingCondition = 'Standard' | 'Luxus' | 'Renovierungsbedürftig';
+
+export type SaleListingHeatingType =
+  | 'Gasheizung'
+  | 'Ölheizung'
+  | 'Fernwärme / Nahwärme'
+  | 'Kohleheizung'
+  | 'Wärmepumpe (Luft-Wasser)'
+  | 'Wärmepumpe (Sole-Wasser / Erdwärme)'
+  | 'Wärmepumpe (Wasser-Wasser / Grundwasser)'
+  | 'Pelletheizung'
+  | 'Hackschnitzelheizung'
+  | 'Scheitholzheizung / Holzvergaserkessel'
+  | 'Solarthermie (Heizungsunterstützung)'
+  | 'Hybridheizung (z. B. Gas + Wärmepumpe)'
+  | 'Elektro-Direktheizung'
+  | 'Nachtspeicherheizung'
+  | 'Infrarotheizung';
+
+export type SaleListingParkingType = 'Garage' | 'Duplex-Stellplatz' | 'Außen überdacht' | 'Außen unüberdacht';
+
+export type PropertySaleListingStatus = 'draft' | 'published';
+
+/**
+ * A standalone "Vorbereiten für Verkauf" snapshot — initialized from
+ * property/tenancy/parking-space data on first open, then edited and saved
+ * independently. Editing a listing never writes back to the live property
+ * record.
+ */
+export interface PropertySaleListing {
+  propertySaleListingId: number;
+  propertyId: number;
+  street: string | null;
+  houseNumber: string | null;
+  postalCode: string | null;
+  city: string | null;
+  squareMeters: number | null;
+  condition: SaleListingCondition | null;
+  yearOfConstruction: number | null;
+  energyEfficient: EnergyEfficient | null;
+  floor: number | null;
+  numberOfRooms: number | null;
+  heatingType: SaleListingHeatingType | null;
+  isRented: boolean | null;
+  coldRent: number | null;
+  serviceCharges: number | null;
+  parkingSpaceCount: number | null;
+  parkingSpaceType: SaleListingParkingType | null;
+  salePrice: number | null;
+  parkingSpaceSalePrice: number | null;
+  availableFrom: string | null;
+  brokerCommissionPercent: number | null;
+  description: string | null;
+  status: PropertySaleListingStatus;
+  publishedAt: string | null;
+  selectedPortals: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PropertySaleListingInsert = Omit<PropertySaleListing, 'propertySaleListingId' | 'createdAt' | 'updatedAt'>;
+export type PropertySaleListingUpdate = Partial<Omit<PropertySaleListing, 'propertySaleListingId' | 'propertyId' | 'createdAt' | 'updatedAt'>>;
+
+// ----------------------------------------------------------------------------
+// PropertyDocument
+// ----------------------------------------------------------------------------
+
+export type PropertyDocumentType = 'Energieausweis' | 'Grundriss' | 'Sonstiges';
+
+/** Files attached to a property (Energieausweis/Grundriss/Sonstiges) —
+ *  mirrors TenancyDocument, minus the tenancy dimension. */
+export interface PropertyDocument {
+  propertyDocumentId: number;
+  propertyId: number;
+  documentType: PropertyDocumentType;
+  fileName: string;
+  storagePath: string;
+  contentType: string | null;
+  fileSize: number | null;
+  createdAt: string;
+  updatedAt: string;
+  supersededAt: string | null;
 }
 
 // ----------------------------------------------------------------------------

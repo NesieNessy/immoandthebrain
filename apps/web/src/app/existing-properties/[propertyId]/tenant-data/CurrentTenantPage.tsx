@@ -2,7 +2,7 @@
 
 import { formatUnitLabel } from '@/components/features/PropertyDisplay';
 import { DataCard, DocumentBox, DocumentReplaceModal, DocumentUploadButton } from './DocumentGeneratorParts';
-import { Button, CalendarField, ComingSoonButton, ConfirmDeleteModal, Dropdown, Header, Icons, Modal, NumberField, PAGE_CONTAINER_CLASS, SectionLabel, StickyActionBar, Table, Tag, TextField, UnsavedChangesModal, type BreadcrumbItem } from '@/components/ui';
+import { Button, CalendarField, ComingSoonButton, ConfirmDeleteModal, Dropdown, FilePickerButton, Header, Icons, Modal, NumberField, PAGE_CONTAINER_CLASS, SectionLabel, StickyActionBar, Table, Tag, TextField, UnsavedChangesModal, type BreadcrumbItem } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import type { Property, PropertyUnit } from '@immoandthebrain/types';
@@ -377,6 +377,12 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                     </>
                 }
             >
+                <FilePickerButton
+                    file={data.uploadDocFile}
+                    onSelect={data.selectUploadDocFile}
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    id="tenant-document-upload-file"
+                />
                 <Dropdown
                     label="Dokumenttyp"
                     options={data.documentFilterOptions}
@@ -389,23 +395,6 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                     value={String(data.uploadPersonIndex)}
                     onChange={(e) => data.setUploadPersonIndex(Number(e.target.value))}
                 />
-                <div>
-                    <label className="block mb-2 text-sm text-foreground">Datei</label>
-                    <input
-                        id="tenant-document-upload-file"
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        className="sr-only"
-                        onChange={(e) => data.selectUploadDocFile(e.target.files?.[0] ?? null)}
-                    />
-                    <label
-                        htmlFor="tenant-document-upload-file"
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-primary text-primary text-sm font-medium cursor-pointer transition-colors hover:bg-primary hover:text-primary-foreground"
-                    >
-                        <Icons.Upload className="w-4 h-4" />
-                        {data.uploadDocFile ? data.uploadDocFile.name : 'Datei auswählen'}
-                    </label>
-                </div>
                 <TextField
                     label="Dateiname"
                     placeholder={data.uploadDocFile?.name ?? 'Wird sonst nach der Datei benannt'}

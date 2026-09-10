@@ -135,6 +135,7 @@ function NewPropertyPageContent() {
         propertyCategory: objektkategorie,
         imageUrl: bildBase64,
         numberOfUnits: 1,
+        archivedAt: null,
       });
       if (!created) {
         setError('Objekt konnte nicht gespeichert werden.');

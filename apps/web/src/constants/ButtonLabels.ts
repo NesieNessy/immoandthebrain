@@ -7,6 +7,7 @@ import {
   Edit3,
   ExternalLink,
   FileText, Play,
+  Globe,
   Plus,
   Save,
   ScanLine,
@@ -42,6 +43,7 @@ enum ButtonType {
   StartDetailCheck = 'StartDetailCheck',
   OpenDetailCheck = 'OpenDetailCheck',
   AddDetailCheck = 'AddDetailCheck',
+  Publish = 'Publish',
 }
 
 // 2. Define the structure for your button properties
@@ -76,4 +78,5 @@ export const BUTTON_DETAILS: Record<ButtonType, ButtonConfig> = {
   [ButtonType.StartDetailCheck]: { label: 'Detailbewertung starten', icon: BookCheck },
   [ButtonType.OpenDetailCheck]:  { label: 'Detailbewertung öffnen',  icon: ExternalLink },
   [ButtonType.AddDetailCheck]:   { label: 'Neue Detailbewertung',    icon: Plus },
+  [ButtonType.Publish]:          { label: 'Veröffentlichen',         icon: Globe },
 };

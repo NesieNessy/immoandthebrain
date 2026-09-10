@@ -215,6 +215,7 @@ export default function DetailCheckOverviewPage() {
         propertyCategory: row.propertyCategory,
         imageUrl: null,
         numberOfUnits: 1,
+        archivedAt: null,
       });
       if (!created) {
         setError('Objekt konnte nicht angelegt werden.');

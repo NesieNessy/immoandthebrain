@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, ConfirmDeleteModal, Dropdown, Header, Icons, Modal, PAGE_CONTAINER_CLASS, Switch, Table, Tag, TextField, TextFieldWithIcon, type MenuItem, type TableColumn } from '@/components/ui';
+import { Button, ConfirmDeleteModal, Dropdown, FilePickerButton, Header, Icons, Modal, PAGE_CONTAINER_CLASS, Switch, Table, Tag, TextField, TextFieldWithIcon, type MenuItem, type TableColumn } from '@/components/ui';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { deleteDocument, getDocumentsByUser, getDocumentUrl, uploadDocument } from '@/lib/supabase/document.supabase';
 import { getProperties } from '@/lib/supabase/property.supabase';
@@ -584,23 +584,12 @@ export default function DocumentsPage() {
                     value={uploadName}
                     onChange={(e) => setUploadName(e.target.value)}
                 />
-                <div>
-                    <label className="block mb-2 text-sm text-foreground">Datei</label>
-                    <input
-                        id="document-upload-file"
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
-                        className="sr-only"
-                        onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-                    />
-                    <label
-                        htmlFor="document-upload-file"
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-primary text-primary text-sm font-medium cursor-pointer transition-colors hover:bg-primary hover:text-primary-foreground"
-                    >
-                        <Icons.Upload className="w-4 h-4" />
-                        {uploadFile ? uploadFile.name : 'Datei auswählen'}
-                    </label>
-                </div>
+                <FilePickerButton
+                    file={uploadFile}
+                    onSelect={setUploadFile}
+                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                    id="document-upload-file"
+                />
             </Modal>
 
             <ConfirmDeleteModal
