@@ -33,29 +33,47 @@ export async function POST(request: Request) {
   );
   if (!owned.rowCount) return NextResponse.json({ error: 'Mietverhältnis nicht gefunden.' }, { status: 404 });
 
-  const existing = await db.query(
-    `SELECT tenancy_document_id, storage_path FROM tenancy_document WHERE tenancy_id = $1 AND document_type = $2 AND tenancy_person_id IS NOT DISTINCT FROM $3 LIMIT 1`,
+  // A new upload into an already-occupied (tenancy, document_type,
+  // tenancy_person_id) slot archives the current row instead of overwriting
+  // it in place — the old file stays in storage and the old row stays
+  // queryable as history, just excluded from "current document" views.
+  await db.query(
+    `UPDATE tenancy_document SET superseded_at = NOW()
+     WHERE tenancy_id = $1 AND document_type = $2 AND tenancy_person_id IS NOT DISTINCT FROM $3 AND superseded_at IS NULL`,
     [tenancyId, input.document_type, input.tenancy_person_id ?? null],
   );
-  const previousStoragePath = existing.rows[0]?.storage_path ?? null;
-  const { rows } = existing.rows[0]
-    ? await db.query(
-      `UPDATE tenancy_document SET file_name=$2, storage_path=$3, content_type=$4, file_size=$5, updated_at=NOW() WHERE tenancy_document_id=$1 RETURNING *`,
-      [existing.rows[0].tenancy_document_id, input.file_name, input.storage_path, input.content_type ?? null, input.file_size ?? null],
-    )
-    : await db.query(
-      `INSERT INTO tenancy_document (tenancy_id, tenancy_person_id, document_type, file_name, storage_path, content_type, file_size) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [tenancyId, input.tenancy_person_id ?? null, input.document_type, input.file_name, input.storage_path, input.content_type ?? null, input.file_size ?? null],
-    );
-  return NextResponse.json({ document: rows[0], previousStoragePath }, { status: 201 });
+
+  const { rows } = await db.query(
+    `INSERT INTO tenancy_document (tenancy_id, tenancy_person_id, document_type, file_name, storage_path, content_type, file_size) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [tenancyId, input.tenancy_person_id ?? null, input.document_type, input.file_name, input.storage_path, input.content_type ?? null, input.file_size ?? null],
+  );
+  return NextResponse.json({ document: rows[0] }, { status: 201 });
 }
 
 export async function PATCH(request: Request) {
   const userId = await requireUserId(request);
   const input = await request.json();
   const id = Number(input.tenancy_document_id);
+  if (!id) return NextResponse.json({ error: 'Ungültiges Dokument.' }, { status: 400 });
+
+  if (input.action === 'archive') {
+    const { rows } = await db.query(
+      `
+        UPDATE tenancy_document td SET superseded_at = NOW(), updated_at = NOW()
+        WHERE td.tenancy_document_id = $1 AND td.superseded_at IS NULL AND EXISTS (
+          SELECT 1 FROM tenancy t JOIN property p ON p.property_id = t.property_id
+          WHERE t.tenancy_id = td.tenancy_id AND p.user_id = $2
+        )
+        RETURNING *
+      `,
+      [id, userId],
+    );
+    if (!rows[0]) return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
+    return NextResponse.json({ document: rows[0] });
+  }
+
   const fileName = String(input.file_name ?? '').trim();
-  if (!id || !fileName) return NextResponse.json({ error: 'Ungültiger Dateiname.' }, { status: 400 });
+  if (!fileName) return NextResponse.json({ error: 'Ungültiger Dateiname.' }, { status: 400 });
 
   const { rows } = await db.query(
     `

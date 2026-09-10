@@ -555,8 +555,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     // upload never silently hides the first. Uploading over an existing
     // document pauses on a confirm (see useDocumentReplaceFlow) instead of
     // deleting it automatically; declining adds the new file as another line.
-    const statementDocs = useMemo(() => documents.filter((d) => d.documentType === 'Nebenkostenabrechnung'), [documents]);
-    const adjustmentDocs = useMemo(() => documents.filter((d) => d.documentType === 'Nebenkosten-Anpassungsschreiben'), [documents]);
+    const statementDocs = useMemo(() => documents.filter((d) => d.documentType === 'Nebenkostenabrechnung' && !d.supersededAt), [documents]);
+    const adjustmentDocs = useMemo(() => documents.filter((d) => d.documentType === 'Nebenkosten-Anpassungsschreiben' && !d.supersededAt), [documents]);
 
     // The server upserts by (tenancy, documentType, tenancyPersonId) — a
     // second upload into an already-occupied slot returns the *same*
@@ -596,11 +596,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     const statementReplaceFlow = useDocumentReplaceFlow<TenancyDocument>({
         upload: (file) => uploadDoc(file, 'Nebenkostenabrechnung'),
-        remove: removeDoc,
     });
     const adjustmentReplaceFlow = useDocumentReplaceFlow<TenancyDocument>({
         upload: (file) => uploadDoc(file, 'Nebenkosten-Anpassungsschreiben'),
-        remove: removeDoc,
     });
 
     const requestStatementUpload = (file: File) => statementReplaceFlow.requestUpload(file, statementDocs);

@@ -304,7 +304,6 @@ export default function TenantCertificatePage({ propertyId, unitId }: { property
                 fileName={data.documents[0]?.fileName}
                 isResolving={data.replaceFlow.isResolving}
                 onReplace={() => void data.replaceFlow.confirmReplace()}
-                onKeepBoth={() => void data.replaceFlow.keepBoth()}
                 onCancel={data.replaceFlow.cancel}
             />
 

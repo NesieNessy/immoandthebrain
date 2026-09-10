@@ -225,15 +225,15 @@ export function DocumentBox<TDoc extends DocumentBoxDoc>({
 }
 
 /**
- * State machine for "ask before replace": uploading while at least one
- * document already exists for the same slot pauses on a confirmation
- * instead of silently deleting anything. Replacing deletes the existing
- * doc(s) first; declining just uploads the new file alongside them (a new
- * line in the box). Uploading into an empty slot skips the prompt entirely.
+ * State machine for "ask before replace": uploading while a document already
+ * exists for the same slot pauses on a confirmation before proceeding — the
+ * upload itself always archives the previous version rather than deleting
+ * it (see the tenancy-documents API route), so nothing is ever lost; this
+ * confirmation exists so a replace is a deliberate choice, not a surprise.
+ * Uploading into an empty slot skips the prompt entirely.
  */
 export function useDocumentReplaceFlow<TDoc>(options: {
     upload: (file: File) => Promise<void>;
-    remove: (doc: TDoc) => Promise<void>;
 }) {
     const [pending, setPending] = useState<{ file: File; existing: TDoc[] } | null>(null);
     const [isResolving, setIsResolving] = useState(false);
@@ -250,18 +250,6 @@ export function useDocumentReplaceFlow<TDoc>(options: {
         if (!pending) return;
         setIsResolving(true);
         try {
-            for (const doc of pending.existing) await options.remove(doc);
-            await options.upload(pending.file);
-            setPending(null);
-        } finally {
-            setIsResolving(false);
-        }
-    };
-
-    const keepBoth = async () => {
-        if (!pending) return;
-        setIsResolving(true);
-        try {
             await options.upload(pending.file);
             setPending(null);
         } finally {
@@ -271,7 +259,7 @@ export function useDocumentReplaceFlow<TDoc>(options: {
 
     const cancel = () => setPending(null);
 
-    return { pending, isResolving, requestUpload, confirmReplace, keepBoth, cancel };
+    return { pending, isResolving, requestUpload, confirmReplace, cancel };
 }
 
 /** Confirmation dialog for the flow above — rendered once per document
@@ -281,14 +269,12 @@ export function DocumentReplaceModal({
     fileName,
     isResolving,
     onReplace,
-    onKeepBoth,
     onCancel,
 }: {
     open: boolean;
     fileName: string | undefined;
     isResolving: boolean;
     onReplace: () => void;
-    onKeepBoth: () => void;
     onCancel: () => void;
 }) {
     return (
@@ -296,17 +282,16 @@ export function DocumentReplaceModal({
             open={open}
             onClose={onCancel}
             title="Dokument ersetzen?"
-            subtitle={fileName ? `Es liegt bereits ein Dokument vor: ${fileName}` : 'Es liegt bereits ein Dokument vor.'}
+            subtitle={fileName ? `Aktuell hinterlegt: ${fileName}` : 'Es liegt bereits ein Dokument vor.'}
             footer={
                 <>
                     <Button label="Abbrechen" variant="outline" disabled={isResolving} onClick={onCancel} />
-                    <Button label="Zusätzlich hinzufügen" variant="outline" disabled={isResolving} onClick={onKeepBoth} />
                     <Button label="Ersetzen" variant="primary" disabled={isResolving} onClick={onReplace} />
                 </>
             }
         >
             <p className="text-sm text-muted-foreground">
-                Möchtest du das vorhandene Dokument ersetzen, oder das neue zusätzlich hinzufügen?
+                Das neue Dokument wird zur aktuellen Version. Die vorherige Version bleibt im Verlauf einsehbar.
             </p>
         </Modal>
     );

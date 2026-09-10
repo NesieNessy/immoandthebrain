@@ -529,7 +529,6 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                 fileName={data.statementDocs[0]?.fileName}
                 isResolving={data.statementReplaceFlow.isResolving}
                 onReplace={() => void data.statementReplaceFlow.confirmReplace()}
-                onKeepBoth={() => void data.statementReplaceFlow.keepBoth()}
                 onCancel={data.statementReplaceFlow.cancel}
             />
             <DocumentReplaceModal
@@ -537,7 +536,6 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                 fileName={data.adjustmentDocs[0]?.fileName}
                 isResolving={data.adjustmentReplaceFlow.isResolving}
                 onReplace={() => void data.adjustmentReplaceFlow.confirmReplace()}
-                onKeepBoth={() => void data.adjustmentReplaceFlow.keepBoth()}
                 onCancel={data.adjustmentReplaceFlow.cancel}
             />
             <ConfirmDeleteModal

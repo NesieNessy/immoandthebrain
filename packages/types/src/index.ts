@@ -452,9 +452,12 @@ export interface TenancyDocument {
   fileSize: number | null;
   createdAt: string;
   updatedAt: string;
+  /** Set when a newer upload replaced this document for the same
+   *  (tenancy, documentType, tenancyPersonId) slot. Null = current version. */
+  supersededAt: string | null;
 }
 
-export type TenancyDocumentInsert = Omit<TenancyDocument, 'tenancyDocumentId' | 'createdAt' | 'updatedAt'>;
+export type TenancyDocumentInsert = Omit<TenancyDocument, 'tenancyDocumentId' | 'createdAt' | 'updatedAt' | 'supersededAt'>;
 
 // ----------------------------------------------------------------------------
 // TenancyMoveOut (Mieterauszug)

@@ -1,11 +1,11 @@
 "use client";
 
-import { Button, ConfirmDeleteModal, Dropdown, Header, Icons, Modal, PAGE_CONTAINER_CLASS, Table, TextField, TextFieldWithIcon, type MenuItem, type TableColumn } from '@/components/ui';
+import { Button, ConfirmDeleteModal, Dropdown, Header, Icons, Modal, PAGE_CONTAINER_CLASS, Switch, Table, Tag, TextField, TextFieldWithIcon, type MenuItem, type TableColumn } from '@/components/ui';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { deleteDocument, getDocumentsByUser, getDocumentUrl, uploadDocument } from '@/lib/supabase/document.supabase';
 import { getProperties } from '@/lib/supabase/property.supabase';
 import { getAllQuickChecks, type QuickCheckOverview } from '@/lib/supabase/quick_check.supabase';
-import { deleteTenancyDocument, getTenancyDocumentsByUser, getTenancyDocumentUrl } from '@/lib/supabase/tenancy_document.supabase';
+import { archiveTenancyDocument, deleteTenancyDocument, getTenancyDocumentsByUser, getTenancyDocumentUrl } from '@/lib/supabase/tenancy_document.supabase';
 import { cn } from '@/lib/utils';
 import type { DocumentCategory, Property } from '@immoandthebrain/types';
 import { format } from 'date-fns';
@@ -31,6 +31,10 @@ interface DisplayDocument {
     fileName: string;
     storagePath: string;
     bucket: 'documents' | 'tenancy-documents';
+    /** Only ever set for source: 'tenancy' rows — the `document` table has no
+     *  versioning. Non-null = an old version, superseded by a later upload
+     *  into the same slot; hidden by default, revealed via "Verlauf anzeigen". */
+    supersededAt: string | null;
 }
 
 const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
@@ -40,7 +44,10 @@ const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
 ];
 
 /** Simple age-based heuristic — not a real AI classification, just a
- *  "this looks stale" nudge shown as the KI-Hinweis column. */
+ *  "this looks stale" nudge shown as the KI-Hinweis column. Only meaningful
+ *  for the current version of a document; superseded rows get a distinct
+ *  "Archiviert" label instead (see KiHinweisPill) since Aktuell/Veraltet
+ *  don't apply to a version that's already been replaced. */
 function kiHinweis(documentDate: string | null): { label: string; ok: boolean } {
     if (!documentDate) return { label: 'Kein Datum', ok: false };
     const ageMonths = (Date.now() - new Date(documentDate).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
@@ -49,8 +56,16 @@ function kiHinweis(documentDate: string | null): { label: string; ok: boolean } 
         : { label: 'Aktuell', ok: true };
 }
 
-function KiHinweisPill({ documentDate }: { documentDate: string | null }) {
-    const { label, ok } = kiHinweis(documentDate);
+function KiHinweisPill({ doc }: { doc: DisplayDocument }) {
+    if (doc.supersededAt) {
+        return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-muted text-muted-foreground">
+                <Icons.Archive className="w-3 h-3" />
+                Archiviert
+            </span>
+        );
+    }
+    const { label, ok } = kiHinweis(doc.documentDate);
     return (
         <span className={cn(
             "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap",
@@ -92,6 +107,9 @@ export default function DocumentsPage() {
     const [search, setSearch] = useState('');
     const [viewMode, setViewMode] = useState<ViewMode>('byObject');
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+    // Old (replaced) versions are excluded by default — every "current"
+    // document view elsewhere in the app only ever shows the current one too.
+    const [showHistory, setShowHistory] = useState(false);
 
     const [showUpload, setShowUpload] = useState(false);
     const [uploadCategory, setUploadCategory] = useState<DocumentCategory>('Persönlich');
@@ -124,6 +142,7 @@ export default function DocumentsPage() {
                 fileName: d.fileName,
                 storagePath: d.storagePath,
                 bucket: 'documents',
+                supersededAt: null,
             }));
             const fromTenancy: DisplayDocument[] = tenancyDocs.map((d) => ({
                 key: `tenancy-${d.tenancyDocumentId}`,
@@ -137,6 +156,7 @@ export default function DocumentsPage() {
                 fileName: d.fileName,
                 storagePath: d.storagePath,
                 bucket: 'tenancy-documents',
+                supersededAt: d.supersededAt,
             }));
             setDocuments([...fromDocuments, ...fromTenancy]);
             setProperties(props);
@@ -174,11 +194,12 @@ export default function DocumentsPage() {
 
     const filteredDocuments = useMemo(() => {
         const query = search.trim().toLowerCase();
-        if (!query) return documents;
-        return documents.filter((doc) =>
+        const base = showHistory ? documents : documents.filter((doc) => !doc.supersededAt);
+        if (!query) return base;
+        return base.filter((doc) =>
             doc.name.toLowerCase().includes(query) || resolveObject(doc).toLowerCase().includes(query)
         );
-    }, [documents, search, resolveObject]);
+    }, [documents, search, showHistory, resolveObject]);
 
     const toggleGroup = (key: string) => {
         setCollapsedGroups((prev) => {
@@ -199,6 +220,16 @@ export default function DocumentsPage() {
             icon: <Icons.Download className="w-4 h-4" />,
             onClick: () => void handleDownload(doc),
         },
+        // Only current tenancy-sourced documents can be archived — the
+        // `document` table has no versioning concept, and an already-archived
+        // row is history, not something to archive again.
+        ...(doc.source === 'tenancy' && !doc.supersededAt
+            ? [{
+                label: 'Archivieren',
+                icon: <Icons.Archive className="w-4 h-4" />,
+                onClick: () => void handleArchive(doc),
+            }]
+            : []),
         {
             label: BUTTON_DETAILS.Delete.label,
             icon: <Icons.Trash2 className="w-4 h-4" />,
@@ -228,6 +259,12 @@ export default function DocumentsPage() {
         link.click();
         link.remove();
         URL.revokeObjectURL(blobUrl);
+    };
+
+    const handleArchive = async (doc: DisplayDocument) => {
+        const archived = await archiveTenancyDocument(doc.id);
+        if (!archived) return;
+        setDocuments((prev) => prev.map((d) => d.key === doc.key ? { ...d, supersededAt: archived.supersededAt } : d));
     };
 
     const handleConfirmDelete = async () => {
@@ -280,6 +317,7 @@ export default function DocumentsPage() {
                     fileName: uploaded.fileName,
                     storagePath: uploaded.storagePath,
                     bucket: 'documents',
+                    supersededAt: null,
                 }, ...prev]);
                 setShowUpload(false);
                 resetUploadForm();
@@ -297,11 +335,13 @@ export default function DocumentsPage() {
         width: '260px',
         sortable: true,
         renderCell: (v, row) => {
-            const { Icon, className } = documentIcon((row.doc as DisplayDocument).fileName);
+            const doc = row.doc as DisplayDocument;
+            const { Icon, className } = documentIcon(doc.fileName);
             return (
                 <span className="flex items-center gap-2 font-medium text-foreground max-w-[228px]">
                     <Icon className={cn("w-4 h-4 shrink-0", className)} />
                     <span className="truncate min-w-0" title={String(v)}>{String(v)}</span>
+                    {doc.supersededAt && <Tag label="Alte Version" variant="muted" className="shrink-0" />}
                 </span>
             );
         },
@@ -331,7 +371,7 @@ export default function DocumentsPage() {
         key: 'documentDate',
         label: 'KI-Hinweis',
         width: '150px',
-        renderCell: (v) => <KiHinweisPill documentDate={v as string | null} />,
+        renderCell: (_v, row) => <KiHinweisPill doc={row.doc as DisplayDocument} />,
     };
     const actionColumn: TableColumn<Record<string, unknown>> = {
         key: 'actions',
@@ -418,6 +458,11 @@ export default function DocumentsPage() {
                         />
                     </div>
                     <span className="text-sm text-muted-foreground">{filteredDocuments.length} Dokumente</span>
+                    <Switch
+                        label="Verlauf anzeigen"
+                        checked={showHistory}
+                        onCheckedChange={setShowHistory}
+                    />
                     <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 ml-auto">
                         {([
                             { value: 'list', label: 'Liste', icon: Icons.List },

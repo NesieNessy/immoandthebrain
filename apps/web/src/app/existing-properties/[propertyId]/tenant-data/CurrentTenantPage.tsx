@@ -492,7 +492,6 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                 fileName={certGen.documents[0]?.fileName}
                 isResolving={certGen.replaceFlow.isResolving}
                 onReplace={() => void certGen.replaceFlow.confirmReplace()}
-                onKeepBoth={() => void certGen.replaceFlow.keepBoth()}
                 onCancel={certGen.replaceFlow.cancel}
             />
 

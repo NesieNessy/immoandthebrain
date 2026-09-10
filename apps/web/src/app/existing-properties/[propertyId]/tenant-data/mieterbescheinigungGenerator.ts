@@ -32,7 +32,7 @@ export function useMieterbescheinigungGenerator(propertyId: string, unitId: stri
     const { showToast } = useToast();
     const { isLoading, notFound, property, unit, hasMultipleUnits, tenancy, persons, landlord, documents, setDocuments } =
         useUnitDocumentGeneratorData(propertyId, unitId, user?.id);
-    const mieterbescheinigungDocs = documents.filter((d) => d.documentType === 'Mieterbescheinigung');
+    const mieterbescheinigungDocs = documents.filter((d) => d.documentType === 'Mieterbescheinigung' && !d.supersededAt);
 
     const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
     const [isUploadingSignature, setIsUploadingSignature] = useState(false);
@@ -159,7 +159,7 @@ export function useMieterbescheinigungGenerator(propertyId: string, unitId: stri
         }
     };
 
-    const replaceFlow = useDocumentReplaceFlow<TenancyDocument>({ upload: uploadDoc, remove: removeDoc });
+    const replaceFlow = useDocumentReplaceFlow<TenancyDocument>({ upload: uploadDoc });
 
     const handleViewDocument = async (doc: TenancyDocument) => {
         const url = await getTenancyDocumentUrl(doc.storagePath);
