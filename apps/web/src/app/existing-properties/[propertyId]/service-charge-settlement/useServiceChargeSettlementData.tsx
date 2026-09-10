@@ -18,11 +18,12 @@ import {
 } from '@/lib/supabase/service_charge_settlement.supabase';
 import { updateTenancy } from '@/lib/supabase/tenancy.supabase';
 import { addAdjustmentHistoryEntry, getAdjustmentHistoryByTenancy } from '@/lib/supabase/tenancy_adjustment_history.supabase';
-import { uploadTenancyDocument } from '@/lib/supabase/tenancy_document.supabase';
+import { deleteTenancyDocument, getTenancyDocumentsByTenancy, getTenancyDocumentUrl, uploadTenancyDocument } from '@/lib/supabase/tenancy_document.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
 import { createMaintenanceCosts, getMaintenanceCostsById, updateMaintenanceCosts } from '@/lib/supabase/maintenance_costs.supabase';
 import { downloadBlob, formatDeDate } from '@/lib/utils';
 import { htmlToPdfBlob } from '@/lib/pdf/htmlToPdf';
+import { buildAdjustmentDocxBlob } from '@/lib/docx/adjustmentDocx';
 import { authFetch } from '@/lib/api/authFetch';
 import {
     compareBudgetCoverage,
@@ -42,15 +43,17 @@ import type {
     ServiceChargeSettlement,
     Tenancy,
     TenancyAdjustmentHistoryEntry,
+    TenancyDocument,
 } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { DEFAULT_COST_ITEMS, euro } from '../tenant-data/useTenantUnitData';
-import { readFileAsDataUrl } from '../tenant-data/DocumentGeneratorParts';
+import { readFileAsDataUrl, useDocumentReplaceFlow } from '../tenant-data/DocumentGeneratorParts';
 import { formatUnitLabel } from '@/components/features/PropertyDisplay';
 import { serviceChargeStatementHtml } from './serviceChargeStatementLetter';
+import { adjustmentLetterHtml } from './adjustmentLetterHtml';
 
 export interface CostItemForm {
     id: number | null;
@@ -107,14 +110,20 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const [miscRentHistory, setMiscRentHistory] = useState<TenancyAdjustmentHistoryEntry[]>([]);
     const [maintenanceCosts, setMaintenanceCosts] = useState<MaintenanceCosts | null>(null);
     const [landlord, setLandlord] = useState<PersonalData | null | undefined>(undefined);
+    const [documents, setDocuments] = useState<TenancyDocument[]>([]);
+    const [pendingDeleteDoc, setPendingDeleteDoc] = useState<TenancyDocument | null>(null);
+    const [deletingDocId, setDeletingDocId] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingSource, setIsUploadingSource] = useState(false);
     const [isExtractingSettlement, setIsExtractingSettlement] = useState(false);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const [isGeneratingAdjustmentDocx, setIsGeneratingAdjustmentDocx] = useState(false);
     const [isApplyingPrepayment, setIsApplyingPrepayment] = useState(false);
     const [previewHtml, setPreviewHtml] = useState<string | null>(null);
     const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+    const [previewAdjustmentHtml, setPreviewAdjustmentHtml] = useState<string | null>(null);
+    const [isLoadingAdjustmentPreview, setIsLoadingAdjustmentPreview] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const load = useCallback(async () => {
@@ -127,10 +136,12 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             setTenancy(currentTenancy);
             setSettlement(currentSettlement);
 
-            const [history, loadedMaintenanceCosts] = await Promise.all([
+            const [history, loadedMaintenanceCosts, loadedDocuments] = await Promise.all([
                 currentTenancy ? getAdjustmentHistoryByTenancy(currentTenancy.tenancyId) : Promise.resolve([]),
                 currentTenancy?.maintenanceCostsId ? getMaintenanceCostsById(currentTenancy.maintenanceCostsId) : Promise.resolve(null),
+                currentTenancy ? getTenancyDocumentsByTenancy(currentTenancy.tenancyId) : Promise.resolve([]),
             ]);
+            setDocuments(loadedDocuments);
             setMiscRentHistory(history.filter((entry) => entry.adjustmentType === 'miscRent'));
             setMaintenanceCosts(loadedMaintenanceCosts);
 
@@ -221,13 +232,13 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     // use a different Verteilerschlüssel than living-area proportion).
     const actualShareForItem = useCallback((item: CostItemForm): number | null => {
         if (!item.allocable || item.actualAmount === '') return null;
-        if (item.actualShareOverride !== '') return Number(item.actualShareOverride);
-        return Math.round(Number(item.actualAmount) * unitShare * 100) / 100;
+        if (item.actualShareOverride !== '') return Number(item.actualShareOverride) || 0;
+        return Math.round((Number(item.actualAmount) || 0) * unitShare * 100) / 100;
     }, [unitShare]);
     const budgetShareForItem = useCallback((item: CostItemForm): number | null => {
         if (!item.allocable || item.budgetAmount === '') return null;
-        if (item.budgetShareOverride !== '') return Number(item.budgetShareOverride);
-        return Math.round(Number(item.budgetAmount) * unitShare * 100) / 100;
+        if (item.budgetShareOverride !== '') return Number(item.budgetShareOverride) || 0;
+        return Math.round((Number(item.budgetAmount) || 0) * unitShare * 100) / 100;
     }, [unitShare]);
 
     // (1) Apartment share: sum of allocable actual cost items for this unit.
@@ -270,6 +281,10 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const newTotalRent = (tenancy?.coldRent ?? 0) + (newMonthlyPrepayment ?? currentMonthlyPrepayment) + (tenancy?.parkingSpaceRent ?? 0);
 
     const settlementYear = periodEnd ? periodEnd.getFullYear() : new Date().getFullYear();
+
+    // Shown as the avatar+name on the document box rows — same tenant the
+    // generated Nebenkostenabrechnung/Anpassungsschreiben actually goes to.
+    const tenantLabel = tenancy ? `${tenancy.tenantFirstName ?? ''} ${tenancy.tenantLastName ?? ''}`.trim() || 'Mieter' : undefined;
 
     // ── Cost item editing ────────────────────────────────────────────────────
     const updateCostItemField = (index: number, patch: Partial<CostItemForm>) => {
@@ -535,6 +550,95 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         if (url) window.open(url, '_blank', 'noopener,noreferrer');
     };
 
+    // ── Documents (Nebenkostenabrechnung PDF + Anpassungsschreiben Word) ────
+    // Every generated or manually uploaded file is its own row — a second
+    // upload never silently hides the first. Uploading over an existing
+    // document pauses on a confirm (see useDocumentReplaceFlow) instead of
+    // deleting it automatically; declining adds the new file as another line.
+    const statementDocs = useMemo(() => documents.filter((d) => d.documentType === 'Nebenkostenabrechnung' && !d.supersededAt), [documents]);
+    const adjustmentDocs = useMemo(() => documents.filter((d) => d.documentType === 'Nebenkosten-Anpassungsschreiben' && !d.supersededAt), [documents]);
+
+    // The server upserts by (tenancy, documentType, tenancyPersonId) — a
+    // second upload into an already-occupied slot returns the *same*
+    // tenancy_document_id with fresh contents, not a new row. Replacing by id
+    // (not blindly appending) keeps the box from showing a stale duplicate.
+    const uploadDoc = useCallback(async (file: File, documentType: TenancyDocument['documentType']) => {
+        if (!user || !tenancy) return;
+        try {
+            const uploaded = await uploadTenancyDocument(user.id, file, {
+                tenancyId: tenancy.tenancyId,
+                tenancyPersonId: null,
+                documentType,
+            });
+            if (!uploaded) {
+                showToast('Dokument konnte nicht hochgeladen werden.', 'error');
+                return;
+            }
+            setDocuments((prev) => [...prev.filter((d) => d.tenancyDocumentId !== uploaded.tenancyDocumentId), uploaded]);
+            showToast('Dokument hochgeladen.', 'success');
+        } catch {
+            showToast('Dokument konnte nicht hochgeladen werden.', 'error');
+        }
+    }, [user, tenancy, showToast]);
+
+    const removeDoc = useCallback(async (doc: TenancyDocument) => {
+        try {
+            const success = await deleteTenancyDocument(doc.tenancyDocumentId, doc.storagePath);
+            if (!success) {
+                showToast('Dokument konnte nicht gelöscht werden.', 'error');
+                return;
+            }
+            setDocuments((prev) => prev.filter((d) => d.tenancyDocumentId !== doc.tenancyDocumentId));
+        } catch {
+            showToast('Dokument konnte nicht gelöscht werden.', 'error');
+        }
+    }, [showToast]);
+
+    const statementReplaceFlow = useDocumentReplaceFlow<TenancyDocument>({
+        upload: (file) => uploadDoc(file, 'Nebenkostenabrechnung'),
+    });
+    const adjustmentReplaceFlow = useDocumentReplaceFlow<TenancyDocument>({
+        upload: (file) => uploadDoc(file, 'Nebenkosten-Anpassungsschreiben'),
+    });
+
+    const requestStatementUpload = (file: File) => statementReplaceFlow.requestUpload(file, statementDocs);
+    const requestAdjustmentUpload = (file: File) => adjustmentReplaceFlow.requestUpload(file, adjustmentDocs);
+
+    const handleViewDocument = async (doc: TenancyDocument) => {
+        const url = await getTenancyDocumentUrl(doc.storagePath);
+        if (url) window.open(url, '_blank', 'noopener,noreferrer');
+    };
+
+    // Signed URLs are cross-origin, so a plain <a download> doesn't force a
+    // download in every browser — fetch the bytes and save them locally.
+    const handleDownloadDocument = async (doc: TenancyDocument) => {
+        const url = await getTenancyDocumentUrl(doc.storagePath);
+        if (!url) return;
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = doc.fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(blobUrl);
+    };
+
+    const requestDeleteDoc = (doc: TenancyDocument) => setPendingDeleteDoc(doc);
+    const cancelDeleteDoc = () => setPendingDeleteDoc(null);
+    const confirmDeleteDoc = async () => {
+        if (!pendingDeleteDoc) return;
+        setDeletingDocId(pendingDeleteDoc.tenancyDocumentId);
+        try {
+            await removeDoc(pendingDeleteDoc);
+            setPendingDeleteDoc(null);
+        } finally {
+            setDeletingDocId(null);
+        }
+    };
+
     // ── PDF generation ───────────────────────────────────────────────────────
     const canGeneratePdf = tenancy != null && settlement != null;
 
@@ -598,15 +702,83 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             if (!html) return;
             const blob = await htmlToPdfBlob(html);
             const file = new File([blob], `Nebenkostenabrechnung_${settlementYear}.pdf`, { type: 'application/pdf' });
-            await uploadTenancyDocument(user.id, file, {
-                tenancyId: tenancy.tenancyId,
-                tenancyPersonId: null,
-                documentType: 'Nebenkostenabrechnung',
-            });
+            requestStatementUpload(file);
             downloadBlob(blob, file.name);
             showToast('Nebenkostenabrechnung als PDF erstellt.', 'success');
         } finally {
             setIsGeneratingPdf(false);
+        }
+    };
+
+    // ── Anpassungsschreiben (Word) ───────────────────────────────────────────
+    // Informs the tenant of the settlement outcome (Nachzahlung/Erstattung)
+    // and the new NK-Vorauszahlung — as an editable .docx (not a PDF), so the
+    // landlord can still adjust wording before sending it.
+    const canGenerateAdjustmentDocx = tenancy != null && settlement != null;
+
+    // Shared field-gathering for both the .docx builder and the HTML preview
+    // (adjustmentLetterHtml) — same content, two different renderers.
+    const buildAdjustmentContentParams = async () => {
+        if (!tenancy || !settlement) return null;
+        const persons = await getTenancyPersonsByTenancy(tenancy.tenancyId);
+        const tenantNames = persons
+            .filter((p) => (p.lastName ?? '').trim() !== '' || (p.firstName ?? '').trim() !== '')
+            .map((p) => `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim());
+
+        return {
+            landlordName: landlord ? `${landlord.firstName} ${landlord.lastName}`.trim() : '',
+            landlordStreet: landlord ? `${landlord.street} ${landlord.houseNumber}` : '',
+            landlordCity: landlord ? `${landlord.postalCode} ${landlord.city}` : '',
+            propertyAddress: `${property.street} ${property.houseNumber}, ${property.postalCode} ${property.city}`,
+            unitLabel: formatUnitLabel(unit.unitLabel, unit.floor, unit.locationNote),
+            tenantNames: tenantNames.length > 0 ? tenantNames : ['Mieter'],
+            issuePlace: landlord?.city || property.city,
+            issueDate: formatDeDate(new Date().toISOString()),
+            settlementYear,
+            periodStart: settlement.periodStart,
+            periodEnd: settlement.periodEnd,
+            totalActualCosts: totalActualAllocable,
+            unitActualShare,
+            annualPrepayment,
+            overUnderCoverage,
+            currentMonthlyPrepayment,
+            newMonthlyPrepayment,
+            newPrepaymentEffectiveDate: format(new Date(settlementYear + 1, 0, 1), 'yyyy-MM-dd'),
+        };
+    };
+
+    const buildAdjustmentLetterHtml = async (): Promise<string | null> => {
+        const params = await buildAdjustmentContentParams();
+        return params ? adjustmentLetterHtml(params) : null;
+    };
+
+    const handlePreviewAdjustment = async () => {
+        setIsLoadingAdjustmentPreview(true);
+        try {
+            const html = await buildAdjustmentLetterHtml();
+            setPreviewAdjustmentHtml(html);
+        } finally {
+            setIsLoadingAdjustmentPreview(false);
+        }
+    };
+
+    const closeAdjustmentPreview = () => setPreviewAdjustmentHtml(null);
+
+    const handleGenerateAdjustmentDocx = async () => {
+        if (!user || !tenancy || !settlement) return;
+        setIsGeneratingAdjustmentDocx(true);
+        try {
+            const params = await buildAdjustmentContentParams();
+            if (!params) return;
+            const blob = await buildAdjustmentDocxBlob(params);
+            const file = new File([blob], `Anpassung_Nebenkostenvorauszahlung_${settlementYear}.docx`, {
+                type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            });
+            requestAdjustmentUpload(file);
+            downloadBlob(blob, file.name);
+            showToast('Anpassungsschreiben als Word-Dokument erstellt.', 'success');
+        } finally {
+            setIsGeneratingAdjustmentDocx(false);
         }
     };
 
@@ -616,11 +788,18 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     return {
         // state
-        isLoading, isSaving, isUploadingSource, isExtractingSettlement, isGeneratingPdf, isApplyingPrepayment, error,
+        isLoading, isSaving, isUploadingSource, isExtractingSettlement, error,
+        isGeneratingPdf, isGeneratingAdjustmentDocx, isApplyingPrepayment,
         settlement, periodStart, setPeriodStart, periodEnd, setPeriodEnd,
         periodMode, setPeriodMode, setSettlementYear,
         costItems, tenancy, landlord, useCaseMenuItems, backHref,
         previewHtml, isLoadingPreview,
+        previewAdjustmentHtml, isLoadingAdjustmentPreview,
+        // documents (generated/uploaded Nebenkostenabrechnung + Anpassungsschreiben)
+        statementDocs, adjustmentDocs, statementReplaceFlow, adjustmentReplaceFlow,
+        requestStatementUpload, requestAdjustmentUpload,
+        handleViewDocument, handleDownloadDocument,
+        pendingDeleteDoc, deletingDocId, requestDeleteDoc, cancelDeleteDoc, confirmDeleteDoc,
         // computed
         isEditing, unitShare, totalArea,
         totalActualCostsAll, totalBudgetCostsAll,
@@ -629,11 +808,13 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         unitActualShare, unitBudgetShare,
         actualShareForItem, budgetShareForItem,
         annualPrepayment, currentMonthlyPrepayment, overUnderCoverage, settlementCoverage, budgetCoverage, budgetOverUnderCoverage,
-        newMonthlyPrepayment, prepaymentDelta, newTotalRent, settlementYear,
-        canGeneratePdf, canApplyPrepayment,
+        newMonthlyPrepayment, prepaymentDelta, newTotalRent, settlementYear, tenantLabel,
+        canGeneratePdf, canGenerateAdjustmentDocx, canApplyPrepayment,
         // handlers
         updateCostItemField, addCostItem, removeCostItem,
         handleSave, handleUploadSourceDocument, handleViewSourceDocument, handleRemoveSourceDocument,
-        handleGeneratePdf, handlePreview, closePreview, handleApplyPrepayment,
+        handleGeneratePdf, handlePreview, closePreview,
+        handleGenerateAdjustmentDocx, handlePreviewAdjustment, closeAdjustmentPreview,
+        handleApplyPrepayment,
     };
 }

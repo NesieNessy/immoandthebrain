@@ -1,13 +1,13 @@
 "use client";
 
 import { PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
-import { Button, Header, Icons, Modal, PAGE_CONTAINER_CLASS, StickyActionBar, type BreadcrumbItem } from '@/components/ui';
+import { Button, ConfirmDeleteModal, Header, Icons, Modal, PAGE_CONTAINER_CLASS, StickyActionBar, type BreadcrumbItem } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { DataCard, Field, initials, Pill } from '../../../DocumentGeneratorParts';
+import { DataCard, DocumentBox, DocumentReplaceModal, Field, initials, Pill } from '../../../DocumentGeneratorParts';
 import { useMieterbescheinigungGenerator } from '../../../mieterbescheinigungGenerator';
 import { certificateBodyHtml, isPersonComplete } from '../../../mieterbescheinigungLetter';
 
@@ -182,6 +182,19 @@ export default function TenantCertificatePage({ propertyId, unitId }: { property
                         </div>
 
                         <div>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Hochgeladene Dokumente</p>
+                            <DocumentBox
+                                docs={data.documents}
+                                label={data.tenantLabel}
+                                onView={data.handleViewDocument}
+                                onDownload={data.handleDownloadDocument}
+                                onDelete={data.requestDeleteDoc}
+                                isBusy={(doc) => data.deletingDocId === doc.tenancyDocumentId}
+                                emptyLabel="Noch keine Mieterbescheinigung hochgeladen."
+                            />
+                        </div>
+
+                        <div>
                             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Unterschrift Vermieter</p>
                             <div className="flex flex-col gap-3">
                                 <div>
@@ -267,6 +280,44 @@ export default function TenantCertificatePage({ propertyId, unitId }: { property
                     </>
                 }
             />
+
+            <Modal
+                open={data.uploadPromptOpen}
+                onClose={data.closeUploadPrompt}
+                title="Zu den Mieterdokumenten hochladen?"
+                subtitle={data.pendingGeneratedFileName ? `${data.pendingGeneratedFileName} wurde heruntergeladen.` : undefined}
+                icon={<Icons.Upload className="w-5 h-5" />}
+                footer={
+                    <>
+                        <Button label="Nicht hochladen" variant="outline" onClick={data.closeUploadPrompt} />
+                        <Button label="Hochladen" variant="primary" onClick={data.confirmUploadPrompt} />
+                    </>
+                }
+            >
+                <p className="text-sm text-muted-foreground">
+                    Möchtest du das generierte Dokument auch zu den Mieterdokumenten hinzufügen, damit es hier und in der Dokumente-Übersicht auffindbar ist?
+                </p>
+            </Modal>
+
+            <DocumentReplaceModal
+                open={data.replaceFlow.pending != null}
+                fileName={data.documents[0]?.fileName}
+                isResolving={data.replaceFlow.isResolving}
+                onReplace={() => void data.replaceFlow.confirmReplace()}
+                onCancel={data.replaceFlow.cancel}
+            />
+
+            <ConfirmDeleteModal
+                open={data.pendingDeleteDoc != null}
+                onCancel={data.cancelDeleteDoc}
+                onConfirm={() => void data.confirmDeleteDoc()}
+                title="Dokument löschen?"
+                confirmDisabled={data.deletingDocId != null}
+            >
+                <p className="text-sm text-muted-foreground">
+                    Möchtest du <span className="font-medium text-foreground">{data.pendingDeleteDoc?.fileName}</span> wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+                </p>
+            </ConfirmDeleteModal>
         </div>
     );
 }

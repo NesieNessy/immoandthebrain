@@ -1,10 +1,11 @@
 "use client";
 
 import { formatUnitLabel } from '@/components/features/PropertyDisplay';
-import { DataCard } from '../tenant-data/DocumentGeneratorParts';
+import { DataCard, DocumentBox, DocumentReplaceModal, DocumentUploadButton } from '../tenant-data/DocumentGeneratorParts';
 import {
     Button,
     CalendarField,
+    ConfirmDeleteModal,
     Header,
     Icons,
     LoadingScreen,
@@ -374,6 +375,18 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                         </td>
                                         <td></td>
                                     </tr>
+                                    <tr className="border-t border-border text-primary">
+                                        <td className="px-3 py-2 font-medium">
+                                            → Neue NK-Vorauszahlung (bringt die Voraussichtliche Nachzahlung/Guthaben auf Null)
+                                        </td>
+                                        <td className="px-3 py-2 border-l border-border">–</td>
+                                        <td className="px-3 py-2 text-right whitespace-nowrap">–</td>
+                                        <td className="px-3 py-2 border-l border-border">–</td>
+                                        <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+                                            {data.newMonthlyPrepayment != null ? `${euro(data.newMonthlyPrepayment)}/Monat` : '–'}
+                                        </td>
+                                        <td></td>
+                                    </tr>
                                 </tfoot>
                             </table>
                         </div>
@@ -414,12 +427,17 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                     {/* Generatable documents */}
                     <div>
                         <SectionLabel>Generierbare Dokumente</SectionLabel>
-                        <div className="mt-3">
+                        <div className="mt-3 flex flex-col gap-3">
                             <DataCard
                                 icon={Icons.FileText}
-                                title="Nebenkostenabrechnung als PDF"
+                                title="Nebenkostenabrechnung"
                                 footer={
                                     <>
+                                        <DocumentUploadButton
+                                            onSelect={data.requestStatementUpload}
+                                            disabled={!data.tenancy}
+                                            disabledTitle="Bitte zuerst Mieterdaten hinterlegen"
+                                        />
                                         <span title={!data.canGeneratePdf ? 'Bitte zuerst Mieterdaten und Abrechnungszeitraum hinterlegen' : undefined}>
                                             <Button
                                                 label="Daten prüfen & Vorschau"
@@ -441,14 +459,96 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                     </>
                                 }
                             >
-                                <p className="text-xs text-muted-foreground">
-                                    Vollständige Abrechnung inkl. Wirtschaftsplan und NK-Anpassung
-                                </p>
+                                <div className="flex flex-col gap-3">
+                                    <DocumentBox
+                                        docs={data.statementDocs}
+                                        label={data.tenantLabel}
+                                        onView={data.handleViewDocument}
+                                        onDownload={data.handleDownloadDocument}
+                                        onDelete={data.requestDeleteDoc}
+                                        isBusy={(doc) => data.deletingDocId === doc.tenancyDocumentId}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Vollständige Abrechnung inkl. Wirtschaftsplan und NK-Anpassung
+                                    </p>
+                                </div>
+                            </DataCard>
+
+                            <DataCard
+                                icon={Icons.FileSignature}
+                                title="Anpassungsschreiben"
+                                footer={
+                                    <>
+                                        <DocumentUploadButton
+                                            onSelect={data.requestAdjustmentUpload}
+                                            disabled={!data.tenancy}
+                                            disabledTitle="Bitte zuerst Mieterdaten hinterlegen"
+                                        />
+                                        <span title={!data.canGenerateAdjustmentDocx ? 'Bitte zuerst Mieterdaten und Abrechnungszeitraum hinterlegen' : undefined}>
+                                            <Button
+                                                label="Daten prüfen & Vorschau"
+                                                icon={<Icons.Eye className="w-4 h-4" />}
+                                                variant="outline"
+                                                disabled={!data.canGenerateAdjustmentDocx}
+                                                onClick={() => router.push(`/existing-properties/${propertyId}/service-charge-settlement/${unit.propertyUnitId}/adjustment`)}
+                                            />
+                                        </span>
+                                        <span title={!data.canGenerateAdjustmentDocx ? 'Bitte zuerst Mieterdaten und Abrechnungszeitraum hinterlegen' : undefined}>
+                                            <Button
+                                                label={data.isGeneratingAdjustmentDocx ? 'Wird erstellt…' : 'Word-Dokument generieren'}
+                                                icon={data.isGeneratingAdjustmentDocx ? <Icons.Loader2 className="w-4 h-4 animate-spin" /> : <Icons.FileSignature className="w-4 h-4" />}
+                                                variant="primary"
+                                                disabled={!data.canGenerateAdjustmentDocx || data.isGeneratingAdjustmentDocx}
+                                                onClick={() => void data.handleGenerateAdjustmentDocx()}
+                                            />
+                                        </span>
+                                    </>
+                                }
+                            >
+                                <div className="flex flex-col gap-3">
+                                    <DocumentBox
+                                        docs={data.adjustmentDocs}
+                                        label={data.tenantLabel}
+                                        onView={data.handleViewDocument}
+                                        onDownload={data.handleDownloadDocument}
+                                        onDelete={data.requestDeleteDoc}
+                                        isBusy={(doc) => data.deletingDocId === doc.tenancyDocumentId}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Informiert den Mieter über {data.settlementCoverage === 'shortfall' ? 'die Nachzahlung' : data.settlementCoverage === 'surplus' ? 'die Erstattung' : 'das Ergebnis'} und die neue NK-Vorauszahlung
+                                    </p>
+                                </div>
                             </DataCard>
                         </div>
                     </div>
                 </div>
             </main>
+
+            <DocumentReplaceModal
+                open={data.statementReplaceFlow.pending != null}
+                fileName={data.statementDocs[0]?.fileName}
+                isResolving={data.statementReplaceFlow.isResolving}
+                onReplace={() => void data.statementReplaceFlow.confirmReplace()}
+                onCancel={data.statementReplaceFlow.cancel}
+            />
+            <DocumentReplaceModal
+                open={data.adjustmentReplaceFlow.pending != null}
+                fileName={data.adjustmentDocs[0]?.fileName}
+                isResolving={data.adjustmentReplaceFlow.isResolving}
+                onReplace={() => void data.adjustmentReplaceFlow.confirmReplace()}
+                onCancel={data.adjustmentReplaceFlow.cancel}
+            />
+            <ConfirmDeleteModal
+                open={data.pendingDeleteDoc != null}
+                onCancel={data.cancelDeleteDoc}
+                onConfirm={() => void data.confirmDeleteDoc()}
+                title="Dokument löschen?"
+                confirmDisabled={data.deletingDocId != null}
+            >
+                <p className="text-sm text-muted-foreground">
+                    Möchtest du <span className="font-medium text-foreground">{data.pendingDeleteDoc?.fileName}</span> wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+                </p>
+            </ConfirmDeleteModal>
 
             <StickyActionBar
                 show={true}

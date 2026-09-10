@@ -46,19 +46,40 @@ export async function htmlToPdfBlob(bodyHtml: string): Promise<Blob> {
 
     try {
         const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff' });
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
-        const pageWidth = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
-        const imgWidth = pageWidth;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-        computePdfPageOffsets(imgHeight, pageHeight).forEach((position, index) => {
-            if (index > 0) pdf.addPage();
-            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        });
+        // A fresh jsPDF document per attempt — reusing one across retries
+        // would just keep appending pages to what's already there instead of
+        // re-rendering at the new quality.
+        const render = (quality: number): Blob => {
+            // JPEG instead of PNG: a lossless PNG of a multi-page raster
+            // screenshot routinely lands in the tens of MB for a
+            // normal-length document and blows past the storage bucket's
+            // upload size limit; JPEG is a fraction of that with no visible
+            // loss on a white-background text/table document like these.
+            const imgData = canvas.toDataURL('image/jpeg', quality);
+            const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const imgWidth = pageWidth;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-        return pdf.output('blob');
+            computePdfPageOffsets(imgHeight, pageHeight).forEach((position, index) => {
+                if (index > 0) pdf.addPage();
+                pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+            });
+            return pdf.output('blob');
+        };
+
+        // A generous but real bucket limit backs this upload — if the
+        // content is unusually long (many cost items, several pages),
+        // progressively lower the JPEG quality rather than let a single
+        // fixed setting risk a 413 on larger documents.
+        const MAX_BYTES = 9 * 1024 * 1024;
+        for (const quality of [0.92, 0.8, 0.65, 0.5]) {
+            const blob = render(quality);
+            if (blob.size <= MAX_BYTES) return blob;
+        }
+        return render(0.35);
     } finally {
         document.body.removeChild(container);
     }

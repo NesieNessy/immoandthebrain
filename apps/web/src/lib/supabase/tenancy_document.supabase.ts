@@ -16,6 +16,7 @@ function toTenancyDocument(row: Record<string, unknown>): TenancyDocument {
     fileSize:          row.file_size as number | null,
     createdAt:         row.created_at as string,
     updatedAt:         row.updated_at as string,
+    supersededAt:      row.superseded_at as string | null,
   };
 }
 
@@ -38,6 +39,7 @@ export interface TenancyDocumentForUser {
   fileName: string;
   storagePath: string;
   createdAt: string;
+  supersededAt: string | null;
 }
 
 /**
@@ -59,6 +61,7 @@ export async function getTenancyDocumentsByUser(): Promise<TenancyDocumentForUse
     fileName: row.file_name as string,
     storagePath: row.storage_path as string,
     createdAt: row.created_at as string,
+    supersededAt: row.superseded_at as string | null,
   }));
 }
 
@@ -74,9 +77,10 @@ export async function getTenancyDocumentUrl(storagePath: string): Promise<string
 // ----------------------------------------------------------------------------
 
 /**
- * Uploads the file to storage and upserts the tenancy_document row for this
- * (tenancy, person-or-shared, document type) slot — a re-upload replaces
- * whatever was there before, both the object and the old metadata row.
+ * Uploads the file to storage and inserts a new tenancy_document row for this
+ * (tenancy, person-or-shared, document type) slot. A re-upload into an
+ * already-occupied slot archives (not deletes) whatever was there before —
+ * both the old file and its row stay around as history, see the API route.
  */
 export async function uploadTenancyDocument(
   userId: string,
@@ -110,12 +114,7 @@ export async function uploadTenancyDocument(
     await supabase.storage.from(BUCKET).remove([storagePath]);
     return null;
   }
-  const result = await metadataResponse.json() as { document: Record<string, unknown>; previousStoragePath: string | null };
-
-  if (result.previousStoragePath) {
-    await supabase.storage.from(BUCKET).remove([result.previousStoragePath]);
-  }
-
+  const result = await metadataResponse.json() as { document: Record<string, unknown> };
   return toTenancyDocument(result.document);
 }
 
@@ -125,6 +124,19 @@ export async function renameTenancyDocument(tenancyDocumentId: number, fileName:
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenancy_document_id: tenancyDocumentId, file_name: fileName }),
+  });
+  if (!response.ok) return null;
+  const result = await response.json() as { document: Record<string, unknown> };
+  return toTenancyDocument(result.document);
+}
+
+/** Marks a current document as archived without replacing it — used from the
+ *  global documents overview, where there's no new file to upload in its place. */
+export async function archiveTenancyDocument(tenancyDocumentId: number): Promise<TenancyDocument | null> {
+  const response = await authFetch('/api/tenancy-documents', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tenancy_document_id: tenancyDocumentId, action: 'archive' }),
   });
   if (!response.ok) return null;
   const result = await response.json() as { document: Record<string, unknown> };

@@ -4,9 +4,10 @@ import { getPersonalData } from '@/lib/supabase/personal_data.supabase';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
 import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
 import { getCurrentTenancyByUnit } from '@/lib/supabase/tenancy.supabase';
+import { getTenancyDocumentsByTenancy } from '@/lib/supabase/tenancy_document.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
-import type { PersonalData, Property, PropertyUnit, Tenancy, TenancyPerson } from '@immoandthebrain/types';
-import { useEffect, useState } from 'react';
+import type { PersonalData, Property, PropertyUnit, Tenancy, TenancyDocument, TenancyPerson } from '@immoandthebrain/types';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 
 interface UnitDocumentGeneratorState {
     isLoading: boolean;
@@ -19,6 +20,7 @@ interface UnitDocumentGeneratorState {
     tenancy: Tenancy | null;
     persons: TenancyPerson[];
     landlord: PersonalData | null | undefined;
+    documents: TenancyDocument[];
 }
 
 const INITIAL_STATE: UnitDocumentGeneratorState = {
@@ -30,6 +32,7 @@ const INITIAL_STATE: UnitDocumentGeneratorState = {
     tenancy: null,
     persons: [],
     landlord: undefined,
+    documents: [],
 };
 
 /** Loads everything the Mieterbescheinigung/Mietvertrag generator pages
@@ -39,7 +42,7 @@ export function useUnitDocumentGeneratorData(
     propertyId: string,
     unitId: string,
     userId: string | undefined,
-): UnitDocumentGeneratorState {
+): UnitDocumentGeneratorState & { setDocuments: Dispatch<SetStateAction<TenancyDocument[]>> } {
     const [state, setState] = useState<UnitDocumentGeneratorState>(INITIAL_STATE);
 
     useEffect(() => {
@@ -56,7 +59,9 @@ export function useUnitDocumentGeneratorData(
             }
 
             const tenancy = await getCurrentTenancyByUnit(unit.propertyUnitId);
-            const persons = tenancy ? await getTenancyPersonsByTenancy(tenancy.tenancyId) : [];
+            const [persons, documents]: [TenancyPerson[], TenancyDocument[]] = tenancy
+                ? await Promise.all([getTenancyPersonsByTenancy(tenancy.tenancyId), getTenancyDocumentsByTenancy(tenancy.tenancyId)])
+                : [[], []];
             if (cancelled) return;
 
             setState((prev) => ({
@@ -68,11 +73,19 @@ export function useUnitDocumentGeneratorData(
                 hasMultipleUnits: units.length > 1,
                 tenancy,
                 persons,
+                documents,
             }));
         });
 
         return () => { cancelled = true; };
     }, [propertyId, unitId]);
+
+    const setDocuments: Dispatch<SetStateAction<TenancyDocument[]>> = (update) => {
+        setState((prev) => ({
+            ...prev,
+            documents: typeof update === 'function' ? (update as (prev: TenancyDocument[]) => TenancyDocument[])(prev.documents) : update,
+        }));
+    };
 
     useEffect(() => {
         if (!userId) return;
@@ -81,5 +94,5 @@ export function useUnitDocumentGeneratorData(
         return () => { cancelled = true; };
     }, [userId]);
 
-    return state;
+    return { ...state, setDocuments };
 }

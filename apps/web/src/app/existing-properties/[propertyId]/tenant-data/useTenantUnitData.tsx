@@ -316,6 +316,15 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
         return () => { cancelled = true; };
     }, [user]);
 
+    // Lets a document flow that lives outside this hook's own upload path
+    // (e.g. the independent Mieterbescheinigung/Mietvertrag generators) tell
+    // this page's document list — and the documents table further down the
+    // page — to catch up after it uploads or deletes something on its own.
+    const refreshDocuments = async () => {
+        if (!tenancy) return;
+        setDocuments(await getTenancyDocumentsByTenancy(tenancy.tenancyId));
+    };
+
     const status = useMemo(() => {
         if (!tenancy || startFreshTenancy) return 'Unvermietet' as const;
         return 'Vermietet' as const;
@@ -1263,6 +1272,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
         goTo, confirmDiscard, updatePerson, addPerson, removePerson, handleDeletePersonClick,
         confirmDeletePerson, makePrimary, confirmTenantChange, handleSave, handleViewDocument,
         handleDownloadDocument, confirmDeleteDocument, handleDocSort, handleDocColumnFilterChange,
+        refreshDocuments,
         renderDocRow, renderFooterUpload, openDocUploadModal, closeDocUploadModal, handleDocUploadSubmit,
         closeRenameModal, confirmRenameDocument,
         handleGenerateRentIncreaseLetter, handleGenerateRenovationLetter,

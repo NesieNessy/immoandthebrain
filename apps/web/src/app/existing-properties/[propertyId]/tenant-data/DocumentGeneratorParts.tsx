@@ -1,6 +1,7 @@
 "use client";
 
-import { Icons } from '@/components/ui';
+import { Button, Icons, Modal } from '@/components/ui';
+import { useRef, useState } from 'react';
 
 export function readFileAsDataUrl(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -70,5 +71,228 @@ export function DataCard({
                 </div>
             )}
         </div>
+    );
+}
+
+// ── Shared "generated document" box ──────────────────────────────────────
+// Every "Generierbare Dokumente" card (Mieterbescheinigung, Mietvertrag,
+// Nebenkostenabrechnung, Anpassungsschreiben, ...) uses the same three
+// pieces below so a fix or design change in one place applies everywhere:
+// a ghost upload button, a box listing every stored document as its own
+// line (never just the latest — nothing is silently hidden), and a shared
+// ask-before-replace flow so uploading over an existing document never
+// deletes it without confirmation.
+
+export interface DocumentBoxDoc {
+    tenancyDocumentId: number;
+    fileName: string;
+}
+
+/** Ghost-styled "Datei hochladen" button wrapping a hidden file input —
+ *  visually identical everywhere a document can be uploaded. */
+export function DocumentUploadButton({
+    onSelect,
+    disabled,
+    disabledTitle,
+    label = 'Datei hochladen',
+    accept = '.pdf,.jpg,.jpeg,.png,.docx',
+}: {
+    onSelect: (file: File) => void;
+    disabled?: boolean;
+    disabledTitle?: string;
+    label?: string;
+    accept?: string;
+}) {
+    const inputRef = useRef<HTMLInputElement>(null);
+    return (
+        <span title={disabled ? disabledTitle : undefined}>
+            <input
+                ref={inputRef}
+                type="file"
+                accept={accept}
+                className="sr-only"
+                disabled={disabled}
+                onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (file) onSelect(file);
+                }}
+            />
+            <Button
+                label={label}
+                icon={<Icons.Upload className="w-4 h-4" />}
+                variant="ghost"
+                disabled={disabled}
+                onClick={() => inputRef.current?.click()}
+            />
+        </span>
+    );
+}
+
+function nameInitials(name: string): string {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '–';
+    return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
+}
+
+/** Leading avatar + name shown at the start of a row when `label` is given
+ *  (e.g. "Klaus Fischer" on a Mietvertrag row) — omitted for document slots
+ *  with no single tenant (e.g. a property-wide Nebenkostenabrechnung). */
+function DocumentBoxLabel({ label }: { label: string }) {
+    return (
+        <>
+            <div className="shrink-0 w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold">
+                {nameInitials(label)}
+            </div>
+            <span className="text-sm text-foreground truncate">{label}</span>
+        </>
+    );
+}
+
+/** Lists every stored document as its own line — a second (or third) upload
+ *  never hides an earlier one; each line has its own view/download/delete.
+ *  Always renders as a bordered row (even with zero documents), matching
+ *  the Mietvertrag row's look everywhere this box is used. */
+export function DocumentBox<TDoc extends DocumentBoxDoc>({
+    docs,
+    onView,
+    onDownload,
+    onDelete,
+    isBusy,
+    readOnly,
+    emptyLabel = 'Kein Dokument hinterlegt',
+    label,
+}: {
+    docs: TDoc[];
+    onView: (doc: TDoc) => void;
+    onDownload: (doc: TDoc) => void;
+    onDelete?: (doc: TDoc) => void;
+    isBusy?: (doc: TDoc) => boolean;
+    readOnly?: boolean;
+    emptyLabel?: string;
+    /** The tenant this document slot belongs to — shown with an avatar. */
+    label?: string;
+}) {
+    if (docs.length === 0) {
+        return (
+            <div className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30">
+                {label && <DocumentBoxLabel label={label} />}
+                <span className="text-xs text-muted-foreground">{emptyLabel}</span>
+            </div>
+        );
+    }
+    return (
+        <div className="flex flex-col gap-2">
+            {docs.map((doc) => (
+                <div key={doc.tenancyDocumentId} className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-muted/30">
+                    <div className="min-w-0 flex items-center gap-3 flex-wrap">
+                        {label && <DocumentBoxLabel label={label} />}
+                        <button
+                            type="button"
+                            onClick={() => onView(doc)}
+                            title={doc.fileName}
+                            className="min-w-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors cursor-pointer"
+                        >
+                            <Icons.FileText className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{doc.fileName}</span>
+                        </button>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => onDownload(doc)}
+                            aria-label="Herunterladen"
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                        >
+                            <Icons.Download className="w-4 h-4" />
+                        </button>
+                        {onDelete && !readOnly && (
+                            <button
+                                type="button"
+                                onClick={() => onDelete(doc)}
+                                disabled={isBusy?.(doc)}
+                                aria-label="Löschen"
+                                className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+                            >
+                                <Icons.Trash2 className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+/**
+ * State machine for "ask before replace": uploading while a document already
+ * exists for the same slot pauses on a confirmation before proceeding — the
+ * upload itself always archives the previous version rather than deleting
+ * it (see the tenancy-documents API route), so nothing is ever lost; this
+ * confirmation exists so a replace is a deliberate choice, not a surprise.
+ * Uploading into an empty slot skips the prompt entirely.
+ */
+export function useDocumentReplaceFlow<TDoc>(options: {
+    upload: (file: File) => Promise<void>;
+}) {
+    const [pending, setPending] = useState<{ file: File; existing: TDoc[] } | null>(null);
+    const [isResolving, setIsResolving] = useState(false);
+
+    const requestUpload = (file: File, existing: TDoc[]) => {
+        if (existing.length === 0) {
+            void options.upload(file);
+            return;
+        }
+        setPending({ file, existing });
+    };
+
+    const confirmReplace = async () => {
+        if (!pending) return;
+        setIsResolving(true);
+        try {
+            await options.upload(pending.file);
+            setPending(null);
+        } finally {
+            setIsResolving(false);
+        }
+    };
+
+    const cancel = () => setPending(null);
+
+    return { pending, isResolving, requestUpload, confirmReplace, cancel };
+}
+
+/** Confirmation dialog for the flow above — rendered once per document
+ *  "slot" (card / row) that offers upload. */
+export function DocumentReplaceModal({
+    open,
+    fileName,
+    isResolving,
+    onReplace,
+    onCancel,
+}: {
+    open: boolean;
+    fileName: string | undefined;
+    isResolving: boolean;
+    onReplace: () => void;
+    onCancel: () => void;
+}) {
+    return (
+        <Modal
+            open={open}
+            onClose={onCancel}
+            title="Dokument ersetzen?"
+            subtitle={fileName ? `Aktuell hinterlegt: ${fileName}` : 'Es liegt bereits ein Dokument vor.'}
+            footer={
+                <>
+                    <Button label="Abbrechen" variant="outline" disabled={isResolving} onClick={onCancel} />
+                    <Button label="Ersetzen" variant="primary" disabled={isResolving} onClick={onReplace} />
+                </>
+            }
+        >
+            <p className="text-sm text-muted-foreground">
+                Das neue Dokument wird zur aktuellen Version. Die vorherige Version bleibt im Verlauf einsehbar.
+            </p>
+        </Modal>
     );
 }

@@ -438,7 +438,7 @@ export type TenancyPersonUpdate = Partial<Omit<TenancyPerson, 'tenancyPersonId' 
 // TenancyDocument
 // ----------------------------------------------------------------------------
 
-export type TenancyDocumentType = 'Ausweis' | 'Schufa' | 'Bürgschaft' | 'Gehaltsnachweise' | 'Vormieterbescheinigung' | 'Sonstiges' | 'Mietvertrag' | 'Mieterbescheinigung' | 'Mieterhöhungsschreiben' | 'Sanierungsanpassungsschreiben' | 'Abnahme' | 'Nebenkostenabrechnung';
+export type TenancyDocumentType = 'Ausweis' | 'Schufa' | 'Bürgschaft' | 'Gehaltsnachweise' | 'Vormieterbescheinigung' | 'Sonstiges' | 'Mietvertrag' | 'Mieterbescheinigung' | 'Mieterhöhungsschreiben' | 'Sanierungsanpassungsschreiben' | 'Abnahme' | 'Nebenkostenabrechnung' | 'Nebenkosten-Anpassungsschreiben';
 
 export interface TenancyDocument {
   tenancyDocumentId: number;
@@ -452,9 +452,12 @@ export interface TenancyDocument {
   fileSize: number | null;
   createdAt: string;
   updatedAt: string;
+  /** Set when a newer upload replaced this document for the same
+   *  (tenancy, documentType, tenancyPersonId) slot. Null = current version. */
+  supersededAt: string | null;
 }
 
-export type TenancyDocumentInsert = Omit<TenancyDocument, 'tenancyDocumentId' | 'createdAt' | 'updatedAt'>;
+export type TenancyDocumentInsert = Omit<TenancyDocument, 'tenancyDocumentId' | 'createdAt' | 'updatedAt' | 'supersededAt'>;
 
 // ----------------------------------------------------------------------------
 // TenancyMoveOut (Mieterauszug)

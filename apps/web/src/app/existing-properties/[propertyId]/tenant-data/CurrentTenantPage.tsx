@@ -1,14 +1,14 @@
 "use client";
 
 import { formatUnitLabel } from '@/components/features/PropertyDisplay';
-import { DataCard } from './DocumentGeneratorParts';
+import { DataCard, DocumentBox, DocumentReplaceModal, DocumentUploadButton } from './DocumentGeneratorParts';
 import { Button, CalendarField, ComingSoonButton, ConfirmDeleteModal, Dropdown, Header, Icons, Modal, NumberField, PAGE_CONTAINER_CLASS, SectionLabel, StickyActionBar, Table, Tag, TextField, UnsavedChangesModal, type BreadcrumbItem } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import type { Property, PropertyUnit } from '@immoandthebrain/types';
 import { formatDeDate } from '@/lib/utils';
 import { useMieterbescheinigungGenerator } from './mieterbescheinigungGenerator';
-import { MIETERBESCHEINIGUNG, personDisplayName, useTenantUnitData } from './useTenantUnitData';
+import { personDisplayName, useTenantUnitData } from './useTenantUnitData';
 
 interface CurrentTenantPageProps {
     propertyId: string;
@@ -31,7 +31,7 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
     // Own independent data load (see useMieterbescheinigungGenerator's doc
     // comment) — lets "Word-Dokument generieren" run right here instead of
     // navigating to the /certificate review page first.
-    const certGen = useMieterbescheinigungGenerator(propertyId, String(unit.propertyUnitId));
+    const certGen = useMieterbescheinigungGenerator(propertyId, String(unit.propertyUnitId), () => void data.refreshDocuments());
 
     const address = `${property.street} ${property.houseNumber}, ${property.postalCode} ${property.city}`;
     const unitLabel = formatUnitLabel(unit.unitLabel, unit.floor, unit.locationNote);
@@ -227,7 +227,11 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                                 title="Mieterbescheinigung"
                                 footer={
                                     <>
-                                        {data.renderFooterUpload(data.mieterbescheinigungRow, MIETERBESCHEINIGUNG, false)}
+                                        <DocumentUploadButton
+                                            onSelect={(file) => certGen.replaceFlow.requestUpload(file, certGen.documents)}
+                                            disabled={data.tenancy == null}
+                                            disabledTitle="Bitte zuerst speichern"
+                                        />
                                         <Button
                                             label="Daten prüfen & Vorschau"
                                             icon={<Icons.Eye className="w-4 h-4" />}
@@ -250,9 +254,14 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                                 }
                             >
                                 <div className="flex flex-col gap-3">
-                                    <div className="flex flex-col gap-2">
-                                        {data.renderDocRow(data.mieterbescheinigungRow, MIETERBESCHEINIGUNG, false, false)}
-                                    </div>
+                                    <DocumentBox
+                                        docs={certGen.documents}
+                                        label={certGen.tenantLabel}
+                                        onView={certGen.handleViewDocument}
+                                        onDownload={certGen.handleDownloadDocument}
+                                        onDelete={certGen.requestDeleteDoc}
+                                        isBusy={(doc) => certGen.deletingDocId === doc.tenancyDocumentId}
+                                    />
                                     <p className="text-xs text-muted-foreground">
                                         Bestätigt das bestehende Mietverhältnis für alle Mietparteien auf Basis der hinterlegten Daten.
                                     </p>
@@ -459,6 +468,44 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                     </>
                 }
             />
+
+            <Modal
+                open={certGen.uploadPromptOpen}
+                onClose={certGen.closeUploadPrompt}
+                title="Zu den Mieterdokumenten hochladen?"
+                subtitle={certGen.pendingGeneratedFileName ? `${certGen.pendingGeneratedFileName} wurde heruntergeladen.` : undefined}
+                icon={<Icons.Upload className="w-5 h-5" />}
+                footer={
+                    <>
+                        <Button label="Nicht hochladen" variant="outline" onClick={certGen.closeUploadPrompt} />
+                        <Button label="Hochladen" variant="primary" onClick={certGen.confirmUploadPrompt} />
+                    </>
+                }
+            >
+                <p className="text-sm text-muted-foreground">
+                    Möchtest du das generierte Dokument auch zu den Mieterdokumenten hinzufügen, damit es hier und in der Dokumente-Übersicht auffindbar ist?
+                </p>
+            </Modal>
+
+            <DocumentReplaceModal
+                open={certGen.replaceFlow.pending != null}
+                fileName={certGen.documents[0]?.fileName}
+                isResolving={certGen.replaceFlow.isResolving}
+                onReplace={() => void certGen.replaceFlow.confirmReplace()}
+                onCancel={certGen.replaceFlow.cancel}
+            />
+
+            <ConfirmDeleteModal
+                open={certGen.pendingDeleteDoc != null}
+                onCancel={certGen.cancelDeleteDoc}
+                onConfirm={() => void certGen.confirmDeleteDoc()}
+                title="Dokument löschen?"
+                confirmDisabled={certGen.deletingDocId != null}
+            >
+                <p className="text-sm text-muted-foreground">
+                    Möchtest du <span className="font-medium text-foreground">{certGen.pendingDeleteDoc?.fileName}</span> wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+                </p>
+            </ConfirmDeleteModal>
         </div>
     );
 }
