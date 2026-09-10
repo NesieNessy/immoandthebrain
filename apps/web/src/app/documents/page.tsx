@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import type { DocumentCategory, Property } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
-import { FileImage, FileSpreadsheet, type LucideIcon, Tags } from 'lucide-react';
+import { FileImage, FilePenLine, Sheet, type LucideIcon, Tags } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 type ViewMode = 'list' | 'byObject' | 'byCategory';
@@ -62,15 +62,16 @@ function KiHinweisPill({ documentDate }: { documentDate: string | null }) {
     );
 }
 
-/** File-type icon by extension — a PDF looks different from a photo at a
- *  glance, matching the KI-Hinweis/tag-style visual language of the page. */
+/** File-type icon by extension — a PDF looks different from a Word/Excel
+ *  file or a photo at a glance. All the same blue so the shape (not the
+ *  color) is what tells the type apart. */
 function documentIcon(fileName: string): { Icon: LucideIcon; className: string } {
     const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
-    if (ext === 'pdf') return { Icon: Icons.FileText, className: 'text-accent-terracotta' };
-    if (['jpg', 'jpeg', 'png'].includes(ext)) return { Icon: FileImage, className: 'text-accent-sky' };
-    if (['doc', 'docx'].includes(ext)) return { Icon: Icons.FileText, className: 'text-primary' };
-    if (['xls', 'xlsx'].includes(ext)) return { Icon: FileSpreadsheet, className: 'text-success' };
-    return { Icon: Icons.File, className: 'text-muted-foreground' };
+    if (ext === 'pdf') return { Icon: Icons.FileText, className: 'text-primary' };
+    if (['jpg', 'jpeg', 'png'].includes(ext)) return { Icon: FileImage, className: 'text-primary' };
+    if (['doc', 'docx'].includes(ext)) return { Icon: FilePenLine, className: 'text-primary' };
+    if (['xls', 'xlsx'].includes(ext)) return { Icon: Sheet, className: 'text-primary' };
+    return { Icon: Icons.File, className: 'text-primary' };
 }
 
 function propertyLabel(property: Property): string {
