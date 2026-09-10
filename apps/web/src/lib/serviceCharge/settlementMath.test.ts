@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     compareBudgetCoverage,
     compareSettlementCoverage,
+    computeUnitSettlementSummary,
     defaultSettlementPeriod,
     isFullCalendarYear,
     prorateAnnualPrepayment,
@@ -82,6 +83,95 @@ describe('prorateAnnualPrepayment', () => {
         const result = prorateAnnualPrepayment(130, history, new Date(2026, 0, 1), new Date(2026, 11, 31));
         const expected = (80 * 12 * 90 + 100 * 12 * 153 + 130 * 12 * 122) / 365;
         expect(result).toBeCloseTo(expected, 2);
+    });
+
+    it('a move-out year (partial period, no rate change) yields less than a full year — not monthly * 12', () => {
+        // Jan 1 – Jun 30 2026 = 181 days, well short of a full year.
+        const result = prorateAnnualPrepayment(100, [], new Date(2026, 0, 1), new Date(2026, 5, 30));
+        expect(result).toBeCloseTo((100 * 12 * 181) / 365, 2);
+        expect(result).toBeLessThan(1200);
+    });
+
+    it('a move-in year (partial period, no rate change) yields less than a full year — not monthly * 12', () => {
+        // May 1 – Dec 31 2026 = 245 days.
+        const result = prorateAnnualPrepayment(150, [], new Date(2026, 4, 1), new Date(2026, 11, 31));
+        expect(result).toBeCloseTo((150 * 12 * 245) / 365, 2);
+        expect(result).toBeLessThan(1800);
+    });
+
+    it('prorates a rate change within a partial (move-out year) period', () => {
+        // Jan 1 – Jun 30 2026 = 181 days: Jan 1 – Mar 31 (90 days) at 100, Apr 1 – Jun 30 (91 days) at 120.
+        const history = [{ effectiveDate: '2026-04-01', amount: 20 }];
+        const result = prorateAnnualPrepayment(120, history, new Date(2026, 0, 1), new Date(2026, 5, 30));
+        const expected = (100 * 12 * 90 + 120 * 12 * 91) / 365;
+        expect(result).toBeCloseTo(expected, 2);
+    });
+});
+
+describe('computeUnitSettlementSummary', () => {
+    const costItems = [
+        { actualAmount: 4000, budgetAmount: 4400, allocable: true, actualShareOverride: null, budgetShareOverride: null },
+        { actualAmount: 1000, budgetAmount: 1000, allocable: false, actualShareOverride: null, budgetShareOverride: null },
+    ];
+
+    it('splits the property-wide cost items by this unit\'s living-area share', () => {
+        const result = computeUnitSettlementSummary({
+            costItems,
+            unitLivingAreaM2: 50,
+            totalLivingAreaM2: 200,
+            currentMonthlyPrepayment: 100,
+            miscRentHistory: [],
+            periodStart: new Date(2026, 0, 1),
+            periodEnd: new Date(2026, 11, 31),
+        });
+        // Only the allocable row counts toward the unit's share: 4000 * (50/200) = 1000.
+        expect(result.unitActualShare).toBe(1000);
+        expect(result.unitBudgetShare).toBe(1100);
+        expect(result.annualPrepayment).toBe(1200);
+        expect(result.overUnderCoverage).toBeCloseTo(-200, 2);
+        expect(result.settlementCoverage).toBe('surplus');
+        expect(result.newMonthlyPrepayment).toBeCloseTo(1100 / 12, 2);
+    });
+
+    it('respects a manual share override instead of the automatic living-area split', () => {
+        const result = computeUnitSettlementSummary({
+            costItems: [{ actualAmount: 4000, budgetAmount: 4400, allocable: true, actualShareOverride: 1500, budgetShareOverride: null }],
+            unitLivingAreaM2: 50,
+            totalLivingAreaM2: 200,
+            currentMonthlyPrepayment: 100,
+            miscRentHistory: [],
+            periodStart: new Date(2026, 0, 1),
+            periodEnd: new Date(2026, 11, 31),
+        });
+        expect(result.unitActualShare).toBe(1500);
+    });
+
+    it('prorates the prepayment for a partial (move-out year) period instead of a flat monthly * 12', () => {
+        const result = computeUnitSettlementSummary({
+            costItems,
+            unitLivingAreaM2: 50,
+            totalLivingAreaM2: 200,
+            currentMonthlyPrepayment: 100,
+            miscRentHistory: [],
+            periodStart: new Date(2026, 0, 1),
+            periodEnd: new Date(2026, 5, 30),
+        });
+        expect(result.annualPrepayment).toBeLessThan(1200);
+        expect(result.annualPrepayment).toBeCloseTo((100 * 12 * 181) / 365, 2);
+    });
+
+    it('returns zero shares when the unit has no living area on record', () => {
+        const result = computeUnitSettlementSummary({
+            costItems,
+            unitLivingAreaM2: null,
+            totalLivingAreaM2: 200,
+            currentMonthlyPrepayment: 100,
+            miscRentHistory: [],
+            periodStart: new Date(2026, 0, 1),
+            periodEnd: new Date(2026, 11, 31),
+        });
+        expect(result.unitActualShare).toBe(0);
+        expect(result.unitBudgetShare).toBe(0);
     });
 });
 

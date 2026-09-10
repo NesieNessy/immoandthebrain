@@ -46,7 +46,12 @@ export async function htmlToPdfBlob(bodyHtml: string): Promise<Blob> {
 
     try {
         const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff' });
-        const imgData = canvas.toDataURL('image/png');
+        // JPEG instead of PNG: a lossless PNG of a multi-page raster screenshot
+        // routinely lands in the tens of MB for a normal-length document and
+        // blows past the storage bucket's upload size limit; at this quality
+        // JPEG is a small fraction of that with no visible loss on a
+        // white-background text/table document like these.
+        const imgData = canvas.toDataURL('image/jpeg', 0.92);
         const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
         const pageWidth = pdf.internal.pageSize.getWidth();
         const pageHeight = pdf.internal.pageSize.getHeight();
@@ -55,7 +60,7 @@ export async function htmlToPdfBlob(bodyHtml: string): Promise<Blob> {
 
         computePdfPageOffsets(imgHeight, pageHeight).forEach((position, index) => {
             if (index > 0) pdf.addPage();
-            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+            pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
         });
 
         return pdf.output('blob');
