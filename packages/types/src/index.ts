@@ -484,6 +484,11 @@ export interface Tenancy {
    *  months before the adjustment date) rather than "no reminder". */
   rentAdjustmentReminderDate?: string | null,
   renovationAdjustmentReminderDate?: string | null,
+  /** Objektentwicklung "Kalkulationsbasis" inputs — NULL means "use the
+   *  legal default" (see rentDevelopmentPlan.ts), not "zero". */
+  rentIndexPerM2?: number | null,
+  rentIncreaseIntervalMonths?: number | null,
+  plannedRenovationCost?: number | null,
   petsAllowed?: RentalTermsPetsAllowed | null,
   redecorationClause?: RentalTermsRedecorationClause | null,
   subletAllowed?: RentalTermsSubletAllowed | null,

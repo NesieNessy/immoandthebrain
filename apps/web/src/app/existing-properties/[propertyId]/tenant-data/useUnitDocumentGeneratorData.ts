@@ -3,7 +3,7 @@
 import { getPersonalData } from '@/lib/supabase/personal_data.supabase';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
 import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
-import { getCurrentTenancyByUnit } from '@/lib/supabase/tenancy.supabase';
+import { getCurrentTenancyByUnit, getTenancyById } from '@/lib/supabase/tenancy.supabase';
 import { getTenancyDocumentsByTenancy } from '@/lib/supabase/tenancy_document.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
 import type { PersonalData, Property, PropertyUnit, Tenancy, TenancyDocument, TenancyPerson } from '@immoandthebrain/types';
@@ -37,11 +37,16 @@ const INITIAL_STATE: UnitDocumentGeneratorState = {
 
 /** Loads everything the Mieterbescheinigung/Mietvertrag generator pages
  *  need, independent of the (already-loaded) tenant-unit-detail page —
- *  these are their own routes, reached directly via the documents table. */
+ *  these are their own routes, reached directly via the documents table.
+ *  Pass `archivedTenancyId` when reached from the Mieterhistorie detail
+ *  view — otherwise this always resolves to the unit's *current* tenancy,
+ *  which would show the current tenant's Mieterbescheinigung instead of
+ *  the moved-out tenant's own. */
 export function useUnitDocumentGeneratorData(
     propertyId: string,
     unitId: string,
     userId: string | undefined,
+    archivedTenancyId?: number,
 ): UnitDocumentGeneratorState & { setDocuments: Dispatch<SetStateAction<TenancyDocument[]>> } {
     const [state, setState] = useState<UnitDocumentGeneratorState>(INITIAL_STATE);
 
@@ -58,7 +63,9 @@ export function useUnitDocumentGeneratorData(
                 return;
             }
 
-            const tenancy = await getCurrentTenancyByUnit(unit.propertyUnitId);
+            const tenancy = archivedTenancyId != null
+                ? await getTenancyById(archivedTenancyId)
+                : await getCurrentTenancyByUnit(unit.propertyUnitId);
             const [persons, documents]: [TenancyPerson[], TenancyDocument[]] = tenancy
                 ? await Promise.all([getTenancyPersonsByTenancy(tenancy.tenancyId), getTenancyDocumentsByTenancy(tenancy.tenancyId)])
                 : [[], []];
@@ -78,7 +85,7 @@ export function useUnitDocumentGeneratorData(
         });
 
         return () => { cancelled = true; };
-    }, [propertyId, unitId]);
+    }, [propertyId, unitId, archivedTenancyId]);
 
     const setDocuments: Dispatch<SetStateAction<TenancyDocument[]>> = (update) => {
         setState((prev) => ({

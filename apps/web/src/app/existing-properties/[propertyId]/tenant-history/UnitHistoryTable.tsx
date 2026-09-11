@@ -136,6 +136,14 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
                         return String(Boolean(r.tenancy.acceptanceProtocol)) === val;
                     case 'kautionAusgezahlt':
                         return String(Boolean(r.tenancy.depositPaidOut)) === val;
+                    case 'mietdauer':
+                        return formatDuration(r.tenancy.tenancyStartDate, r.tenancy.tenancyEndDate).toLowerCase().includes(lower);
+                    case 'mieteBeginn':
+                        return euro(r.rentStart).toLowerCase().includes(lower);
+                    case 'mieteEnde':
+                        return euro(r.rentEnd).toLowerCase().includes(lower);
+                    case 'unterlagen':
+                        return r.documents.some((doc) => doc.documentType.toLowerCase().includes(lower));
                     default:
                         return true;
                 }
@@ -143,11 +151,6 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
         }
         return filtered;
     }, [rows, search, columnFilters]);
-
-    const handleToggle = async (tenancyId: number, field: 'acceptanceProtocol' | 'depositPaidOut', current: boolean) => {
-        setRows((prev) => prev?.map((r) => (r.tenancy.tenancyId === tenancyId ? { ...r, tenancy: { ...r.tenancy, [field]: !current } } : r)) ?? null);
-        await updateTenancy(tenancyId, { [field]: !current });
-    };
 
     const handleViewDocument = async (doc: TenancyDocument) => {
         const url = await getTenancyDocumentUrl(doc.storagePath);
@@ -187,23 +190,21 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
         }
     };
 
-    const toggleCell = (tenancyId: number, field: 'acceptanceProtocol' | 'depositPaidOut', value: boolean) => (
-        <button
-            type="button"
-            onClick={() => void handleToggle(tenancyId, field, value)}
-            aria-label={value ? 'Als offen markieren' : 'Als erledigt markieren'}
-            className="inline-flex items-center justify-center rounded-md p-1 hover:bg-muted/50 transition-colors cursor-pointer"
+    // Read-only — reflects whatever actually happened in the Mieterauszug use
+    // case (Abnahmeprotokoll erstellen / Mietkaution auflösen), not something
+    // to toggle by hand here.
+    const statusIcon = (value: boolean, doneLabel: string, openLabel: string) => (
+        <span
+            title={value ? doneLabel : openLabel}
+            className="inline-flex items-center justify-center p-1"
         >
             {value ? <Icons.CheckCircle2 className="w-4 h-4 text-success" /> : <Circle className="w-4 h-4 text-muted-foreground" />}
-        </button>
+        </span>
     );
 
+    const openRow = (row: HistoryRow) => router.push(`/existing-properties/${propertyId}/tenant-history/${unit.propertyUnitId}/${row.tenancy.tenancyId}`);
+
     const rowMenuItems = (row: HistoryRow): MenuItem[] => [
-        {
-            label: 'Ansehen',
-            icon: <Icons.Eye className="w-4 h-4" />,
-            onClick: () => router.push(`/existing-properties/${propertyId}/tenant-history/${unit.propertyUnitId}/${row.tenancy.tenancyId}`),
-        },
         {
             label: 'Reaktivieren',
             icon: <RotateCcw className="w-4 h-4" />,
@@ -265,6 +266,7 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
         {
             key: 'mietdauer',
             label: 'Mietdauer',
+            filterable: true,
             renderCell: (_v, row) => {
                 const t = (row.historyRow as HistoryRow).tenancy;
                 return formatDuration(t.tenancyStartDate, t.tenancyEndDate);
@@ -273,11 +275,13 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
         {
             key: 'mieteBeginn',
             label: 'Miete Beginn',
+            filterable: true,
             renderCell: (_v, row) => euro((row.historyRow as HistoryRow).rentStart),
         },
         {
             key: 'mieteEnde',
             label: 'Miete Ende',
+            filterable: true,
             renderCell: (_v, row) => euro((row.historyRow as HistoryRow).rentEnd),
         },
         {
@@ -288,7 +292,7 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
             filterOptions: BOOLEAN_FILTER_OPTIONS,
             renderCell: (_v, row) => {
                 const t = (row.historyRow as HistoryRow).tenancy;
-                return toggleCell(t.tenancyId, 'acceptanceProtocol', Boolean(t.acceptanceProtocol));
+                return statusIcon(Boolean(t.acceptanceProtocol), 'Abnahmeprotokoll erstellt', 'Kein Abnahmeprotokoll erstellt');
             },
         },
         {
@@ -299,12 +303,13 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
             filterOptions: BOOLEAN_FILTER_OPTIONS,
             renderCell: (_v, row) => {
                 const t = (row.historyRow as HistoryRow).tenancy;
-                return toggleCell(t.tenancyId, 'depositPaidOut', Boolean(t.depositPaidOut));
+                return statusIcon(Boolean(t.depositPaidOut), 'Mietkaution ausgezahlt', 'Mietkaution noch nicht ausgezahlt');
             },
         },
         {
             key: 'unterlagen',
             label: 'Unterlagen',
+            filterable: true,
             renderCell: (_v, row) => {
                 const docs = (row.historyRow as HistoryRow).documents;
                 if (docs.length === 0) return <span className="text-xs text-muted-foreground">–</span>;
@@ -314,7 +319,7 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
                             <button
                                 key={doc.tenancyDocumentId}
                                 type="button"
-                                onClick={() => void handleViewDocument(doc)}
+                                onClick={(e) => { e.stopPropagation(); void handleViewDocument(doc); }}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline cursor-pointer text-left"
                             >
                                 <Icons.FileText className="w-3 h-3 shrink-0" />
@@ -352,6 +357,7 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
                         data={tableData}
                         columnFilters={columnFilters}
                         onColumnFilterChange={handleColumnFilterChange}
+                        onRowClick={(row) => openRow(row.historyRow as HistoryRow)}
                         emptyMessage="Für diese Wohneinheit liegt noch keine Mieterhistorie vor."
                         footerLeft={`${tableData.length} Einträge`}
                         pageSize={10}

@@ -4,7 +4,6 @@ import { formatUnitLabel } from '@/components/features/PropertyDisplay';
 import {
     Button,
     CalendarField,
-    ComingSoonButton,
     Dropdown,
     Header,
     Icons,
@@ -148,7 +147,7 @@ export function TenantMoveOutView({ propertyId, property, unit, hasMultipleUnits
                         <div className="mt-3 px-4 py-3 rounded-lg bg-warning/10 border border-warning/30 text-sm text-foreground">
                             Sobald das Auszugsdatum erreicht ist, wird der Mieter-Datensatz automatisch in die{' '}
                             <a href={`/existing-properties/${propertyId}/tenant-history/${unit.propertyUnitId}`} className="font-medium text-primary hover:underline">
-                                Mieter-Historie
+                                Mieterhistorie
                             </a>{' '}verschoben.
                         </div>
                     </div>
@@ -300,7 +299,7 @@ export function TenantMoveOutView({ propertyId, property, unit, hasMultipleUnits
                                         </button>
                                     )}
                                     <p className="text-xs text-muted-foreground">
-                                        Protokolliert Zählerstände und Schäden bei Auszug. Wird als PDF erzeugt und auch unter Dokumente abgelegt.
+                                        Protokolliert Zählerstände und Schäden bei Auszug.
                                     </p>
                                 </div>
                             </DataCard>
@@ -311,11 +310,20 @@ export function TenantMoveOutView({ propertyId, property, unit, hasMultipleUnits
                     <div>
                         <SectionLabel>Abschluss</SectionLabel>
                         <div className="mt-3 flex items-center gap-3 flex-wrap">
-                            <ComingSoonButton
-                                label="Mietkaution auflösen"
-                                icon={<Icons.ExternalLink className="w-4 h-4" />}
-                                variant="outline"
-                            />
+                            {data.tenancy.depositPaidOut ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success/15 text-success text-xs font-medium">
+                                    <Icons.CheckCircle2 className="w-3.5 h-3.5" />
+                                    Mietkaution ausgezahlt
+                                </span>
+                            ) : (
+                                <Button
+                                    label="Mietkaution auflösen"
+                                    icon={<Icons.ExternalLink className="w-4 h-4" />}
+                                    variant="outline"
+                                    disabled={data.isReleasingDeposit}
+                                    onClick={() => void data.handleReleaseDeposit()}
+                                />
+                            )}
                             <p className="text-xs text-muted-foreground">
                                 Hinterlegte Kaution: {data.tenancy.deposit != null ? `${deCurrencyFormatter.format(data.tenancy.deposit)} €` : '–'} · Weiterleitung zum Partner
                             </p>
@@ -326,10 +334,8 @@ export function TenantMoveOutView({ propertyId, property, unit, hasMultipleUnits
 
             <StickyActionBar
                 show
-                ghostLabel={BUTTON_DETAILS.Cancel.label}
-                ghostIcon={<BUTTON_DETAILS.Cancel.icon />}
                 onGhost={() => router.push(data.backHref)}
-                primaryLabel={BUTTON_DETAILS.Save.label}
+                primaryLabel="Mieterauszug speichern"
                 primaryIcon={<BUTTON_DETAILS.Save.icon />}
                 primaryDisabled={data.isSaving}
                 onPrimary={() => void data.handleSave()}

@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from '@/components/ui';
+import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { cn } from '@/lib/utils';
 import React from 'react';
 
@@ -8,7 +9,11 @@ interface StickyActionBarProps {
     show: boolean;
     onGhost: () => void;
     onPrimary: () => void;
-    ghostLabel: string;
+    /** Defaults to "Zurück" — the ghost button is a "leave this page" action
+     *  on virtually every page that uses this bar. Pass an explicit label
+     *  only when a page genuinely needs something else (e.g. "Abbrechen" for
+     *  a destructive discard-changes context). */
+    ghostLabel?: string;
     primaryLabel: string;
     ghostIcon?: React.ReactNode;
     primaryIcon?: React.ReactNode;
@@ -29,9 +34,9 @@ export function StickyActionBar({
     show,
     onGhost,
     onPrimary,
-    ghostLabel,
+    ghostLabel = BUTTON_DETAILS.Back.label,
     primaryLabel,
-    ghostIcon,
+    ghostIcon = <BUTTON_DETAILS.Back.icon className="w-4 h-4" />,
     primaryIcon,
     ghostDisabled = false,
     primaryDisabled = false,

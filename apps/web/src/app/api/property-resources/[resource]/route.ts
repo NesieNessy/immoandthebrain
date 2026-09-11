@@ -58,6 +58,7 @@ const RESOURCES: Record<string, ResourceConfig> = {
       'next_rent_adjustment_date', 'next_rent_adjustment_amount', 'renovation_adjustment_planned',
       'renovation_adjustment_start_date', 'renovation_adjustment_end_date', 'renovation_adjustment_amount',
       'rent_adjustment_reminder_date', 'renovation_adjustment_reminder_date',
+      'rent_index_per_m2', 'rent_increase_interval_months', 'planned_renovation_cost',
       'pets_allowed', 'redecoration_clause', 'sublet_allowed', 'additional_terms',
       'acceptance_protocol', 'deposit_paid_out',
     ],

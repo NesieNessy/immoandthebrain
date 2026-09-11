@@ -5,8 +5,12 @@ import { DataCard, DocumentBox, DocumentReplaceModal, DocumentUploadButton } fro
 import { Button, CalendarField, ComingSoonButton, ConfirmDeleteModal, Dropdown, FilePickerButton, Header, Icons, Modal, NumberField, PAGE_CONTAINER_CLASS, SectionLabel, StickyActionBar, Table, Tag, TextField, UnsavedChangesModal, type BreadcrumbItem } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
+import { getCurrentTenancyByUnit, updateTenancy } from '@/lib/supabase/tenancy.supabase';
 import type { Property, PropertyUnit } from '@immoandthebrain/types';
 import { formatDeDate } from '@/lib/utils';
+import { format } from 'date-fns';
+import { RotateCcw } from 'lucide-react';
+import { useState } from 'react';
 import { useMieterbescheinigungGenerator } from './mieterbescheinigungGenerator';
 import { personDisplayName, useTenantUnitData } from './useTenantUnitData';
 
@@ -31,7 +35,30 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
     // Own independent data load (see useMieterbescheinigungGenerator's doc
     // comment) — lets "Word-Dokument generieren" run right here instead of
     // navigating to the /certificate review page first.
-    const certGen = useMieterbescheinigungGenerator(propertyId, String(unit.propertyUnitId), () => void data.refreshDocuments());
+    const certGen = useMieterbescheinigungGenerator(propertyId, String(unit.propertyUnitId), () => void data.refreshDocuments(), archivedTenancyId);
+    const [reactivateModalOpen, setReactivateModalOpen] = useState(false);
+    const [isReactivating, setIsReactivating] = useState(false);
+
+    // Clears this tenancy's move-out so it becomes the unit's current
+    // tenancy again — same action as Mieterhistorie's "Reaktivieren", just
+    // reachable from the detail view too. If another tenancy is currently
+    // active on this unit, that one is ended (today) first so the unit
+    // doesn't end up with two open-ended tenancies.
+    const handleConfirmReactivate = async () => {
+        if (!data.tenancy) return;
+        setIsReactivating(true);
+        try {
+            const current = await getCurrentTenancyByUnit(unit.propertyUnitId);
+            if (current && current.tenancyId !== data.tenancy.tenancyId) {
+                await updateTenancy(current.tenancyId, { tenancyEndDate: format(new Date(), 'yyyy-MM-dd') });
+            }
+            await updateTenancy(data.tenancy.tenancyId, { tenancyEndDate: null, isRented: true });
+            setReactivateModalOpen(false);
+            data.goTo(hasMultipleUnits ? `/existing-properties/${propertyId}/tenant-data/${unit.propertyUnitId}` : `/existing-properties/${propertyId}/tenant-data`);
+        } finally {
+            setIsReactivating(false);
+        }
+    };
 
     const address = `${property.street} ${property.houseNumber}, ${property.postalCode} ${property.city}`;
     const unitLabel = formatUnitLabel(unit.unitLabel, unit.floor, unit.locationNote);
@@ -41,8 +68,12 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
         ? [
             { label: 'Bestandsobjekte', href: '/existing-properties' },
             { label: address, href: `/existing-properties/${propertyId}` },
-            ...(hasMultipleUnits ? [{ label: 'Wohneinheiten', href: `/existing-properties/${propertyId}/tenant-history` }] : []),
-            { label: unitLabel, href: `/existing-properties/${propertyId}/tenant-history/${unit.propertyUnitId}` },
+            ...(hasMultipleUnits
+                ? [
+                    { label: 'Wohneinheiten', href: `/existing-properties/${propertyId}/tenant-history` },
+                    { label: unitLabel, href: `/existing-properties/${propertyId}/tenant-history/${unit.propertyUnitId}` },
+                ]
+                : [{ label: 'Mieterhistorie', href: `/existing-properties/${propertyId}/tenant-history/${unit.propertyUnitId}` }]),
             { label: archivedTenantName },
         ]
         : hasMultipleUnits
@@ -158,26 +189,30 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                                     <TextField
-                                        label={person.isPrimary ? 'Nachname *' : 'Nachname'}
+                                        label="Nachname"
+                                        optional={!person.isPrimary}
                                         value={person.lastName}
                                         onChange={(e) => data.updatePerson(index, { lastName: e.target.value })}
                                         disabled={data.isArchived}
                                     />
                                     <TextField
-                                        label={person.isPrimary ? 'Vorname *' : 'Vorname'}
+                                        label="Vorname"
+                                        optional={!person.isPrimary}
                                         value={person.firstName}
                                         onChange={(e) => data.updatePerson(index, { firstName: e.target.value })}
                                         disabled={data.isArchived}
                                     />
                                     <TextField
-                                        label={person.isPrimary ? 'Steuer-ID *' : 'Steuer-ID'}
+                                        label="Steuer-ID"
+                                        optional={!person.isPrimary}
                                         placeholder="00 000 000 000"
                                         value={person.taxId}
                                         onChange={(e) => data.updatePerson(index, { taxId: e.target.value })}
                                         disabled={data.isArchived}
                                     />
                                     <CalendarField
-                                        label={person.isPrimary ? 'Einzugsdatum *' : 'Einzugsdatum'}
+                                        label="Einzugsdatum"
+                                        optional={!person.isPrimary}
                                         value={person.moveInDate}
                                         onChange={(date) => data.updatePerson(index, { moveInDate: date })}
                                         disabled={data.isArchived}
@@ -226,20 +261,20 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                                 icon={Icons.BadgeCheck}
                                 title="Mieterbescheinigung"
                                 footer={
-                                    <>
-                                        <DocumentUploadButton
-                                            onSelect={(file) => certGen.replaceFlow.requestUpload(file, certGen.documents)}
-                                            disabled={data.tenancy == null}
-                                            disabledTitle="Bitte zuerst speichern"
-                                        />
-                                        <Button
-                                            label="Daten prüfen & Vorschau"
-                                            icon={<Icons.Eye className="w-4 h-4" />}
-                                            variant="outline"
-                                            disabled={data.tenancy == null}
-                                            onClick={() => data.goTo(`${data.generatorBase}/certificate`)}
-                                        />
-                                        {!data.isArchived && (
+                                    data.isArchived ? undefined : (
+                                        <>
+                                            <DocumentUploadButton
+                                                onSelect={(file) => certGen.replaceFlow.requestUpload(file, certGen.documents)}
+                                                disabled={data.tenancy == null}
+                                                disabledTitle="Bitte zuerst speichern"
+                                            />
+                                            <Button
+                                                label="Daten prüfen & Vorschau"
+                                                icon={<Icons.Eye className="w-4 h-4" />}
+                                                variant="outline"
+                                                disabled={data.tenancy == null}
+                                                onClick={() => data.goTo(`${data.generatorBase}/certificate`)}
+                                            />
                                             <span title={!certGen.canGenerate ? 'Bitte zuerst Vermieter- und Mieterdaten vervollständigen' : undefined}>
                                                 <Button
                                                     label={certGen.isGenerating ? 'Wird erstellt…' : 'Word-Dokument generieren'}
@@ -249,8 +284,8 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                                                     onClick={certGen.handleGenerate}
                                                 />
                                             </span>
-                                        )}
-                                    </>
+                                        </>
+                                    )
                                 }
                             >
                                 <div className="flex flex-col gap-3">
@@ -261,6 +296,8 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                                         onDownload={certGen.handleDownloadDocument}
                                         onDelete={certGen.requestDeleteDoc}
                                         isBusy={(doc) => certGen.deletingDocId === doc.tenancyDocumentId}
+                                        readOnly={data.isArchived}
+                                        emptyLabel={data.isArchived ? 'Keine Mieterbescheinigung vorhanden' : undefined}
                                     />
                                     <p className="text-xs text-muted-foreground">
                                         Bestätigt das bestehende Mietverhältnis für alle Mietparteien auf Basis der hinterlegten Daten.
@@ -299,13 +336,39 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
             <StickyActionBar
                 show={true}
                 onGhost={() => data.goTo(data.backHref)}
-                onPrimary={() => void data.handleSave()}
-                ghostLabel={BUTTON_DETAILS.Back.label}
-                ghostIcon={<BUTTON_DETAILS.Back.icon />}
-                primaryLabel="Mieterdaten speichern"
-                primaryIcon={<BUTTON_DETAILS.Save.icon />}
-                primaryDisabled={data.isArchived || !data.isEditing || data.isSaving}
+                onPrimary={data.isArchived ? () => setReactivateModalOpen(true) : () => void data.handleSave()}
+                primaryLabel={data.isArchived ? 'Mieter reaktivieren' : 'Mieterdaten speichern'}
+                primaryIcon={data.isArchived ? <RotateCcw className="w-4 h-4" /> : <BUTTON_DETAILS.Save.icon />}
+                primaryDisabled={data.isArchived ? isReactivating : (!data.isEditing || data.isSaving)}
             />
+
+            <Modal
+                open={reactivateModalOpen}
+                onClose={() => setReactivateModalOpen(false)}
+                title="Mietverhältnis reaktivieren?"
+                icon={<RotateCcw />}
+                footer={
+                    <>
+                        <Button
+                            label={BUTTON_DETAILS.Cancel.label}
+                            variant="outline"
+                            disabled={isReactivating}
+                            onClick={() => setReactivateModalOpen(false)}
+                        />
+                        <Button
+                            label="Reaktivieren"
+                            variant="primary"
+                            disabled={isReactivating}
+                            onClick={() => void handleConfirmReactivate()}
+                        />
+                    </>
+                }
+            >
+                <p className="text-sm text-muted-foreground">
+                    {archivedTenantName} wird wieder als aktueller Mieter dieser Wohneinheit geführt (Auszug wird entfernt).
+                    {' '}Ein derzeit aktives Mietverhältnis auf dieser Einheit wird dabei mit dem heutigen Datum als beendet markiert.
+                </p>
+            </Modal>
 
             <ConfirmDeleteModal
                 open={data.personIndexPendingDelete !== null}
