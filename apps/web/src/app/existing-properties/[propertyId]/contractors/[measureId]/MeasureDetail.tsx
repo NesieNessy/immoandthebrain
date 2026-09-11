@@ -14,7 +14,6 @@ import {
     Modal,
     NumberField,
     PAGE_CONTAINER_CLASS,
-    SectionLabel,
     StickyActionBar,
     TextArea,
     TextField,
@@ -35,6 +34,21 @@ function toDate(value: string | null): Date | undefined {
 
 function toDateInput(date: Date | undefined): string | null {
     return date ? format(date, 'yyyy-MM-dd') : null;
+}
+
+/** Card shell matching the app's established icon+title header pattern
+ *  (see DocumentGeneratorParts.tsx's DataCard / RentalTrends.tsx's
+ *  ProposalCardShell) instead of a bare SectionLabel inside plain padding. */
+function MeasureCard({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
+    return (
+        <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+                <Icon className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold text-foreground">{title}</span>
+            </div>
+            <div className="p-4 flex flex-col gap-4">{children}</div>
+        </div>
+    );
 }
 
 function StatusIcon({ state }: { state: 'done' | 'active' | 'pending' }) {
@@ -123,24 +137,8 @@ export default function MeasureDetail({ propertyId, measureId }: { propertyId: s
                 />
 
                 <div className="flex flex-col gap-6">
-                    <div className="flex items-start justify-between gap-3 p-4 rounded-lg border border-border bg-card">
-                        <div>
-                            <h1 className="text-lg font-semibold text-foreground">{measure.title} – Sanierungsmaßnahme</h1>
-                            <p className="text-sm text-muted-foreground">{address}</p>
-                        </div>
-                        <a
-                            href={`/existing-properties/${propertyId}`}
-                            aria-label="Zur Immobilie"
-                            title="Zur Immobilie"
-                            className="shrink-0 p-2 rounded-md border border-border text-muted-foreground hover:text-primary hover:border-primary transition-colors"
-                        >
-                            <Icons.Building2 className="w-4 h-4" />
-                        </a>
-                    </div>
-
                     {/* ── Beschreibung & Schäden ──────────────────────────────── */}
-                    <div className="flex flex-col gap-3 p-4 rounded-lg border border-border bg-card">
-                        <SectionLabel>Beschreibung & Schäden</SectionLabel>
+                    <MeasureCard icon={Icons.AlertTriangle} title="Beschreibung & Schäden">
                         <TextArea
                             placeholder="Leichte Schäden im Badezimmer und Fußboden…"
                             disabled={isLocked}
@@ -186,11 +184,10 @@ export default function MeasureDetail({ propertyId, measureId }: { propertyId: s
                                 ))}
                             </div>
                         </div>
-                    </div>
+                    </MeasureCard>
 
                     {/* ── Termine & Kosten ────────────────────────────────────── */}
-                    <div className="flex flex-col gap-4 p-4 rounded-lg border border-border bg-card">
-                        <SectionLabel>Termine & Kosten</SectionLabel>
+                    <MeasureCard icon={Icons.Calendar} title="Termine & Kosten">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <CalendarField
                                 label="Start Wunsch"
@@ -230,16 +227,12 @@ export default function MeasureDetail({ propertyId, measureId }: { propertyId: s
                                 onBlur={() => void data.commitField({ quotedCost: measure.quotedCost })}
                             />
                         </div>
-                    </div>
+                    </MeasureCard>
 
                     {/* ── Preisindikation ─────────────────────────────────────── */}
                     {items && range && (
-                        <div className="flex flex-col gap-4 p-4 rounded-lg border border-border bg-card">
-                            <SectionLabel>{`KI-Schätzung ${measure.category}sanierung (je nach Region & Qualität)`}</SectionLabel>
+                        <MeasureCard icon={Icons.Calculator} title={`KI-Schätzung ${measure.category}sanierung (je nach Region & Qualität)`}>
                             <div className="flex items-start gap-4">
-                                <div className="hidden sm:flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                    <Icons.FolderOpen className="w-6 h-6" />
-                                </div>
                                 <div className="flex-1 min-w-0 overflow-x-auto">
                                     <table className="w-full text-sm">
                                         <thead>
@@ -284,14 +277,12 @@ export default function MeasureDetail({ propertyId, measureId }: { propertyId: s
                                     <span>{euro(range.max)}</span>
                                 </div>
                             </div>
-                        </div>
+                        </MeasureCard>
                     )}
 
                     {/* ── Status & Fortschritt ────────────────────────────────── */}
-                    <div className="flex flex-col p-4 rounded-lg border border-border bg-card">
-                        <SectionLabel>Status & Fortschritt</SectionLabel>
-
-                        <div className="flex flex-col mt-3">
+                    <MeasureCard icon={Icons.Wrench} title="Status & Fortschritt">
+                        <div className="flex flex-col">
                             {/* Step 1 */}
                             <div className="flex gap-3 pb-6">
                                 <div className="flex flex-col items-center">
@@ -437,7 +428,7 @@ export default function MeasureDetail({ propertyId, measureId }: { propertyId: s
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </MeasureCard>
                 </div>
             </main>
 

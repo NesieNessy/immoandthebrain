@@ -13,8 +13,10 @@ import {
     Modal,
     NumberField,
     PAGE_CONTAINER_CLASS,
+    SectionLabel,
     Table,
     TextField,
+    type MenuItem,
     type TableColumn,
 } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
@@ -63,7 +65,6 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
     if (!data.property) return <PropertyNotFoundPage />;
 
     const { property, measures } = data;
-    const address = `${property.street} ${property.houseNumber}, ${property.postalCode} ${property.city}`;
 
     const totalEstimated = measures.reduce((sum, m) => sum + (m.estimatedCost ?? 0), 0);
     const quotedMeasures = measures.filter((m) => m.quotedCost != null);
@@ -88,20 +89,44 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
         }
     };
 
+    const rowMenuItems = (measure: RenovationMeasure): MenuItem[] => [
+        {
+            label: 'Öffnen',
+            icon: <Icons.Eye className="w-4 h-4" />,
+            onClick: () => openMeasure(measure),
+        },
+        {
+            label: BUTTON_DETAILS.Delete.label,
+            icon: <BUTTON_DETAILS.Delete.icon className="w-4 h-4" />,
+            destructive: true,
+            disabled: isLocked(measure),
+            onClick: () => data.requestDeleteMeasure(measure),
+        },
+    ];
+
     const columns: TableColumn<MeasureRow>[] = [
+        {
+            key: 'actions',
+            label: '',
+            width: '48px',
+            renderCell: (_v, row) => (
+                <div onClick={(e) => e.stopPropagation()}>
+                    <Button
+                        iconOnly
+                        icon={<Icons.MoreVertical className="w-4 h-4" />}
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`${row.measure.title}: Aktionen`}
+                        menuItems={rowMenuItems(row.measure)}
+                    />
+                </div>
+            ),
+        },
         {
             key: 'title',
             label: 'Maßnahme',
             width: '160px',
-            renderCell: (_v, row) => (
-                <button
-                    type="button"
-                    onClick={() => openMeasure(row.measure)}
-                    className="font-semibold text-foreground hover:text-primary hover:underline cursor-pointer text-left"
-                >
-                    {row.measure.title}
-                </button>
-            ),
+            renderCell: (_v, row) => <span className="font-semibold text-foreground">{row.measure.title}</span>,
         },
         {
             key: 'estimatedCost',
@@ -276,36 +301,6 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                 );
             },
         },
-        {
-            key: 'actions',
-            label: 'Aktionen',
-            width: '100px',
-            align: 'right',
-            renderCell: (_v, row) => {
-                const m = row.measure;
-                return (
-                    <div className="flex items-center justify-end gap-2">
-                        <button
-                            type="button"
-                            onClick={() => openMeasure(m)}
-                            aria-label={`${m.title} öffnen`}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                        >
-                            <Icons.Rename className="w-4 h-4" />
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => data.requestDeleteMeasure(m)}
-                            disabled={isLocked(m)}
-                            aria-label={`${m.title} löschen`}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
-                        >
-                            <Icons.Trash2 className="w-4 h-4" />
-                        </button>
-                    </div>
-                );
-            },
-        },
     ];
 
     const tableData: MeasureRow[] = measures.map((measure) => ({ key: String(measure.renovationMeasureId), measure }));
@@ -318,64 +313,56 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                 />
 
                 <div className="flex flex-col gap-6">
-                    <div className="flex items-start justify-between gap-3 p-4 rounded-lg border border-border bg-card">
-                        <div>
-                            <h1 className="text-lg font-semibold text-foreground">Übersicht Sanierungsmaßnahmen</h1>
-                            <p className="text-sm text-muted-foreground">{address}</p>
-                        </div>
-                        <a
-                            href={`/existing-properties/${propertyId}`}
-                            aria-label="Zur Immobilie"
-                            title="Zur Immobilie"
-                            className="shrink-0 p-2 rounded-md border border-border text-muted-foreground hover:text-primary hover:border-primary transition-colors"
-                        >
-                            <Icons.Building2 className="w-4 h-4" />
-                        </a>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <div className="min-w-0 rounded-md border border-primary/15 bg-card p-4 shadow-sm">
-                            <p className="text-xs text-muted-foreground uppercase tracking-wide">Maßnahmen gesamt</p>
-                            <p className="mt-2 text-2xl font-semibold text-foreground">{measures.length}</p>
-                        </div>
-                        <div className="min-w-0 rounded-md border border-primary/15 bg-card p-4 shadow-sm">
-                            <p className="text-xs text-muted-foreground uppercase tracking-wide">Kosten veranschlagt</p>
-                            <p className="mt-2 text-2xl font-semibold text-foreground">{euro(totalEstimated)}</p>
-                        </div>
-                        <div className="min-w-0 rounded-md border border-primary/15 bg-card p-4 shadow-sm">
-                            <p className="text-xs text-muted-foreground uppercase tracking-wide">Kosten lt. Angebot</p>
-                            <p className="mt-2 text-2xl font-semibold text-primary">{quotedMeasures.length > 0 ? euro(totalQuoted) : '–'}</p>
-                        </div>
-                        <div className="min-w-0 rounded-md border border-primary/15 bg-card p-4 shadow-sm">
-                            <p className="text-xs text-muted-foreground uppercase tracking-wide">Abweichung</p>
-                            <p className={`mt-2 text-2xl font-semibold ${quotedMeasures.length === 0 ? 'text-foreground' : deviation > 0 ? 'text-warning' : deviation < 0 ? 'text-success' : 'text-foreground'}`}>
-                                {quotedMeasures.length === 0 ? '–' : `${deviation > 0 ? '+' : ''}${euro(deviation)}`}
-                            </p>
+                    <div className="flex flex-col gap-3">
+                        <SectionLabel>Übersicht</SectionLabel>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+                                <p className="text-xs text-muted-foreground uppercase tracking-wide">Maßnahmen gesamt</p>
+                                <p className="mt-2 text-2xl font-semibold text-foreground">{measures.length}</p>
+                            </div>
+                            <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+                                <p className="text-xs text-muted-foreground uppercase tracking-wide">Kosten veranschlagt</p>
+                                <p className="mt-2 text-2xl font-semibold text-foreground">{euro(totalEstimated)}</p>
+                            </div>
+                            <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+                                <p className="text-xs text-muted-foreground uppercase tracking-wide">Kosten lt. Angebot</p>
+                                <p className="mt-2 text-2xl font-semibold text-primary">{quotedMeasures.length > 0 ? euro(totalQuoted) : '–'}</p>
+                            </div>
+                            <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+                                <p className="text-xs text-muted-foreground uppercase tracking-wide">Abweichung</p>
+                                <p className={`mt-2 text-2xl font-semibold ${quotedMeasures.length === 0 ? 'text-foreground' : deviation > 0 ? 'text-warning' : deviation < 0 ? 'text-success' : 'text-foreground'}`}>
+                                    {quotedMeasures.length === 0 ? '–' : `${deviation > 0 ? '+' : ''}${euro(deviation)}`}
+                                </p>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Maßnahmen</h2>
-                        <Button label="Maßnahme hinzufügen" icon={<Icons.Plus className="w-4 h-4" />} variant="primary" onClick={openAddModal} />
+                    <div className="flex flex-col gap-3">
+                        <SectionLabel>Maßnahmen</SectionLabel>
+                        <div className="flex justify-end">
+                            <Button label="Maßnahme hinzufügen" icon={<Icons.Plus className="w-4 h-4" />} variant="primary" size="sm" onClick={openAddModal} />
+                        </div>
                     </div>
 
                     <Table
                         columns={columns}
                         data={tableData}
                         emptyMessage="Noch keine Sanierungsmaßnahmen erfasst."
-                        footerLeft="Gesamtkosten veranschlagt"
-                        footerRight={
-                            <span className="flex items-center gap-2">
-                                {quotedMeasures.length > 0 && (
-                                    <span className={`inline-flex items-center gap-1 ${deviation > 0 ? 'text-warning' : deviation < 0 ? 'text-success' : 'text-muted-foreground'}`}>
-                                        {deviation !== 0 && (deviation > 0 ? <Icons.TrendingUp className="w-3.5 h-3.5" /> : <Icons.TrendingDown className="w-3.5 h-3.5" />)}
-                                        {deviation > 0 ? '+' : ''}{euro(deviation)} über Angebot
-                                    </span>
-                                )}
-                                <span className="font-semibold text-foreground">{euro(totalEstimated)}</span>
-                            </span>
-                        }
+                        footerLeft={`${measures.length} Einträge`}
                     />
+
+                    <div className="flex items-center justify-between gap-3 p-4 rounded-lg border border-border bg-card">
+                        <span className="text-sm text-muted-foreground">Gesamtkosten veranschlagt</span>
+                        <span className="flex items-center gap-2">
+                            {quotedMeasures.length > 0 && (
+                                <span className={`inline-flex items-center gap-1 text-sm ${deviation > 0 ? 'text-warning' : deviation < 0 ? 'text-success' : 'text-muted-foreground'}`}>
+                                    {deviation !== 0 && (deviation > 0 ? <Icons.TrendingUp className="w-3.5 h-3.5" /> : <Icons.TrendingDown className="w-3.5 h-3.5" />)}
+                                    {deviation > 0 ? '+' : ''}{euro(deviation)} über Angebot
+                                </span>
+                            )}
+                            <span className="text-lg font-semibold text-foreground">{euro(totalEstimated)}</span>
+                        </span>
+                    </div>
                 </div>
             </main>
 
