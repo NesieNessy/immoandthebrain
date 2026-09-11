@@ -26,12 +26,17 @@ const WORD_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingm
  * `onUploaded` is an optional hook for a caller that keeps its own separate
  * document list (e.g. the tenant-unit page's own `useTenantUnitData`) so it
  * can refresh and show the newly uploaded file without a full page reload.
+ *
+ * `archivedTenancyId` scopes everything to a specific past tenancy (the
+ * Mieterhistorie detail view) instead of the unit's current one — without
+ * it, this would show the *current* tenant's Mieterbescheinigung even while
+ * looking at a moved-out tenant's record.
  */
-export function useMieterbescheinigungGenerator(propertyId: string, unitId: string, onUploaded?: () => void) {
+export function useMieterbescheinigungGenerator(propertyId: string, unitId: string, onUploaded?: () => void, archivedTenancyId?: number) {
     const { user } = useRequireAuth();
     const { showToast } = useToast();
     const { isLoading, notFound, property, unit, hasMultipleUnits, tenancy, persons, landlord, documents, setDocuments } =
-        useUnitDocumentGeneratorData(propertyId, unitId, user?.id);
+        useUnitDocumentGeneratorData(propertyId, unitId, user?.id, archivedTenancyId);
     const mieterbescheinigungDocs = documents.filter((d) => d.documentType === 'Mieterbescheinigung' && !d.supersededAt);
 
     const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);

@@ -39,6 +39,9 @@ function toTenancy(row: Record<string, unknown>): Tenancy {
         renovationAdjustmentAmount: row.renovation_adjustment_amount as number | null,
         rentAdjustmentReminderDate: row.rent_adjustment_reminder_date as string | null,
         renovationAdjustmentReminderDate: row.renovation_adjustment_reminder_date as string | null,
+        rentIndexPerM2: row.rent_index_per_m2 as number | null,
+        rentIncreaseIntervalMonths: row.rent_increase_interval_months as number | null,
+        plannedRenovationCost: row.planned_renovation_cost as number | null,
         petsAllowed: row.pets_allowed as RentalTermsPetsAllowed | null,
         redecorationClause: row.redecoration_clause as RentalTermsRedecorationClause | null,
         subletAllowed: row.sublet_allowed as RentalTermsSubletAllowed | null,
@@ -109,6 +112,9 @@ export async function createTenancy(payload: TenancyInsert): Promise<Tenancy | n
             renovation_adjustment_amount: payload.renovationAdjustmentAmount,
             rent_adjustment_reminder_date: payload.rentAdjustmentReminderDate,
             renovation_adjustment_reminder_date: payload.renovationAdjustmentReminderDate,
+            rent_index_per_m2: payload.rentIndexPerM2,
+            rent_increase_interval_months: payload.rentIncreaseIntervalMonths,
+            planned_renovation_cost: payload.plannedRenovationCost,
         } }));
     if (!data) return null;
     return toTenancy(data);
@@ -144,6 +150,9 @@ export async function updateTenancy(
     if (updates.renovationAdjustmentAmount !== undefined) dbUpdates.renovation_adjustment_amount = updates.renovationAdjustmentAmount;
     if (updates.rentAdjustmentReminderDate !== undefined) dbUpdates.rent_adjustment_reminder_date = updates.rentAdjustmentReminderDate;
     if (updates.renovationAdjustmentReminderDate !== undefined) dbUpdates.renovation_adjustment_reminder_date = updates.renovationAdjustmentReminderDate;
+    if (updates.rentIndexPerM2 !== undefined) dbUpdates.rent_index_per_m2 = updates.rentIndexPerM2;
+    if (updates.rentIncreaseIntervalMonths !== undefined) dbUpdates.rent_increase_interval_months = updates.rentIncreaseIntervalMonths;
+    if (updates.plannedRenovationCost !== undefined) dbUpdates.planned_renovation_cost = updates.plannedRenovationCost;
     if (updates.petsAllowed !== undefined) dbUpdates.pets_allowed = updates.petsAllowed;
     if (updates.redecorationClause !== undefined) dbUpdates.redecoration_clause = updates.redecorationClause;
     if (updates.subletAllowed !== undefined) dbUpdates.sublet_allowed = updates.subletAllowed;

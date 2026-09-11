@@ -88,7 +88,7 @@ const MIETE: HubCard[] = [
   },
   {
     key: 'tenant-history',
-    title: 'Mieter-Historie',
+    title: 'Mieterhistorie',
     description: 'Alle bisherigen Mietverhältnisse und Mieterwechsel einsehen',
     route: 'tenant-history',
     scope: 'unit',
@@ -263,7 +263,7 @@ export default function PropertyHub({ propertyId, unitId }: { propertyId: string
     ...(!property.archivedAt
       ? [{
           key: 'archive-property',
-          title: 'Archivieren',
+          title: 'Archivierung',
           description: 'Objekt aus der Bestandsobjekte-Übersicht ausblenden',
           route: '',
           scope: 'property' as const,

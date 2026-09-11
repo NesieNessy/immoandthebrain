@@ -79,6 +79,7 @@ export function useTenantMoveOutData(propertyId: string, property: Property, uni
     const [isSaving, setIsSaving] = useState(false);
     const [isGeneratingProtocol, setIsGeneratingProtocol] = useState(false);
     const [isUploadingProtocol, setIsUploadingProtocol] = useState(false);
+    const [isReleasingDeposit, setIsReleasingDeposit] = useState(false);
     const [uploadingDamageId, setUploadingDamageId] = useState<string | null>(null);
     const [pendingHref, setPendingHref] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -331,13 +332,31 @@ export function useTenantMoveOutData(propertyId: string, property: Property, uni
         if (url) window.open(url, '_blank', 'noopener,noreferrer');
     };
 
+    // The actual payout still routes through a partner (not yet wired up —
+    // see the "Weiterleitung zum Partner" note on the button) — this marks
+    // the deposit as settled on the tenancy record, the same way generating
+    // the Abnahmeprotokoll marks acceptanceProtocol, so the Mieterhistorie
+    // status columns reflect real actions taken here instead of being
+    // manually toggled.
+    const handleReleaseDeposit = async () => {
+        if (!tenancy) return;
+        setIsReleasingDeposit(true);
+        try {
+            const updated = await updateTenancy(tenancy.tenancyId, { depositPaidOut: true });
+            if (updated) setTenancy(updated);
+            showToast('Mietkaution als ausgezahlt markiert.', 'success');
+        } finally {
+            setIsReleasingDeposit(false);
+        }
+    };
+
     const backHref = hasMultipleUnits
         ? `/existing-properties/${propertyId}/tenant-move-out`
         : `/existing-properties/${propertyId}`;
 
     return {
         // state
-        isLoading, isSaving, isGeneratingProtocol, isUploadingProtocol, isLoadingPreview, error,
+        isLoading, isSaving, isGeneratingProtocol, isUploadingProtocol, isReleasingDeposit, isLoadingPreview, error,
         tenancy, tenantDisplayName, useCaseMenuItems, backHref,
         moveOutDate, setMoveOutDate,
         meterReadings, damages,
@@ -351,6 +370,6 @@ export function useTenantMoveOutData(propertyId: string, property: Property, uni
         addMeterReading, updateMeterReading, removeMeterReading,
         addDamage, updateDamageDescription, removeDamage,
         addDamagePhoto, removeDamagePhoto,
-        handleSave, handleGenerateProtocol, handleUploadProtocol, handleViewProtocolDocument, handlePreview,
+        handleSave, handleGenerateProtocol, handleUploadProtocol, handleViewProtocolDocument, handlePreview, handleReleaseDeposit,
     };
 }

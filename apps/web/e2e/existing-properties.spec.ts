@@ -44,8 +44,8 @@ test('unit hub -> tenant data page shows the real tenant', async ({ page }) => {
     // card, so asserting on the editable first-/last-name fields themselves
     // is the precise way to check the real tenant loaded — a plain text
     // search for the combined name is ambiguous on this page.
-    await expect(page.getByLabel('Vorname *')).toHaveValue(E2E_FIXTURE.tenantFirstName);
-    await expect(page.getByLabel('Nachname *')).toHaveValue(E2E_FIXTURE.tenantLastName);
+    await expect(page.getByLabel('Vorname', { exact: true })).toHaveValue(E2E_FIXTURE.tenantFirstName);
+    await expect(page.getByLabel('Nachname', { exact: true })).toHaveValue(E2E_FIXTURE.tenantLastName);
 });
 
 test('a meter reading on the tenant move-out page persists after reload', async ({ page }) => {
