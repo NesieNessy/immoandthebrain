@@ -102,6 +102,16 @@ const RESOURCES: Record<string, ResourceConfig> = {
     columns: ['service_charge_settlement_id', 'property_id', 'sort_order', 'label', 'allocable', 'actual_amount', 'budget_amount', 'actual_share_override', 'budget_share_override'],
     orderBy: 'sort_order, service_charge_cost_item_id',
   },
+  'renovation-measures': {
+    table: 'renovation_measure',
+    primaryKey: 'renovation_measure_id',
+    columns: [
+      'property_id', 'sort_order', 'title', 'estimated_cost', 'quoted_cost',
+      'preferred_start_date', 'quoted_start_date', 'actual_completion_date',
+      'published', 'published_at', 'quote_accepted', 'customer_confirmed_completed',
+    ],
+    orderBy: 'sort_order, renovation_measure_id',
+  },
 };
 
 function getConfig(resource: string): ResourceConfig | null {

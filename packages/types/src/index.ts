@@ -724,6 +724,40 @@ export type ServiceChargeCostItemInsert = Omit<ServiceChargeCostItem, 'serviceCh
 export type ServiceChargeCostItemUpdate = Partial<Omit<ServiceChargeCostItem, 'serviceChargeCostItemId' | 'serviceChargeSettlementId' | 'propertyId' | 'createdAt' | 'updatedAt'>>;
 
 // ----------------------------------------------------------------------------
+// Renovation measures (Handwerker / Sanierungsmaßnahmen overview)
+// ----------------------------------------------------------------------------
+
+export interface RenovationMeasure {
+  renovationMeasureId: number;
+  propertyId: number;
+  sortOrder: number;
+  title: string;
+  /** Kosten veranschlagt — owner's own estimate. */
+  estimatedCost: number | null;
+  /** Kosten lt. Angebot — set once a quote comes in; its presence is what
+   *  drives the "Angebot" status checkmark (no separate boolean for it). */
+  quotedCost: number | null;
+  preferredStartDate: string | null;
+  quotedStartDate: string | null;
+  /** Abschluss ist — entered by the owner once the contractor reports the
+   *  work done; there's no contractor portal to report it directly. */
+  actualCompletionDate: string | null;
+  /** Local status flag only — no external marketplace/platform integration. */
+  published: boolean;
+  publishedAt: string | null;
+  /** Once true, the measure is read-only except customerConfirmedCompleted. */
+  quoteAccepted: boolean;
+  /** Owner's explicit confirmation on top of actualCompletionDate; only
+   *  meaningful once that date is set. */
+  customerConfirmedCompleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RenovationMeasureInsert = Omit<RenovationMeasure, 'renovationMeasureId' | 'publishedAt' | 'createdAt' | 'updatedAt'>;
+export type RenovationMeasureUpdate = Partial<Omit<RenovationMeasure, 'renovationMeasureId' | 'propertyId' | 'createdAt' | 'updatedAt'>>;
+
+// ----------------------------------------------------------------------------
 // Financing
 // ----------------------------------------------------------------------------
 
