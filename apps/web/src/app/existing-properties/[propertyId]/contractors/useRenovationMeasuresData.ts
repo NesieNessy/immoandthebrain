@@ -13,11 +13,12 @@ import { useEffect, useState } from 'react';
 
 export interface NewMeasureForm {
     title: string;
+    category: string;
     estimatedCost: string;
     preferredStartDate: Date | undefined;
 }
 
-export const EMPTY_NEW_MEASURE: NewMeasureForm = { title: '', estimatedCost: '', preferredStartDate: undefined };
+export const EMPTY_NEW_MEASURE: NewMeasureForm = { title: '', category: '', estimatedCost: '', preferredStartDate: undefined };
 
 /**
  * There is no craftsperson-facing portal — the property owner enters the
@@ -74,6 +75,8 @@ export function useRenovationMeasuresData(propertyId: string) {
             propertyId: property.propertyId,
             sortOrder: measures.length,
             title: form.title.trim(),
+            category: form.category !== '' ? form.category : null,
+            description: null,
             estimatedCost: form.estimatedCost !== '' ? Number(form.estimatedCost) : null,
             quotedCost: null,
             preferredStartDate: form.preferredStartDate ? form.preferredStartDate.toISOString().slice(0, 10) : null,
@@ -81,7 +84,9 @@ export function useRenovationMeasuresData(propertyId: string) {
             actualCompletionDate: null,
             published: false,
             quoteAccepted: false,
+            craftsmanConfirmedCompleted: false,
             customerConfirmedCompleted: false,
+            craftsmanNotes: null,
         });
         if (!created) {
             showToast('Maßnahme konnte nicht angelegt werden.', 'error');
@@ -103,8 +108,17 @@ export function useRenovationMeasuresData(propertyId: string) {
         void persistField(measure.renovationMeasureId, { quoteAccepted: next });
     };
 
+    const toggleCraftsmanConfirmed = (measure: RenovationMeasure) => {
+        const next = !measure.craftsmanConfirmedCompleted;
+        // Un-confirming the contractor's report can't leave a stale customer
+        // confirmation sitting on top of it.
+        const patch = next ? { craftsmanConfirmedCompleted: next } : { craftsmanConfirmedCompleted: next, customerConfirmedCompleted: false };
+        updateLocalField(measure.renovationMeasureId, patch);
+        void persistField(measure.renovationMeasureId, patch);
+    };
+
     const toggleCustomerConfirmed = (measure: RenovationMeasure) => {
-        if (!measure.actualCompletionDate) return;
+        if (!measure.craftsmanConfirmedCompleted) return;
         const next = !measure.customerConfirmedCompleted;
         updateLocalField(measure.renovationMeasureId, { customerConfirmedCompleted: next });
         void persistField(measure.renovationMeasureId, { customerConfirmedCompleted: next });
@@ -138,6 +152,7 @@ export function useRenovationMeasuresData(propertyId: string) {
         addMeasure,
         togglePublished,
         toggleQuoteAccepted,
+        toggleCraftsmanConfirmed,
         toggleCustomerConfirmed,
         measurePendingDelete,
         requestDeleteMeasure,

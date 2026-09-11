@@ -1,11 +1,13 @@
 "use client";
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { buildPropertyUseCaseBreadcrumb, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
 import {
     Button,
     CalendarField,
     ConfirmDeleteModal,
+    Dropdown,
     Header,
     Icons,
     Modal,
@@ -20,7 +22,10 @@ import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCas
 import { deCurrencyFormatter } from '@/lib/utils';
 import type { RenovationMeasure } from '@immoandthebrain/types';
 import { format, parseISO } from 'date-fns';
+import { MEASURE_CATEGORIES } from './measureCategories';
 import { EMPTY_NEW_MEASURE, useRenovationMeasuresData, type NewMeasureForm } from './useRenovationMeasuresData';
+
+const CATEGORY_OPTIONS = [{ value: '', label: 'Bitte wählen...' }, ...MEASURE_CATEGORIES];
 
 function euro(value: number | null | undefined): string {
     return value != null ? `${deCurrencyFormatter.format(value)} €` : '–';
@@ -44,13 +49,15 @@ interface MeasureRow extends Record<string, unknown> {
 }
 
 export default function Contractors({ propertyId }: { propertyId: string }) {
+    const router = useRouter();
     const data = useRenovationMeasuresData(propertyId);
     const [addOpen, setAddOpen] = useState(false);
     const [newMeasure, setNewMeasure] = useState<NewMeasureForm>(EMPTY_NEW_MEASURE);
     const [isAdding, setIsAdding] = useState(false);
-    const [renameTarget, setRenameTarget] = useState<RenovationMeasure | null>(null);
-    const [renameValue, setRenameValue] = useState('');
-    const [isRenaming, setIsRenaming] = useState(false);
+
+    const openMeasure = (measure: RenovationMeasure) => {
+        router.push(`/existing-properties/${propertyId}/contractors/${measure.renovationMeasureId}`);
+    };
 
     if (data.isLoading) return <PropertyLoadingPage />;
     if (!data.property) return <PropertyNotFoundPage />;
@@ -81,29 +88,20 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
         }
     };
 
-    const openRenameModal = (measure: RenovationMeasure) => {
-        setRenameTarget(measure);
-        setRenameValue(measure.title);
-    };
-
-    const confirmRename = async () => {
-        if (!renameTarget || renameValue.trim() === '') return;
-        setIsRenaming(true);
-        try {
-            data.updateLocalField(renameTarget.renovationMeasureId, { title: renameValue.trim() });
-            await data.persistField(renameTarget.renovationMeasureId, { title: renameValue.trim() });
-            setRenameTarget(null);
-        } finally {
-            setIsRenaming(false);
-        }
-    };
-
     const columns: TableColumn<MeasureRow>[] = [
         {
             key: 'title',
             label: 'Maßnahme',
             width: '160px',
-            renderCell: (_v, row) => <span className="font-semibold text-foreground">{row.measure.title}</span>,
+            renderCell: (_v, row) => (
+                <button
+                    type="button"
+                    onClick={() => openMeasure(row.measure)}
+                    className="font-semibold text-foreground hover:text-primary hover:underline cursor-pointer text-left"
+                >
+                    {row.measure.title}
+                </button>
+            ),
         },
         {
             key: 'estimatedCost',
@@ -260,7 +258,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
             align: 'center',
             renderCell: (_v, row) => {
                 const m = row.measure;
-                const canConfirm = m.actualCompletionDate != null;
+                const canConfirm = m.craftsmanConfirmedCompleted;
                 return (
                     <button
                         type="button"
@@ -268,7 +266,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                         disabled={!canConfirm}
                         aria-pressed={m.customerConfirmedCompleted}
                         aria-label={m.customerConfirmedCompleted ? `${m.title} als nicht abgeschlossen markieren` : `${m.title} als abgeschlossen bestätigen`}
-                        title={!canConfirm ? 'Bitte zuerst den tatsächlichen Abschluss eintragen' : undefined}
+                        title={!canConfirm ? 'Bitte zuerst „Handwerker bestätigt" in der Detailansicht setzen' : undefined}
                         className="mx-auto flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                         {m.customerConfirmedCompleted
@@ -289,10 +287,9 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                     <div className="flex items-center justify-end gap-2">
                         <button
                             type="button"
-                            onClick={() => openRenameModal(m)}
-                            disabled={isLocked(m)}
-                            aria-label={`${m.title} umbenennen`}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                            onClick={() => openMeasure(m)}
+                            aria-label={`${m.title} öffnen`}
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
                         >
                             <Icons.Rename className="w-4 h-4" />
                         </button>
@@ -407,6 +404,13 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                         value={newMeasure.title}
                         onChange={(e) => setNewMeasure((prev) => ({ ...prev, title: e.target.value }))}
                     />
+                    <Dropdown
+                        label="Kategorie"
+                        optional
+                        options={CATEGORY_OPTIONS}
+                        value={newMeasure.category}
+                        onChange={(e) => setNewMeasure((prev) => ({ ...prev, category: e.target.value }))}
+                    />
                     <NumberField
                         label="Kosten veranschlagt"
                         optional
@@ -422,27 +426,6 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                         onChange={(date) => setNewMeasure((prev) => ({ ...prev, preferredStartDate: date }))}
                     />
                 </div>
-            </Modal>
-
-            <Modal
-                open={renameTarget !== null}
-                onClose={() => setRenameTarget(null)}
-                title="Maßnahme umbenennen"
-                icon={<Icons.Rename className="w-5 h-5" />}
-                footer={
-                    <>
-                        <Button label={BUTTON_DETAILS.Cancel.label} variant="outline" onClick={() => setRenameTarget(null)} />
-                        <Button
-                            label="Speichern"
-                            icon={<BUTTON_DETAILS.Save.icon className="w-4 h-4" />}
-                            variant="primary"
-                            disabled={renameValue.trim() === '' || isRenaming}
-                            onClick={() => void confirmRename()}
-                        />
-                    </>
-                }
-            >
-                <TextField label="Maßnahme" value={renameValue} onChange={(e) => setRenameValue(e.target.value)} />
             </Modal>
 
             <ConfirmDeleteModal

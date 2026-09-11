@@ -61,9 +61,11 @@ export default async function globalSetup() {
 
         // The UI reads tenant names from tenancy_person (persons list), not
         // tenancy.tenant_first_name/last_name directly — both need seeding.
+        // tax_id and move_in_date are required for the Hauptmieter (see
+        // tenancy_person_primary_tax_id_required / _move_in_date_required).
         await client.query(
-            `INSERT INTO tenancy_person (tenancy_id, first_name, last_name, is_primary, sort_order)
-             VALUES ($1, $2, $3, true, 0)`,
+            `INSERT INTO tenancy_person (tenancy_id, first_name, last_name, is_primary, sort_order, tax_id, move_in_date)
+             VALUES ($1, $2, $3, true, 0, '12345678901', '2024-01-01')`,
             [tenancyRes.rows[0].tenancy_id, E2E_FIXTURE.tenantFirstName, E2E_FIXTURE.tenantLastName],
         );
     } finally {

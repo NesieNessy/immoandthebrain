@@ -78,8 +78,8 @@ async function main() {
             [propertyAId, unitA1.rows[0].property_unit_id],
         );
         await client.query(
-            `INSERT INTO tenancy_person (tenancy_id, first_name, last_name, is_primary, sort_order, move_in_date)
-             VALUES ($1, 'Michael', 'Bauer', true, 0, '2022-03-01')`,
+            `INSERT INTO tenancy_person (tenancy_id, first_name, last_name, is_primary, sort_order, move_in_date, tax_id)
+             VALUES ($1, 'Michael', 'Bauer', true, 0, '2022-03-01', '65123456789')`,
             [tenancyA1.rows[0].tenancy_id],
         );
 
@@ -130,8 +130,8 @@ async function main() {
             [propertyBId, unitB1.rows[0].property_unit_id],
         );
         await client.query(
-            `INSERT INTO tenancy_person (tenancy_id, first_name, last_name, is_primary, sort_order, move_in_date)
-             VALUES ($1, 'Sabine', 'Hoffmann', true, 0, '2019-06-01')`,
+            `INSERT INTO tenancy_person (tenancy_id, first_name, last_name, is_primary, sort_order, move_in_date, tax_id)
+             VALUES ($1, 'Sabine', 'Hoffmann', true, 0, '2019-06-01', '65198765432')`,
             [tenancyB1.rows[0].tenancy_id],
         );
 
@@ -142,8 +142,8 @@ async function main() {
             [propertyBId, unitB2.rows[0].property_unit_id],
         );
         await client.query(
-            `INSERT INTO tenancy_person (tenancy_id, first_name, last_name, is_primary, sort_order, move_in_date)
-             VALUES ($1, 'Thomas', 'Krüger', true, 0, '2021-09-01')`,
+            `INSERT INTO tenancy_person (tenancy_id, first_name, last_name, is_primary, sort_order, move_in_date, tax_id)
+             VALUES ($1, 'Thomas', 'Krüger', true, 0, '2021-09-01', '65145678901')`,
             [tenancyB2.rows[0].tenancy_id],
         );
         await client.query(
@@ -159,11 +159,93 @@ async function main() {
             [propertyBId],
         );
 
-        // Exercises the Handwerker / Sanierungsmaßnahmen table (renovation_measure).
-        await client.query(
-            `INSERT INTO renovation_measure (property_id, sort_order, title, estimated_cost, preferred_start_date, published)
-             VALUES ($1, 0, 'Fenster', 8000, '2026-06-01', false)`,
+        // ------------------------------------------------------------------
+        // Handwerker / Sanierungsmaßnahmen — one measure per stage of the
+        // detail-page workflow, so every stepper state and both the
+        // multi-quote and defects lists have something to show.
+        // ------------------------------------------------------------------
+
+        // Property B — fully completed: published, two quotes with one
+        // accepted (locking the measure), both completion confirmations set,
+        // and a defect logged after the fact.
+        const measureBathroom = await client.query(
+            `INSERT INTO renovation_measure (
+                property_id, sort_order, title, category, description,
+                estimated_cost, quoted_cost, preferred_start_date, quoted_start_date, actual_completion_date,
+                published, published_at, quote_accepted, craftsman_confirmed_completed, customer_confirmed_completed, craftsman_notes
+             )
+             VALUES ($1, 0, 'Badezimmer', 'Badezimmer', 'Leichte Schäden im Badezimmer und Fußboden.',
+                13500, 14000, '2026-01-01', '2026-02-01', '2026-03-15',
+                true, NOW(), true, true, true, 'Rückfrage zum Fliesentyp beantwortet — Feinsteinzeug gewählt.')
+             RETURNING renovation_measure_id`,
             [propertyBId],
+        );
+        const measureBathroomId = measureBathroom.rows[0].renovation_measure_id;
+        await client.query(
+            `INSERT INTO renovation_measure_quote (renovation_measure_id, property_id, sort_order, company_name, cost, accepted)
+             VALUES ($1, $2, 0, 'Mustermann GmbH', 14000, true)`,
+            [measureBathroomId, propertyBId],
+        );
+        await client.query(
+            `INSERT INTO renovation_measure_quote (renovation_measure_id, property_id, sort_order, company_name, cost, accepted)
+             VALUES ($1, $2, 1, 'Handwerk AG', 15500, false)`,
+            [measureBathroomId, propertyBId],
+        );
+        await client.query(
+            `INSERT INTO renovation_measure_defect (renovation_measure_id, property_id, sort_order, description)
+             VALUES ($1, $2, 0, 'Silikonfuge an der Dusche nachbessern')`,
+            [measureBathroomId, propertyBId],
+        );
+
+        // Property B — published, two competing quotes still awaiting a
+        // decision (nothing accepted yet, so still editable/unlocked).
+        const measureWindows = await client.query(
+            `INSERT INTO renovation_measure (
+                property_id, sort_order, title, category, description,
+                estimated_cost, preferred_start_date,
+                published, published_at, craftsman_notes
+             )
+             VALUES ($1, 1, 'Fenster', 'Fenster', '5 Fenster im Wohnzimmer und Schlafzimmer undicht.',
+                8000, '2026-06-01',
+                true, NOW(), 'Welche Fensterfarbe wird gewünscht — weiß oder anthrazit?')
+             RETURNING renovation_measure_id`,
+            [propertyBId],
+        );
+        const measureWindowsId = measureWindows.rows[0].renovation_measure_id;
+        await client.query(
+            `INSERT INTO renovation_measure_quote (renovation_measure_id, property_id, sort_order, company_name, cost)
+             VALUES ($1, $2, 0, 'Fensterbau Schmidt', 7200)`,
+            [measureWindowsId, propertyBId],
+        );
+        await client.query(
+            `INSERT INTO renovation_measure_quote (renovation_measure_id, property_id, sort_order, company_name, cost)
+             VALUES ($1, $2, 1, 'GlasTechnik Nord', 8900)`,
+            [measureWindowsId, propertyBId],
+        );
+
+        // Property B — earliest stage: just an estimate, not yet published.
+        await client.query(
+            `INSERT INTO renovation_measure (property_id, sort_order, title, category, estimated_cost, published)
+             VALUES ($1, 2, 'Fußboden', 'Fußboden', 6000, false)`,
+            [propertyBId],
+        );
+
+        // Property A — published with a single quote still under
+        // consideration, for coverage on the single-unit property too.
+        const measureElectrical = await client.query(
+            `INSERT INTO renovation_measure (
+                property_id, sort_order, title, category, description,
+                estimated_cost, published, published_at
+             )
+             VALUES ($1, 0, 'Elektrik', 'Elektrik', 'Sicherungskasten veraltet, Steckdosen im Bad fehlen.',
+                5000, true, NOW())
+             RETURNING renovation_measure_id`,
+            [propertyAId],
+        );
+        await client.query(
+            `INSERT INTO renovation_measure_quote (renovation_measure_id, property_id, sort_order, company_name, cost)
+             VALUES ($1, $2, 0, 'Elektro Müller GmbH', 4800)`,
+            [measureElectrical.rows[0].renovation_measure_id, propertyAId],
         );
 
         // ------------------------------------------------------------------
@@ -260,6 +342,7 @@ async function main() {
         console.log(`  Property B (Leipzig, 3 units incl. 1 vacant):                  property_id=${propertyBId}`);
         console.log('  Quick Checks: 1 accepted+detail-checked, 1 active, 1 discarded');
         console.log(`  Detail Check: workflow_id=${workflowId} (all 11 tables populated)`);
+        console.log('  Handwerker: Badezimmer (completed, 2 quotes + defect), Fenster (2 quotes, undecided), Fußboden (draft), Elektrik on Property A (1 quote)');
     } catch (err) {
         await client.query('ROLLBACK');
         throw err;
