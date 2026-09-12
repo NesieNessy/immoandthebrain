@@ -96,7 +96,7 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.117.0
 
       # Isolated local stack (Postgres + Auth), not the shared remote
       # project — the auth-bypass user only exists here (seeded by
