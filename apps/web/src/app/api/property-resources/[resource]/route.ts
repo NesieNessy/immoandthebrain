@@ -131,6 +131,18 @@ const RESOURCES: Record<string, ResourceConfig> = {
     columns: ['renovation_measure_id', 'property_id', 'storage_path', 'file_name'],
     orderBy: 'renovation_measure_photo_id',
   },
+  'tax-expense-categories': {
+    table: 'tax_expense_category',
+    primaryKey: 'tax_expense_category_id',
+    columns: ['property_id', 'sort_order', 'label', 'amount', 'elster_reference'],
+    orderBy: 'sort_order, tax_expense_category_id',
+  },
+  'tax-expense-documents': {
+    table: 'tax_expense_document',
+    primaryKey: 'tax_expense_document_id',
+    columns: ['tax_expense_category_id', 'property_id', 'storage_path', 'file_name'],
+    orderBy: 'tax_expense_document_id',
+  },
 };
 
 const RENOVATION_MEASURE_CHILD_TABLES = ['renovation_measure_quote', 'renovation_measure_defect', 'renovation_measure_photo'];
@@ -165,6 +177,7 @@ export async function GET(request: Request, context: RouteContext) {
   const tenancyId = url.searchParams.get('tenancyId');
   const settlementId = url.searchParams.get('settlementId');
   const measureId = url.searchParams.get('measureId');
+  const categoryId = url.searchParams.get('categoryId');
   const filters: string[] = [];
   const values: unknown[] = [userId];
   if (id) {
@@ -190,6 +203,10 @@ export async function GET(request: Request, context: RouteContext) {
   if (measureId && RENOVATION_MEASURE_CHILD_TABLES.includes(config.table)) {
     values.push(Number(measureId));
     filters.push(`r.renovation_measure_id = $${values.length}`);
+  }
+  if (categoryId && config.table === 'tax_expense_document') {
+    values.push(Number(categoryId));
+    filters.push(`r.tax_expense_category_id = $${values.length}`);
   }
   // "Current" excludes a tenancy whose move-out date has already passed
   // entirely, rather than merely deprioritizing it — a unit whose only
