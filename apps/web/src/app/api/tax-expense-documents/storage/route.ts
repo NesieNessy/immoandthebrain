@@ -1,11 +1,38 @@
 import { requireUserId } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
-import { getSupabaseAdmin } from '@/lib/server/supabaseAdmin';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
 const BUCKET = 'tax-expense-documents';
+
+// Talks to the Storage REST API directly with the service-role key rather
+// than through the @supabase/supabase-js Storage client — that client
+// inexplicably reports "Bucket not found" for this bucket in this bundled
+// Next.js server context even though the exact same request succeeds via a
+// plain fetch (verified directly against the API), so the raw HTTP calls
+// are used here instead of chasing the library's behavior further.
+function storageHeaders(extra?: Record<string, string>) {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) {
+    throw new Response(JSON.stringify({ error: 'Supabase admin configuration is missing.' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  return { Authorization: `Bearer ${key}`, apikey: key, ...extra };
+}
+
+function storageBaseUrl(): string {
+  const url = process.env.SUPABASE_ADMIN_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) {
+    throw new Response(JSON.stringify({ error: 'Supabase admin configuration is missing.' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  return `${url}/storage/v1`;
+}
 
 async function ownedCategoryPropertyId(userId: string, categoryId: number): Promise<number | null> {
   const result = await db.query(
@@ -35,11 +62,14 @@ export async function POST(request: Request) {
 
   const storagePath = `${userId}/${propertyId}/${categoryId}/beleg-${crypto.randomUUID()}-${file.name}`;
   const buffer = Buffer.from(await file.arrayBuffer());
-  const admin = getSupabaseAdmin();
-  const { error: uploadError } = await admin.storage.from(BUCKET).upload(storagePath, buffer, { contentType: file.type || undefined });
-  if (uploadError) {
-    console.error('tax-expense-documents upload failed:', uploadError);
-    return NextResponse.json({ error: 'Datei konnte nicht hochgeladen werden.', detail: String(uploadError.message ?? uploadError) }, { status: 500 });
+  const uploadResponse = await fetch(`${storageBaseUrl()}/object/${BUCKET}/${storagePath}`, {
+    method: 'POST',
+    headers: storageHeaders({ 'Content-Type': file.type || 'application/octet-stream' }),
+    body: buffer,
+  });
+  if (!uploadResponse.ok) {
+    console.error('tax-expense-documents upload failed:', uploadResponse.status, await uploadResponse.text());
+    return NextResponse.json({ error: 'Datei konnte nicht hochgeladen werden.' }, { status: 500 });
   }
 
   const { rows: documentRows } = await db.query(
@@ -62,10 +92,17 @@ export async function GET(request: Request) {
   // request for someone else's file outright, without needing a DB lookup.
   if (!path.startsWith(`${userId}/`)) return NextResponse.json({ error: 'Nicht gefunden.' }, { status: 404 });
 
-  const admin = getSupabaseAdmin();
-  const { data, error } = await admin.storage.from(BUCKET).createSignedUrl(path, 60);
-  if (error || !data) return NextResponse.json({ error: 'URL konnte nicht erstellt werden.' }, { status: 500 });
-  return NextResponse.json({ url: data.signedUrl });
+  const signResponse = await fetch(`${storageBaseUrl()}/object/sign/${BUCKET}/${path}`, {
+    method: 'POST',
+    headers: storageHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ expiresIn: 60 }),
+  });
+  if (!signResponse.ok) {
+    console.error('tax-expense-documents sign failed:', signResponse.status, await signResponse.text());
+    return NextResponse.json({ error: 'URL konnte nicht erstellt werden.' }, { status: 500 });
+  }
+  const { signedURL } = await signResponse.json();
+  return NextResponse.json({ url: `${storageBaseUrl()}${signedURL}` });
 }
 
 export async function DELETE(request: Request) {
@@ -80,8 +117,15 @@ export async function DELETE(request: Request) {
   const document = owned[0];
   if (!document) return NextResponse.json({ error: 'Nicht gefunden.' }, { status: 404 });
 
-  const admin = getSupabaseAdmin();
-  await admin.storage.from(BUCKET).remove([document.storage_path]);
+  const deleteResponse = await fetch(`${storageBaseUrl()}/object/${BUCKET}`, {
+    method: 'DELETE',
+    headers: storageHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ prefixes: [document.storage_path] }),
+  });
+  if (!deleteResponse.ok) {
+    console.error('tax-expense-documents delete failed:', deleteResponse.status, await deleteResponse.text());
+  }
+
   const result = await db.query('DELETE FROM tax_expense_document WHERE tax_expense_document_id = $1', [id]);
   const { rows: categoryRows } = await db.query(
     `UPDATE tax_expense_category SET amount = amount - $1, updated_at = NOW() WHERE tax_expense_category_id = $2 RETURNING *`,

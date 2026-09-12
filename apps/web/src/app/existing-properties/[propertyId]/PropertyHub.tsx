@@ -166,12 +166,18 @@ const WEITERE_AKTIONEN: HubCard[] = [
   },
 ];
 
-function HubCardTile({ card, propertyId, unitId }: { card: HubCard; propertyId: string; unitId: string | null }) {
+function HubCardTile({ card, propertyId, unitId, hasMultipleUnits }: { card: HubCard; propertyId: string; unitId: string | null; hasMultipleUnits: boolean }) {
   const router = useRouter();
   const Icon = card.icon;
+  // A property-wide page (scope: 'property') has no unit in its own URL —
+  // on a multi-unit property, the unit the visitor came from is passed as a
+  // query param purely so that page's breadcrumb can keep showing it; the
+  // page's own data stays property-wide regardless.
   const href = card.scope === 'unit' && unitId
     ? `/existing-properties/${propertyId}/${card.route}/${unitId}`
-    : `/existing-properties/${propertyId}/${card.route}`;
+    : card.scope === 'property' && unitId && hasMultipleUnits
+      ? `/existing-properties/${propertyId}/${card.route}?unit=${unitId}`
+      : `/existing-properties/${propertyId}/${card.route}`;
   return (
     <button
       type="button"
@@ -305,7 +311,7 @@ export default function PropertyHub({ propertyId, unitId }: { propertyId: string
           <SectionLabel>Objektverwaltung</SectionLabel>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {OBJEKTVERWALTUNG.map((card) => (
-              <HubCardTile key={card.key} card={card} propertyId={propertyId} unitId={unitId} />
+              <HubCardTile key={card.key} card={card} propertyId={propertyId} unitId={unitId} hasMultipleUnits={units.length > 1} />
             ))}
           </div>
         </div>
@@ -315,7 +321,7 @@ export default function PropertyHub({ propertyId, unitId }: { propertyId: string
             <SectionLabel>Miete</SectionLabel>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {MIETE.map((card) => (
-                <HubCardTile key={card.key} card={card} propertyId={propertyId} unitId={unitId} />
+                <HubCardTile key={card.key} card={card} propertyId={propertyId} unitId={unitId} hasMultipleUnits={units.length > 1} />
               ))}
             </div>
           </div>
@@ -325,7 +331,7 @@ export default function PropertyHub({ propertyId, unitId }: { propertyId: string
           <SectionLabel>Finanzen &amp; Dokumente</SectionLabel>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {FINANZEN_DOKUMENTE.filter((card) => showUnitSections || card.scope === 'property').map((card) => (
-              <HubCardTile key={card.key} card={card} propertyId={propertyId} unitId={unitId} />
+              <HubCardTile key={card.key} card={card} propertyId={propertyId} unitId={unitId} hasMultipleUnits={units.length > 1} />
             ))}
           </div>
         </div>
@@ -334,7 +340,7 @@ export default function PropertyHub({ propertyId, unitId }: { propertyId: string
           <SectionLabel>Weitere Aktionen</SectionLabel>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {weitereAktionen.map((card) => (
-              <HubCardTile key={card.key} card={card} propertyId={propertyId} unitId={unitId} />
+              <HubCardTile key={card.key} card={card} propertyId={propertyId} unitId={unitId} hasMultipleUnits={units.length > 1} />
             ))}
           </div>
         </div>

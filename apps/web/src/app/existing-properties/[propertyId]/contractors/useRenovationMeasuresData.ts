@@ -2,13 +2,15 @@
 
 import { useToast } from '@/components/ui';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
+import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
 import {
     createRenovationMeasure,
     deleteRenovationMeasure,
     getRenovationMeasuresByProperty,
     updateRenovationMeasure,
 } from '@/lib/supabase/renovation_measure.supabase';
-import type { Property, RenovationMeasure } from '@immoandthebrain/types';
+import type { Property, PropertyUnit, RenovationMeasure } from '@immoandthebrain/types';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 export interface NewMeasureForm {
@@ -31,8 +33,11 @@ export const EMPTY_NEW_MEASURE: NewMeasureForm = { title: '', category: '', esti
  */
 export function useRenovationMeasuresData(propertyId: string) {
     const { showToast } = useToast();
+    const searchParams = useSearchParams();
+    const contextUnitId = searchParams.get('unit');
     const [property, setProperty] = useState<Property | null>(null);
     const [measures, setMeasures] = useState<RenovationMeasure[]>([]);
+    const [units, setUnits] = useState<PropertyUnit[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [measurePendingDelete, setMeasurePendingDelete] = useState<RenovationMeasure | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -40,14 +45,18 @@ export function useRenovationMeasuresData(propertyId: string) {
     useEffect(() => {
         const id = parseInt(propertyId, 10);
         let cancelled = false;
-        Promise.all([getPropertyById(id), getRenovationMeasuresByProperty(id)]).then(([loadedProperty, loadedMeasures]) => {
+        Promise.all([getPropertyById(id), getRenovationMeasuresByProperty(id), getPropertyUnitsByProperty(id)]).then(([loadedProperty, loadedMeasures, loadedUnits]) => {
             if (cancelled) return;
             setProperty(loadedProperty);
             setMeasures(loadedMeasures);
+            setUnits(loadedUnits);
             setIsLoading(false);
         });
         return () => { cancelled = true; };
     }, [propertyId]);
+
+    const hasMultipleUnits = units.length > 1;
+    const contextUnit = contextUnitId ? units.find((u) => u.propertyUnitId === Number(contextUnitId)) ?? null : null;
 
     const replaceMeasure = (updated: RenovationMeasure | null, fallbackId: number) => {
         if (!updated) {
@@ -147,6 +156,8 @@ export function useRenovationMeasuresData(propertyId: string) {
         property,
         measures,
         isLoading,
+        hasMultipleUnits,
+        contextUnit,
         updateLocalField,
         persistField,
         addMeasure,

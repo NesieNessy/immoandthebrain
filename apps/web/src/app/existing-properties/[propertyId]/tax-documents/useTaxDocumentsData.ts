@@ -2,6 +2,7 @@
 
 import { useToast } from '@/components/ui';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
+import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
 import {
     createTaxExpenseCategory,
     deleteTaxExpenseCategory,
@@ -14,7 +15,8 @@ import {
     getTaxExpenseDocumentUrl,
     uploadTaxExpenseDocument,
 } from '@/lib/supabase/tax_expense_document.supabase';
-import type { Property, TaxExpenseCategory, TaxExpenseDocument } from '@immoandthebrain/types';
+import type { Property, PropertyUnit, TaxExpenseCategory, TaxExpenseDocument } from '@immoandthebrain/types';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 /** Every property starts with this set the first time Steuerunterlagen is
@@ -32,8 +34,11 @@ export interface CategoryRow {
 
 export function useTaxDocumentsData(propertyId: string) {
     const { showToast } = useToast();
+    const searchParams = useSearchParams();
+    const contextUnitId = searchParams.get('unit');
     const [property, setProperty] = useState<Property | null>(null);
     const [rows, setRows] = useState<CategoryRow[]>([]);
+    const [units, setUnits] = useState<PropertyUnit[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [pendingDelete, setPendingDelete] = useState<TaxExpenseCategory | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -42,6 +47,8 @@ export function useTaxDocumentsData(propertyId: string) {
         const id = parseInt(propertyId, 10);
         let cancelled = false;
         (async () => {
+            const foundUnits = await getPropertyUnitsByProperty(id);
+            if (!cancelled) setUnits(foundUnits);
             const [foundProperty, foundCategories] = await Promise.all([
                 getPropertyById(id),
                 getTaxExpenseCategoriesByProperty(id),
@@ -147,10 +154,15 @@ export function useTaxDocumentsData(propertyId: string) {
         if (url) window.open(url, '_blank', 'noopener,noreferrer');
     };
 
+    const hasMultipleUnits = units.length > 1;
+    const contextUnit = contextUnitId ? units.find((u) => u.propertyUnitId === Number(contextUnitId)) ?? null : null;
+
     return {
         property,
         rows,
         isLoading,
+        hasMultipleUnits,
+        contextUnit,
         totalAmount,
         totalDocuments,
         pendingDelete,

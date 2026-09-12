@@ -1,7 +1,7 @@
 "use client";
 import { useState } from 'react';
 
-import { buildPropertyUseCaseBreadcrumb, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
+import { buildPropertyUseCaseBreadcrumb, formatUnitLabel, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
 import { Button, ConfirmDeleteModal, FilePickerButton, Header, Icons, Modal, NumberField, PAGE_CONTAINER_CLASS, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
@@ -72,7 +72,14 @@ export default function TaxDocuments({ propertyId }: { propertyId: string }) {
         <div className="min-h-screen bg-background pb-24">
             <main className={PAGE_CONTAINER_CLASS}>
                 <Header
-                    items={buildPropertyUseCaseBreadcrumb(data.property, propertyId, ExistingPropertiesUseCases.TaxDocuments)}
+                    items={buildPropertyUseCaseBreadcrumb(
+                        data.property,
+                        propertyId,
+                        ExistingPropertiesUseCases.TaxDocuments,
+                        data.hasMultipleUnits && data.contextUnit
+                            ? { label: formatUnitLabel(data.contextUnit.unitLabel, data.contextUnit.floor, data.contextUnit.locationNote), href: `/existing-properties/${propertyId}/${data.contextUnit.propertyUnitId}` }
+                            : undefined,
+                    )}
                 />
 
                 <div className="space-y-6">

@@ -20,14 +20,23 @@ export const BESTANDSOBJEKTE_BREADCRUMB_ROOT: BreadcrumbItem = {
   href: '/existing-properties',
 };
 
+/**
+ * `unit` is optional — pass it (a label + href back to that unit's hub) for a
+ * property-wide page reached from a specific unit's hub on a multi-unit
+ * property, purely so the breadcrumb keeps showing which unit the visitor
+ * came from. The page itself stays property-wide either way; this doesn't
+ * scope its data to that unit.
+ */
 export function buildPropertyUseCaseBreadcrumb(
   property: { street: string; houseNumber: string; postalCode: string; city: string },
   propertyId: string,
   currentLabel: string,
+  unit?: BreadcrumbItem,
 ): BreadcrumbItem[] {
   return [
     BESTANDSOBJEKTE_BREADCRUMB_ROOT,
     { label: `${property.street} ${property.houseNumber}, ${property.postalCode} ${property.city}`, href: `/existing-properties/${propertyId}` },
+    ...(unit ? [unit] : []),
     { label: currentLabel },
   ];
 }
