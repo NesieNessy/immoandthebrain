@@ -4,7 +4,7 @@ import { ToastProvider } from '@/components/ui';
 import "../styles/index.css";
 
 export const metadata: Metadata = {
-  title: "ImmoAndTheBrain - Real Estate Management Platform",
+  title: "ImmoAndTheBrain",
   description: "Modern real estate management platform for customers and properties",
   keywords: ["real estate", "property management", "immoandthebrain"],
 };
