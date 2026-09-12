@@ -4,11 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { BESTANDSOBJEKTE_BREADCRUMB_ROOT, formatUnitLabel, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
 import { Button, Header, Icons, PAGE_CONTAINER_CLASS, Table, Tag, TextFieldWithIcon, type SortDirection, type TableColumn } from '@/components/ui';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
-import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
+import { createPropertyUnit, getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
 import { getCurrentTenancyByUnit } from '@/lib/supabase/tenancy.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
 import { deCurrencyFormatter, formatDeDate } from '@/lib/utils';
-import type { Property, PropertyUnit } from '@immoandthebrain/types';
+import { type Property, type PropertyUnit, UnitUsageType } from '@immoandthebrain/types';
 import { useRouter } from 'next/navigation';
 
 import PropertyHub from './PropertyHub';
@@ -51,12 +51,12 @@ async function loadUnitRow(unit: PropertyUnit): Promise<UnitRow> {
 }
 
 /**
- * Entry point for a property. With exactly one unit it goes straight into
- * that unit's hub — there's no picking to do. With several, it shows the
- * units table first so the whole hub (Mieterdaten, Mietvertrag,
+ * Entry point for a property. A property with no Einheit yet is backed with
+ * a single default one transparently (see load() below), so in practice this
+ * always resolves to either one unit or several. With exactly one it goes
+ * straight into that unit's hub — there's no picking to do. With several, it
+ * shows the units table first so the whole hub (Mieterdaten, Mietvertrag,
  * Nebenkostenabrechnung, …) can be entered already scoped to one unit.
- * With none yet, it falls through to the hub in property-only mode so
- * "Neue Einheit" is still reachable.
  */
 export default function PropertyEntry({ propertyId }: { propertyId: string }) {
     const router = useRouter();
@@ -76,10 +76,39 @@ export default function PropertyEntry({ propertyId }: { propertyId: string }) {
             getPropertyUnitsByProperty(id),
         ]);
         setProperty(foundProperty);
-        setUnits(foundUnits);
 
-        if (foundUnits.length > 1) {
-            const rows = await Promise.all(foundUnits.map(loadUnitRow));
+        // A property with no Einheit defined yet is just as usable as one with
+        // exactly one — an Einfamilienhaus or Eigentumswohnung has no reason to
+        // differentiate between units. Rather than blocking Mieterdaten,
+        // Mietvertrag, etc. behind a manual "create a unit first" step, back it
+        // transparently with a single default unit representing the whole
+        // object the first time the property is opened. A genuinely second
+        // Einheit added later then simply joins this one, instead of the
+        // property ever having skipped past having one at all.
+        let units = foundUnits;
+        if (foundProperty && foundUnits.length === 0) {
+            const defaultUnit = await createPropertyUnit({
+                propertyId: id,
+                unitLabel: 'Gesamtes Objekt',
+                sortOrder: 0,
+                usageType: foundProperty.propertyCategory === 'GEWERBE' ? UnitUsageType.Gewerbeflaeche : UnitUsageType.Wohnung,
+                floor: null,
+                locationNote: null,
+                livingAreaM2: foundProperty.squareMeters ?? null,
+                numberOfRooms: foundProperty.numberOfRooms ?? null,
+                yearOfConstruction: foundProperty.yearOfConstruction ?? null,
+                energyEfficient: foundProperty.energyEfficient ?? null,
+                numberOfParkingSpaces: 0,
+                targetColdRent: null,
+                targetParkingRent: null,
+                targetAncillaryCosts: null,
+            });
+            if (defaultUnit) units = [defaultUnit];
+        }
+        setUnits(units);
+
+        if (units.length > 1) {
+            const rows = await Promise.all(units.map(loadUnitRow));
             setUnitRows(rows);
         }
         setIsLoading(false);
@@ -98,8 +127,9 @@ export default function PropertyEntry({ propertyId }: { propertyId: string }) {
 
     if (!property) return <PropertyNotFoundPage />;
 
-    // No units yet — show the hub in property-only mode so setup actions
-    // (Objektdaten, Neue Einheit, …) stay reachable.
+    // load() always backs a unit-less property with a default unit, so this
+    // only triggers if that creation call itself failed — fall back to the
+    // hub in property-only mode so setup actions stay reachable regardless.
     if (units.length === 0) {
         return <PropertyHub propertyId={propertyId} unitId={null} />;
     }
