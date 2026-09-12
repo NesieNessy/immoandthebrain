@@ -724,6 +724,98 @@ export type ServiceChargeCostItemInsert = Omit<ServiceChargeCostItem, 'serviceCh
 export type ServiceChargeCostItemUpdate = Partial<Omit<ServiceChargeCostItem, 'serviceChargeCostItemId' | 'serviceChargeSettlementId' | 'propertyId' | 'createdAt' | 'updatedAt'>>;
 
 // ----------------------------------------------------------------------------
+// Renovation measures (Handwerker / Sanierungsmaßnahmen overview)
+// ----------------------------------------------------------------------------
+
+export interface RenovationMeasure {
+  renovationMeasureId: number;
+  propertyId: number;
+  sortOrder: number;
+  title: string;
+  /** Drives the static Preisindikation lookup on the detail page (e.g.
+   *  "Badezimmer") — free text, unknown/unset categories just show no
+   *  estimate card. */
+  category: string | null;
+  /** Beschreibung & Schäden — free text. */
+  description: string | null;
+  /** Kosten veranschlagt — owner's own estimate. */
+  estimatedCost: number | null;
+  /** Kosten lt. Angebot — synced from whichever quote is accepted (see
+   *  RenovationMeasureQuote); its presence is what drives the "Angebot"
+   *  status checkmark (no separate boolean for it). */
+  quotedCost: number | null;
+  preferredStartDate: string | null;
+  quotedStartDate: string | null;
+  /** Abschluss ist — entered by the owner once the contractor reports the
+   *  work done; there's no contractor portal to report it directly. */
+  actualCompletionDate: string | null;
+  /** Local status flag only — no external marketplace/platform integration. */
+  published: boolean;
+  publishedAt: string | null;
+  /** Once true, the measure is read-only except the two completion
+   *  confirmations below. Set either directly or by accepting a quote. */
+  quoteAccepted: boolean;
+  /** "Handwerker bestätigt" — owner-entered proxy for the contractor
+   *  reporting completion; there's no contractor portal to report it
+   *  directly. Gates customerConfirmedCompleted (owner confirms only after
+   *  entering this). */
+  craftsmanConfirmedCompleted: boolean;
+  /** "Kunde bestätigt" — owner's own final confirmation. */
+  customerConfirmedCompleted: boolean;
+  /** Rückfragen des Handwerks — free-text notes, entered by the owner on
+   *  the contractor's behalf (phone/email), not a real message thread. */
+  craftsmanNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RenovationMeasureInsert = Omit<RenovationMeasure, 'renovationMeasureId' | 'publishedAt' | 'createdAt' | 'updatedAt'>;
+export type RenovationMeasureUpdate = Partial<Omit<RenovationMeasure, 'renovationMeasureId' | 'propertyId' | 'createdAt' | 'updatedAt'>>;
+
+/** One offer the owner received for a measure — manually entered, no
+ *  craftsperson-facing portal. Accepting a quote sets it (and clears any
+ *  other accepted quote on the same measure) and syncs the parent
+ *  measure's quotedCost/quoteAccepted. */
+export interface RenovationMeasureQuote {
+  renovationMeasureQuoteId: number;
+  renovationMeasureId: number;
+  propertyId: number;
+  sortOrder: number;
+  companyName: string;
+  cost: number | null;
+  documentPath: string | null;
+  documentFileName: string | null;
+  accepted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RenovationMeasureQuoteInsert = Omit<RenovationMeasureQuote, 'renovationMeasureQuoteId' | 'createdAt' | 'updatedAt'>;
+
+export interface RenovationMeasureDefect {
+  renovationMeasureDefectId: number;
+  renovationMeasureId: number;
+  propertyId: number;
+  sortOrder: number;
+  description: string;
+  createdAt: string;
+}
+
+export type RenovationMeasureDefectInsert = Omit<RenovationMeasureDefect, 'renovationMeasureDefectId' | 'createdAt'>;
+
+/** A damage photo attached to a measure's Beschreibung & Schäden section. */
+export interface RenovationMeasurePhoto {
+  renovationMeasurePhotoId: number;
+  renovationMeasureId: number;
+  propertyId: number;
+  storagePath: string;
+  fileName: string;
+  createdAt: string;
+}
+
+export type RenovationMeasurePhotoInsert = Omit<RenovationMeasurePhoto, 'renovationMeasurePhotoId' | 'createdAt'>;
+
+// ----------------------------------------------------------------------------
 // Financing
 // ----------------------------------------------------------------------------
 

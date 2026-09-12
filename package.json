@@ -16,7 +16,8 @@
     "docker:logs": "docker-compose logs -f",
     "supabase:start": "cd supabase && supabase start",
     "supabase:stop": "cd supabase && supabase stop",
-    "supabase:status": "cd supabase && supabase status"
+    "supabase:status": "cd supabase && supabase status",
+    "db:seed": "node scripts/seed-local-dev.cjs"
   },
   "workspaces": [
     "apps/*",

@@ -167,8 +167,15 @@ export function Table<T extends Record<string, unknown> = Record<string, unknown
         {/* border-separate (not border-collapse) — sticky positioning on
             <thead> is unreliable with collapsed table borders in several
             browsers, which otherwise let the header scroll away with the
-            body instead of staying pinned while only the rows scroll. */}
-        <table className="w-full border-separate border-spacing-0">
+            body instead of staying pinned while only the rows scroll.
+            table-layout: fixed — without it, a column's `width` is only a
+            hint the browser's auto-layout algorithm can override based on
+            cell content (most visibly, a form control's w-full resolves
+            against an as-yet-undetermined column width, so it renders
+            smaller than the declared width instead of filling it). Fixed
+            layout makes `width` authoritative and splits the remainder
+            evenly across columns that don't specify one. */}
+        <table className="w-full border-separate border-spacing-0 table-fixed">
           <thead className={cn(paginationEnabled && "sticky top-0 z-10")}>
             {/* ── Sort / label row ──────────────────────────────────── */}
             <tr className="bg-primary/8 border-b border-border">
@@ -288,7 +295,14 @@ export function Table<T extends Record<string, unknown> = Record<string, unknown
                       <td
                         key={col.key}
                         className={cn(
-                          "px-4 py-4 text-sm text-foreground whitespace-nowrap",
+                          // overflow-hidden text-ellipsis — a defensive fallback
+                          // for columns whose renderCell doesn't already
+                          // truncate its own content: with table-fixed a
+                          // column's width is authoritative, so unclipped
+                          // overflow-x content would otherwise visually bleed
+                          // into the next cell instead of the column growing
+                          // to fit it (the old auto-layout behavior).
+                          "px-4 py-4 text-sm text-foreground whitespace-nowrap overflow-hidden text-ellipsis",
                           alignClass(col.align)
                         )}
                       >

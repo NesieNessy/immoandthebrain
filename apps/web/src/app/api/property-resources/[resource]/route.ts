@@ -102,7 +102,38 @@ const RESOURCES: Record<string, ResourceConfig> = {
     columns: ['service_charge_settlement_id', 'property_id', 'sort_order', 'label', 'allocable', 'actual_amount', 'budget_amount', 'actual_share_override', 'budget_share_override'],
     orderBy: 'sort_order, service_charge_cost_item_id',
   },
+  'renovation-measures': {
+    table: 'renovation_measure',
+    primaryKey: 'renovation_measure_id',
+    columns: [
+      'property_id', 'sort_order', 'title', 'category', 'description', 'estimated_cost', 'quoted_cost',
+      'preferred_start_date', 'quoted_start_date', 'actual_completion_date',
+      'published', 'published_at', 'quote_accepted',
+      'craftsman_confirmed_completed', 'customer_confirmed_completed', 'craftsman_notes',
+    ],
+    orderBy: 'sort_order, renovation_measure_id',
+  },
+  'renovation-measure-quotes': {
+    table: 'renovation_measure_quote',
+    primaryKey: 'renovation_measure_quote_id',
+    columns: ['renovation_measure_id', 'property_id', 'sort_order', 'company_name', 'cost', 'document_path', 'document_file_name', 'accepted'],
+    orderBy: 'sort_order, renovation_measure_quote_id',
+  },
+  'renovation-measure-defects': {
+    table: 'renovation_measure_defect',
+    primaryKey: 'renovation_measure_defect_id',
+    columns: ['renovation_measure_id', 'property_id', 'sort_order', 'description'],
+    orderBy: 'sort_order, renovation_measure_defect_id',
+  },
+  'renovation-measure-photos': {
+    table: 'renovation_measure_photo',
+    primaryKey: 'renovation_measure_photo_id',
+    columns: ['renovation_measure_id', 'property_id', 'storage_path', 'file_name'],
+    orderBy: 'renovation_measure_photo_id',
+  },
 };
+
+const RENOVATION_MEASURE_CHILD_TABLES = ['renovation_measure_quote', 'renovation_measure_defect', 'renovation_measure_photo'];
 
 function getConfig(resource: string): ResourceConfig | null {
   return Object.hasOwn(RESOURCES, resource) ? RESOURCES[resource] : null;
@@ -133,6 +164,7 @@ export async function GET(request: Request, context: RouteContext) {
   const propertyUnitId = url.searchParams.get('propertyUnitId');
   const tenancyId = url.searchParams.get('tenancyId');
   const settlementId = url.searchParams.get('settlementId');
+  const measureId = url.searchParams.get('measureId');
   const filters: string[] = [];
   const values: unknown[] = [userId];
   if (id) {
@@ -154,6 +186,10 @@ export async function GET(request: Request, context: RouteContext) {
   if (settlementId && config.table === 'service_charge_cost_item') {
     values.push(Number(settlementId));
     filters.push(`r.service_charge_settlement_id = $${values.length}`);
+  }
+  if (measureId && RENOVATION_MEASURE_CHILD_TABLES.includes(config.table)) {
+    values.push(Number(measureId));
+    filters.push(`r.renovation_measure_id = $${values.length}`);
   }
   // "Current" excludes a tenancy whose move-out date has already passed
   // entirely, rather than merely deprioritizing it — a unit whose only

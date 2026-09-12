@@ -3,13 +3,13 @@ project_id = "immoandthebrain"
 
 [api]
 enabled = true
-port = 54321
+port = 55321
 schemas = ["public", "graphql_public"]
 extra_search_path = ["public"]
 max_rows = 1000
 
 [db]
-port = 54322
+port = 55322
 major_version = 15
 
 # supabase/seed.sql is stale (references a "properties" table with columns
@@ -22,7 +22,7 @@ enabled = false
 
 [db.pooler]
 enabled = false
-port = 54329
+port = 55329
 pool_mode = "transaction"
 default_pool_size = 20
 max_client_conn = 100
@@ -32,13 +32,13 @@ enabled = true
 
 [studio]
 enabled = true
-port = 54324
+port = 55324
 
 [local_smtp]
 enabled = true
-port = 54325
-smtp_port = 54326
-pop3_port = 54327
+port = 55325
+smtp_port = 55326
+pop3_port = 55327
 
 [storage]
 enabled = true
