@@ -140,7 +140,7 @@ const RESOURCES: Record<string, ResourceConfig> = {
   'tax-expense-documents': {
     table: 'tax_expense_document',
     primaryKey: 'tax_expense_document_id',
-    columns: ['tax_expense_category_id', 'property_id', 'storage_path', 'file_name'],
+    columns: ['tax_expense_category_id', 'property_id', 'storage_path', 'file_name', 'amount'],
     orderBy: 'tax_expense_document_id',
   },
 };

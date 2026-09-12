@@ -337,19 +337,20 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                         </div>
                     </div>
 
-                    <div className="flex flex-col gap-3">
+                    <div>
                         <SectionLabel>Maßnahmen</SectionLabel>
-                        <div className="flex justify-end">
-                            <Button label="Maßnahme hinzufügen" icon={<Icons.Plus className="w-4 h-4" />} variant="primary" size="sm" onClick={openAddModal} />
+                        <div className="mt-3 flex justify-end">
+                            <Button label="Maßnahme hinzufügen" icon={<Icons.Plus className="w-4 h-4" />} variant="outline" size="sm" onClick={openAddModal} />
+                        </div>
+                        <div className="mt-3">
+                            <Table
+                                columns={columns}
+                                data={tableData}
+                                emptyMessage="Noch keine Sanierungsmaßnahmen erfasst."
+                                footerLeft={`${measures.length} Einträge`}
+                            />
                         </div>
                     </div>
-
-                    <Table
-                        columns={columns}
-                        data={tableData}
-                        emptyMessage="Noch keine Sanierungsmaßnahmen erfasst."
-                        footerLeft={`${measures.length} Einträge`}
-                    />
 
                     <div className="flex items-center justify-between gap-3 p-4 rounded-lg border border-border bg-card">
                         <span className="text-sm text-muted-foreground">Gesamtkosten veranschlagt</span>

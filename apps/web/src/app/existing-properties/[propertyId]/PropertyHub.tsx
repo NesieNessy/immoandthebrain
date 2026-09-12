@@ -145,7 +145,7 @@ const FINANZEN_DOKUMENTE: HubCard[] = [
   },
   {
     key: 'contractors',
-    title: 'Handwerker',
+    title: 'Handwerkerleistungen',
     description: 'Handwerksaufträge verwalten und Angebote einholen',
     route: 'contractors',
     scope: 'property',

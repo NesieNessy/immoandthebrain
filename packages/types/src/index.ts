@@ -838,13 +838,16 @@ export interface TaxExpenseCategory {
 export type TaxExpenseCategoryInsert = Omit<TaxExpenseCategory, 'taxExpenseCategoryId' | 'createdAt' | 'updatedAt'>;
 export type TaxExpenseCategoryUpdate = Partial<Omit<TaxExpenseCategory, 'taxExpenseCategoryId' | 'propertyId' | 'createdAt' | 'updatedAt'>>;
 
-/** One uploaded receipt attached to a tax expense category. */
+/** One uploaded receipt attached to a tax expense category. Its amount is
+ *  entered once at upload time — the parent category's amount is a running
+ *  total of these, never typed in directly. */
 export interface TaxExpenseDocument {
   taxExpenseDocumentId: number;
   taxExpenseCategoryId: number;
   propertyId: number;
   storagePath: string;
   fileName: string;
+  amount: number;
   createdAt: string;
 }
 

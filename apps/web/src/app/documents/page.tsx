@@ -293,7 +293,7 @@ export default function DocumentsPage() {
             const success = pendingDelete.source === 'tenancy'
                 ? await deleteTenancyDocument(pendingDelete.id, pendingDelete.storagePath)
                 : pendingDelete.source === 'taxExpense'
-                    ? await deleteTaxExpenseDocument(pendingDelete.id, pendingDelete.storagePath)
+                    ? await deleteTaxExpenseDocument(pendingDelete.id) !== null
                     : await deleteDocument(pendingDelete.id, pendingDelete.storagePath);
             if (success) {
                 setDocuments((prev) => prev.filter((d) => d.key !== pendingDelete.key));

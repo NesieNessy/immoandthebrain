@@ -1,7 +1,6 @@
 "use client";
 
 import { useToast } from '@/components/ui';
-import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
 import {
     createTaxExpenseCategory,
@@ -33,7 +32,6 @@ export interface CategoryRow {
 
 export function useTaxDocumentsData(propertyId: string) {
     const { showToast } = useToast();
-    const { user } = useRequireAuth();
     const [property, setProperty] = useState<Property | null>(null);
     const [rows, setRows] = useState<CategoryRow[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -71,12 +69,12 @@ export function useTaxDocumentsData(propertyId: string) {
     const totalAmount = rows.reduce((sum, row) => sum + row.category.amount, 0);
     const totalDocuments = rows.reduce((sum, row) => sum + row.documents.length, 0);
 
-    const updateLocalField = (categoryId: number, patch: Partial<TaxExpenseCategory>) => {
-        setRows((prev) => prev.map((row) => row.category.taxExpenseCategoryId === categoryId ? { ...row, category: { ...row.category, ...patch } } : row));
+    const updateLocalLabel = (categoryId: number, label: string) => {
+        setRows((prev) => prev.map((row) => row.category.taxExpenseCategoryId === categoryId ? { ...row, category: { ...row.category, label } } : row));
     };
 
-    const persistField = async (categoryId: number, patch: Partial<TaxExpenseCategory>) => {
-        const updated = await updateTaxExpenseCategory(categoryId, patch);
+    const persistLabel = async (categoryId: number, label: string) => {
+        const updated = await updateTaxExpenseCategory(categoryId, { label });
         if (!updated) {
             showToast('Änderung konnte nicht gespeichert werden.', 'error');
             return;
@@ -116,25 +114,31 @@ export function useTaxDocumentsData(propertyId: string) {
         }
     };
 
-    const addDocuments = async (categoryId: number, files: FileList) => {
-        if (!property || !user || files.length === 0) return;
+    // The category's amount is never typed in directly — every upload asks
+    // "how much does this receipt add" and the server bumps the category's
+    // running total by that amount in the same request.
+    const addDocument = async (categoryId: number, file: File, amount: number) => {
         setRows((prev) => prev.map((row) => row.category.taxExpenseCategoryId === categoryId ? { ...row, isUploading: true } : row));
-        const uploaded = await Promise.all(Array.from(files).map((file) => uploadTaxExpenseDocument(user.id, property.propertyId, categoryId, file)));
-        const failures = uploaded.filter((d) => d === null).length;
-        if (failures > 0) showToast(`${failures} Beleg(e) konnten nicht hochgeladen werden.`, 'error');
+        const result = await uploadTaxExpenseDocument(categoryId, file, amount);
+        if (!result) {
+            showToast('Beleg konnte nicht hochgeladen werden.', 'error');
+            setRows((prev) => prev.map((row) => row.category.taxExpenseCategoryId === categoryId ? { ...row, isUploading: false } : row));
+            return false;
+        }
         setRows((prev) => prev.map((row) => row.category.taxExpenseCategoryId === categoryId
-            ? { ...row, isUploading: false, documents: [...row.documents, ...uploaded.filter((d): d is TaxExpenseDocument => d !== null)] }
+            ? { ...row, isUploading: false, category: result.category, documents: [...row.documents, result.document] }
             : row));
+        return true;
     };
 
     const removeDocument = async (categoryId: number, document: TaxExpenseDocument) => {
-        const success = await deleteTaxExpenseDocument(document.taxExpenseDocumentId, document.storagePath);
-        if (!success) {
+        const result = await deleteTaxExpenseDocument(document.taxExpenseDocumentId);
+        if (!result) {
             showToast('Beleg konnte nicht gelöscht werden.', 'error');
             return;
         }
         setRows((prev) => prev.map((row) => row.category.taxExpenseCategoryId === categoryId
-            ? { ...row, documents: row.documents.filter((d) => d.taxExpenseDocumentId !== document.taxExpenseDocumentId) }
+            ? { ...row, category: result.category, documents: row.documents.filter((d) => d.taxExpenseDocumentId !== document.taxExpenseDocumentId) }
             : row));
     };
 
@@ -152,11 +156,11 @@ export function useTaxDocumentsData(propertyId: string) {
         pendingDelete,
         isDeleting,
         setPendingDelete,
-        updateLocalField,
-        persistField,
+        updateLocalLabel,
+        persistLabel,
         addCategory,
         confirmDeleteCategory,
-        addDocuments,
+        addDocument,
         removeDocument,
         viewDocument,
     };

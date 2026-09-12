@@ -1,8 +1,6 @@
-import { jsonRequest, propertyResourceRequest } from '@/lib/api/propertyResources';
-import { supabase } from '@/lib/supabase/client.supabase';
-import type { TaxExpenseDocument } from '@immoandthebrain/types';
-
-const BUCKET = 'tax-expense-documents';
+import { authFetch } from '@/lib/api/authFetch';
+import { propertyResourceRequest } from '@/lib/api/propertyResources';
+import type { TaxExpenseCategory, TaxExpenseDocument } from '@immoandthebrain/types';
 
 function toDocument(row: Record<string, unknown>): TaxExpenseDocument {
     return {
@@ -11,7 +9,21 @@ function toDocument(row: Record<string, unknown>): TaxExpenseDocument {
         propertyId: row.property_id as number,
         storagePath: row.storage_path as string,
         fileName: row.file_name as string,
+        amount: Number(row.amount ?? 0),
         createdAt: row.created_at as string,
+    };
+}
+
+function toCategory(row: Record<string, unknown>): TaxExpenseCategory {
+    return {
+        taxExpenseCategoryId: row.tax_expense_category_id as number,
+        propertyId: row.property_id as number,
+        sortOrder: row.sort_order as number,
+        label: row.label as string,
+        amount: Number(row.amount ?? 0),
+        elsterReference: row.elster_reference as string | null,
+        createdAt: row.created_at as string,
+        updatedAt: row.updated_at as string,
     };
 }
 
@@ -33,36 +45,44 @@ export async function getTaxExpenseDocumentsByUser(): Promise<TaxExpenseDocument
     return data?.map(toDocument) ?? [];
 }
 
-/** Signed URL for viewing/downloading — the bucket is private. */
+/** Signed URL for viewing/downloading. Goes through the server (service
+ *  role) rather than the browser's Supabase client — the bucket is private
+ *  and RLS-gated on a real auth.uid(), which AUTH_BYPASS mode never
+ *  establishes, so an anon-key request would be rejected regardless of
+ *  ownership. The route re-checks ownership from the path itself. */
 export async function getTaxExpenseDocumentUrl(storagePath: string): Promise<string | null> {
-    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 60);
-    if (error || !data) return null;
-    return data.signedUrl;
+    const response = await authFetch(`/api/tax-expense-documents/storage?path=${encodeURIComponent(storagePath)}`);
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.url ?? null;
 }
 
 // ----------------------------------------------------------------------------
 // Mutations
 // ----------------------------------------------------------------------------
 
-export async function uploadTaxExpenseDocument(userId: string, propertyId: number, categoryId: number, file: File): Promise<TaxExpenseDocument | null> {
-    const storagePath = `${userId}/${propertyId}/${categoryId}/beleg-${crypto.randomUUID()}-${file.name}`;
-    const { error: uploadError } = await supabase.storage.from(BUCKET).upload(storagePath, file, { contentType: file.type || undefined });
-    if (uploadError) return null;
-
-    const data = await propertyResourceRequest<Record<string, unknown>>('tax-expense-documents', jsonRequest('POST', { values: {
-        tax_expense_category_id: categoryId,
-        property_id: propertyId,
-        storage_path: storagePath,
-        file_name: file.name,
-    } }));
-    if (!data) {
-        await supabase.storage.from(BUCKET).remove([storagePath]);
-        return null;
-    }
-    return toDocument(data);
+/** Uploads one receipt with the amount it contributes — the server stores
+ *  the file, records the document, and bumps the parent category's running
+ *  total by `amount` in the same request. Returns both the new document and
+ *  the category's updated total so the caller doesn't need a second fetch. */
+export async function uploadTaxExpenseDocument(
+    categoryId: number,
+    file: File,
+    amount: number,
+): Promise<{ document: TaxExpenseDocument; category: TaxExpenseCategory } | null> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('categoryId', String(categoryId));
+    formData.append('amount', String(amount));
+    const response = await authFetch('/api/tax-expense-documents/storage', { method: 'POST', body: formData });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return { document: toDocument(data.document), category: toCategory(data.category) };
 }
 
-export async function deleteTaxExpenseDocument(taxExpenseDocumentId: number, storagePath: string): Promise<boolean> {
-    await supabase.storage.from(BUCKET).remove([storagePath]);
-    return Boolean(await propertyResourceRequest<{ deleted: number }>('tax-expense-documents', { method: 'DELETE' }, { id: taxExpenseDocumentId }));
+export async function deleteTaxExpenseDocument(taxExpenseDocumentId: number): Promise<{ category: TaxExpenseCategory } | null> {
+    const response = await authFetch(`/api/tax-expense-documents/storage?id=${taxExpenseDocumentId}`, { method: 'DELETE' });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return { category: toCategory(data.category) };
 }
