@@ -131,7 +131,7 @@ export default function MeasureDetail({ propertyId, measureId }: { propertyId: s
                     items={[
                         { label: 'Bestandsobjekte', href: '/existing-properties' },
                         { label: address, href: `/existing-properties/${propertyId}` },
-                        { label: 'Handwerker', href: backHref },
+                        { label: 'Handwerkerleistungen', href: backHref },
                         { label: measure.title },
                     ]}
                 />
@@ -289,9 +289,21 @@ export default function MeasureDetail({ propertyId, measureId }: { propertyId: s
                                     <StatusIcon state={step1State} />
                                     <div className="w-px flex-1 bg-border mt-1" />
                                 </div>
-                                <div className="flex-1 min-w-0 pb-2">
-                                    <p className="text-sm font-semibold text-foreground">Ausschreibung erfolgt</p>
-                                    <p className="text-xs text-muted-foreground">Maßnahme wurde im Handwerkerportal ausgeschrieben</p>
+                                <div className="flex-1 min-w-0 pb-2 flex flex-col gap-2">
+                                    <div>
+                                        <p className="text-sm font-semibold text-foreground">Ausschreibung erfolgt</p>
+                                        <p className="text-xs text-muted-foreground">Maßnahme wurde im Handwerkerportal ausgeschrieben</p>
+                                    </div>
+                                    <div>
+                                        <Button
+                                            label={measure.published ? 'Im Handwerkerportal veröffentlicht' : 'Im Handwerkerportal veröffentlichen'}
+                                            icon={<BUTTON_DETAILS.Publish.icon className="w-4 h-4" />}
+                                            variant={measure.published ? 'outline' : 'primary'}
+                                            size="sm"
+                                            disabled={isLocked}
+                                            onClick={() => data.togglePublished()}
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
@@ -434,19 +446,8 @@ export default function MeasureDetail({ propertyId, measureId }: { propertyId: s
 
             <StickyActionBar
                 show={true}
-                leftContent={
-                    <Button
-                        label={measure.published ? 'Im Handwerkerportal veröffentlicht' : 'Im Handwerkerportal veröffentlichen'}
-                        icon={<BUTTON_DETAILS.Publish.icon className="w-4 h-4" />}
-                        variant={measure.published ? 'outline' : 'primary'}
-                        disabled={isLocked}
-                        onClick={() => data.togglePublished()}
-                    />
-                }
-                ghostLabel={BUTTON_DETAILS.Cancel.label}
-                ghostIcon={<BUTTON_DETAILS.Cancel.icon className="w-4 h-4" />}
                 onGhost={() => router.push(backHref)}
-                primaryLabel={BUTTON_DETAILS.Save.label}
+                primaryLabel="Handwerkerleistungen speichern"
                 primaryIcon={<BUTTON_DETAILS.Save.icon className="w-4 h-4" />}
                 onPrimary={() => router.push(backHref)}
             />

@@ -1,4 +1,4 @@
-# ImmoAndTheBrain - Real Estate Management Platform
+# ImmoAndTheBrain 
 
 Real estate property management and valuation platform built with Next.js and Supabase.
 

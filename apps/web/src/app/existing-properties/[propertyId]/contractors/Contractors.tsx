@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { buildPropertyUseCaseBreadcrumb, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
+import { buildPropertyUseCaseBreadcrumb, formatUnitLabel, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
 import {
     Button,
     CalendarField,
@@ -16,7 +16,6 @@ import {
     SectionLabel,
     Table,
     TextField,
-    type MenuItem,
     type TableColumn,
 } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
@@ -64,7 +63,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
     if (data.isLoading) return <PropertyLoadingPage />;
     if (!data.property) return <PropertyNotFoundPage />;
 
-    const { property, measures } = data;
+    const { property, measures, hasMultipleUnits, contextUnit } = data;
 
     const totalEstimated = measures.reduce((sum, m) => sum + (m.estimatedCost ?? 0), 0);
     const quotedMeasures = measures.filter((m) => m.quotedCost != null);
@@ -89,38 +88,37 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
         }
     };
 
-    const rowMenuItems = (measure: RenovationMeasure): MenuItem[] => [
-        {
-            label: 'Öffnen',
-            icon: <Icons.Eye className="w-4 h-4" />,
-            onClick: () => openMeasure(measure),
-        },
-        {
-            label: BUTTON_DETAILS.Delete.label,
-            icon: <BUTTON_DETAILS.Delete.icon className="w-4 h-4" />,
-            destructive: true,
-            disabled: isLocked(measure),
-            onClick: () => data.requestDeleteMeasure(measure),
-        },
-    ];
-
     const columns: TableColumn<MeasureRow>[] = [
         {
             key: 'actions',
             label: '',
-            width: '48px',
-            renderCell: (_v, row) => (
-                <div onClick={(e) => e.stopPropagation()}>
-                    <Button
-                        iconOnly
-                        icon={<Icons.MoreVertical className="w-4 h-4" />}
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`${row.measure.title}: Aktionen`}
-                        menuItems={rowMenuItems(row.measure)}
-                    />
-                </div>
-            ),
+            width: '90px',
+            renderCell: (_v, row) => {
+                const m = row.measure;
+                return (
+                    <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
+                        <Button
+                            iconOnly
+                            icon={<BUTTON_DETAILS.Publish.icon className="w-4 h-4" />}
+                            variant={m.published ? 'outline' : 'primary'}
+                            size="sm"
+                            disabled={isLocked(m)}
+                            aria-label={m.published ? `${m.title}: Veröffentlichung zurückziehen` : `${m.title}: veröffentlichen`}
+                            title={m.published ? 'Veröffentlicht' : 'Veröffentlichen'}
+                            onClick={() => data.togglePublished(m)}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => data.requestDeleteMeasure(m)}
+                            disabled={isLocked(m)}
+                            aria-label={`${m.title} löschen`}
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                            <BUTTON_DETAILS.Delete.icon className="w-4 h-4" />
+                        </button>
+                    </div>
+                );
+            },
         },
         {
             key: 'title',
@@ -135,15 +133,17 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
             renderCell: (_v, row) => {
                 const m = row.measure;
                 return (
-                    <NumberField
-                        aria-label={`Kosten veranschlagt für ${m.title}`}
-                        unit="€"
-                        min={0}
-                        disabled={isLocked(m)}
-                        value={m.estimatedCost ?? ''}
-                        onChange={(e) => data.updateLocalField(m.renovationMeasureId, { estimatedCost: e.target.value === '' ? null : Number(e.target.value) })}
-                        onBlur={() => void data.persistField(m.renovationMeasureId, { estimatedCost: m.estimatedCost })}
-                    />
+                    <div onClick={(e) => e.stopPropagation()}>
+                        <NumberField
+                            aria-label={`Kosten veranschlagt für ${m.title}`}
+                            unit="€"
+                            min={0}
+                            disabled={isLocked(m)}
+                            value={m.estimatedCost ?? ''}
+                            onChange={(e) => data.updateLocalField(m.renovationMeasureId, { estimatedCost: e.target.value === '' ? null : Number(e.target.value) })}
+                            onBlur={() => void data.persistField(m.renovationMeasureId, { estimatedCost: m.estimatedCost })}
+                        />
+                    </div>
                 );
             },
         },
@@ -154,15 +154,17 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
             renderCell: (_v, row) => {
                 const m = row.measure;
                 return (
-                    <NumberField
-                        aria-label={`Kosten laut Angebot für ${m.title}`}
-                        unit="€"
-                        min={0}
-                        disabled={isLocked(m)}
-                        value={m.quotedCost ?? ''}
-                        onChange={(e) => data.updateLocalField(m.renovationMeasureId, { quotedCost: e.target.value === '' ? null : Number(e.target.value) })}
-                        onBlur={() => void data.persistField(m.renovationMeasureId, { quotedCost: m.quotedCost })}
-                    />
+                    <div onClick={(e) => e.stopPropagation()}>
+                        <NumberField
+                            aria-label={`Kosten laut Angebot für ${m.title}`}
+                            unit="€"
+                            min={0}
+                            disabled={isLocked(m)}
+                            value={m.quotedCost ?? ''}
+                            onChange={(e) => data.updateLocalField(m.renovationMeasureId, { quotedCost: e.target.value === '' ? null : Number(e.target.value) })}
+                            onBlur={() => void data.persistField(m.renovationMeasureId, { quotedCost: m.quotedCost })}
+                        />
+                    </div>
                 );
             },
         },
@@ -173,16 +175,18 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
             renderCell: (_v, row) => {
                 const m = row.measure;
                 return (
-                    <CalendarField
-                        aria-label={`Wunschstart für ${m.title}`}
-                        disabled={isLocked(m)}
-                        value={toDate(m.preferredStartDate)}
-                        onChange={(date) => {
-                            const patch = { preferredStartDate: toDateInput(date) };
-                            data.updateLocalField(m.renovationMeasureId, patch);
-                            void data.persistField(m.renovationMeasureId, patch);
-                        }}
-                    />
+                    <div onClick={(e) => e.stopPropagation()}>
+                        <CalendarField
+                            aria-label={`Wunschstart für ${m.title}`}
+                            disabled={isLocked(m)}
+                            value={toDate(m.preferredStartDate)}
+                            onChange={(date) => {
+                                const patch = { preferredStartDate: toDateInput(date) };
+                                data.updateLocalField(m.renovationMeasureId, patch);
+                                void data.persistField(m.renovationMeasureId, patch);
+                            }}
+                        />
+                    </div>
                 );
             },
         },
@@ -193,16 +197,18 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
             renderCell: (_v, row) => {
                 const m = row.measure;
                 return (
-                    <CalendarField
-                        aria-label={`Start laut Angebot für ${m.title}`}
-                        disabled={isLocked(m)}
-                        value={toDate(m.quotedStartDate)}
-                        onChange={(date) => {
-                            const patch = { quotedStartDate: toDateInput(date) };
-                            data.updateLocalField(m.renovationMeasureId, patch);
-                            void data.persistField(m.renovationMeasureId, patch);
-                        }}
-                    />
+                    <div onClick={(e) => e.stopPropagation()}>
+                        <CalendarField
+                            aria-label={`Start laut Angebot für ${m.title}`}
+                            disabled={isLocked(m)}
+                            value={toDate(m.quotedStartDate)}
+                            onChange={(date) => {
+                                const patch = { quotedStartDate: toDateInput(date) };
+                                data.updateLocalField(m.renovationMeasureId, patch);
+                                void data.persistField(m.renovationMeasureId, patch);
+                            }}
+                        />
+                    </div>
                 );
             },
         },
@@ -213,32 +219,20 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
             renderCell: (_v, row) => {
                 const m = row.measure;
                 return (
-                    <CalendarField
-                        aria-label={`Tatsächlicher Abschluss für ${m.title}`}
-                        value={toDate(m.actualCompletionDate)}
-                        onChange={(date) => {
-                            const next = toDateInput(date);
-                            // Clearing the completion date can't leave a stale
-                            // customer confirmation behind it.
-                            const patch = next ? { actualCompletionDate: next } : { actualCompletionDate: next, customerConfirmedCompleted: false };
-                            data.updateLocalField(m.renovationMeasureId, patch);
-                            void data.persistField(m.renovationMeasureId, patch);
-                        }}
-                    />
-                );
-            },
-        },
-        {
-            key: 'published',
-            label: 'Veröffentlichen',
-            width: '170px',
-            align: 'center',
-            renderCell: (_v, row) => {
-                const m = row.measure;
-                return m.published ? (
-                    <Button label="Veröffentlicht" size="sm" variant="outline" icon={<Icons.Check className="w-4 h-4" />} disabled={isLocked(m)} onClick={() => data.togglePublished(m)} />
-                ) : (
-                    <Button label={BUTTON_DETAILS.Publish.label} size="sm" variant="primary" icon={<BUTTON_DETAILS.Publish.icon className="w-4 h-4" />} disabled={isLocked(m)} onClick={() => data.togglePublished(m)} />
+                    <div onClick={(e) => e.stopPropagation()}>
+                        <CalendarField
+                            aria-label={`Tatsächlicher Abschluss für ${m.title}`}
+                            value={toDate(m.actualCompletionDate)}
+                            onChange={(date) => {
+                                const next = toDateInput(date);
+                                // Clearing the completion date can't leave a stale
+                                // customer confirmation behind it.
+                                const patch = next ? { actualCompletionDate: next } : { actualCompletionDate: next, customerConfirmedCompleted: false };
+                                data.updateLocalField(m.renovationMeasureId, patch);
+                                void data.persistField(m.renovationMeasureId, patch);
+                            }}
+                        />
+                    </div>
                 );
             },
         },
@@ -264,7 +258,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                 return (
                     <button
                         type="button"
-                        onClick={() => data.toggleQuoteAccepted(m)}
+                        onClick={(e) => { e.stopPropagation(); data.toggleQuoteAccepted(m); }}
                         aria-pressed={m.quoteAccepted}
                         aria-label={m.quoteAccepted ? `${m.title} als nicht beauftragt markieren` : `${m.title} als beauftragt markieren`}
                         className="mx-auto flex items-center justify-center cursor-pointer"
@@ -287,7 +281,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                 return (
                     <button
                         type="button"
-                        onClick={() => data.toggleCustomerConfirmed(m)}
+                        onClick={(e) => { e.stopPropagation(); data.toggleCustomerConfirmed(m); }}
                         disabled={!canConfirm}
                         aria-pressed={m.customerConfirmedCompleted}
                         aria-label={m.customerConfirmedCompleted ? `${m.title} als nicht abgeschlossen markieren` : `${m.title} als abgeschlossen bestätigen`}
@@ -309,7 +303,14 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
         <div className="min-h-screen bg-background pb-24">
             <main className={PAGE_CONTAINER_CLASS}>
                 <Header
-                    items={buildPropertyUseCaseBreadcrumb(property, propertyId, ExistingPropertiesUseCases.Contractors)}
+                    items={buildPropertyUseCaseBreadcrumb(
+                        property,
+                        propertyId,
+                        ExistingPropertiesUseCases.Contractors,
+                        hasMultipleUnits && contextUnit
+                            ? { label: formatUnitLabel(contextUnit.unitLabel, contextUnit.floor, contextUnit.locationNote), href: `/existing-properties/${propertyId}/${contextUnit.propertyUnitId}` }
+                            : undefined,
+                    )}
                 />
 
                 <div className="flex flex-col gap-6">
@@ -337,31 +338,20 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                         </div>
                     </div>
 
-                    <div className="flex flex-col gap-3">
+                    <div>
                         <SectionLabel>Maßnahmen</SectionLabel>
-                        <div className="flex justify-end">
-                            <Button label="Maßnahme hinzufügen" icon={<Icons.Plus className="w-4 h-4" />} variant="primary" size="sm" onClick={openAddModal} />
+                        <div className="mt-3 flex justify-end">
+                            <Button label="Maßnahme hinzufügen" icon={<Icons.Plus className="w-4 h-4" />} variant="outline" size="sm" onClick={openAddModal} />
                         </div>
-                    </div>
-
-                    <Table
-                        columns={columns}
-                        data={tableData}
-                        emptyMessage="Noch keine Sanierungsmaßnahmen erfasst."
-                        footerLeft={`${measures.length} Einträge`}
-                    />
-
-                    <div className="flex items-center justify-between gap-3 p-4 rounded-lg border border-border bg-card">
-                        <span className="text-sm text-muted-foreground">Gesamtkosten veranschlagt</span>
-                        <span className="flex items-center gap-2">
-                            {quotedMeasures.length > 0 && (
-                                <span className={`inline-flex items-center gap-1 text-sm ${deviation > 0 ? 'text-warning' : deviation < 0 ? 'text-success' : 'text-muted-foreground'}`}>
-                                    {deviation !== 0 && (deviation > 0 ? <Icons.TrendingUp className="w-3.5 h-3.5" /> : <Icons.TrendingDown className="w-3.5 h-3.5" />)}
-                                    {deviation > 0 ? '+' : ''}{euro(deviation)} über Angebot
-                                </span>
-                            )}
-                            <span className="text-lg font-semibold text-foreground">{euro(totalEstimated)}</span>
-                        </span>
+                        <div className="mt-3">
+                            <Table
+                                columns={columns}
+                                data={tableData}
+                                onRowClick={(row) => openMeasure(row.measure)}
+                                emptyMessage="Noch keine Sanierungsmaßnahmen erfasst."
+                                footerLeft={`${measures.length} Einträge`}
+                            />
+                        </div>
                     </div>
                 </div>
             </main>

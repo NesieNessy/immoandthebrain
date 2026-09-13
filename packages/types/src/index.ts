@@ -816,6 +816,44 @@ export interface RenovationMeasurePhoto {
 export type RenovationMeasurePhotoInsert = Omit<RenovationMeasurePhoto, 'renovationMeasurePhotoId' | 'createdAt'>;
 
 // ----------------------------------------------------------------------------
+// TaxExpenseCategory — Steuerunterlagen ("Angefallene Kosten")
+// ----------------------------------------------------------------------------
+
+/** One property-scoped expense category (Fahrtkosten, Übernachtungskosten,
+ *  ...) with a manually-entered total and any number of uploaded receipts.
+ *  Entwicklungsstufe 1 — manual entry only, no OCR extraction, no WISO
+ *  export; elsterReference is a free-text field the user fills in
+ *  themselves rather than a value this app looks up or validates. */
+export interface TaxExpenseCategory {
+  taxExpenseCategoryId: number;
+  propertyId: number;
+  sortOrder: number;
+  label: string;
+  amount: number;
+  elsterReference: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type TaxExpenseCategoryInsert = Omit<TaxExpenseCategory, 'taxExpenseCategoryId' | 'createdAt' | 'updatedAt'>;
+export type TaxExpenseCategoryUpdate = Partial<Omit<TaxExpenseCategory, 'taxExpenseCategoryId' | 'propertyId' | 'createdAt' | 'updatedAt'>>;
+
+/** One uploaded receipt attached to a tax expense category. Its amount is
+ *  entered once at upload time — the parent category's amount is a running
+ *  total of these, never typed in directly. */
+export interface TaxExpenseDocument {
+  taxExpenseDocumentId: number;
+  taxExpenseCategoryId: number;
+  propertyId: number;
+  storagePath: string;
+  fileName: string;
+  amount: number;
+  createdAt: string;
+}
+
+export type TaxExpenseDocumentInsert = Omit<TaxExpenseDocument, 'taxExpenseDocumentId' | 'createdAt'>;
+
+// ----------------------------------------------------------------------------
 // Financing
 // ----------------------------------------------------------------------------
 

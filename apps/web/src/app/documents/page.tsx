@@ -5,6 +5,7 @@ import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { deleteDocument, getDocumentsByUser, getDocumentUrl, uploadDocument } from '@/lib/supabase/document.supabase';
 import { getProperties } from '@/lib/supabase/property.supabase';
 import { getAllQuickChecks, type QuickCheckOverview } from '@/lib/supabase/quick_check.supabase';
+import { deleteTaxExpenseDocument, getTaxExpenseDocumentsByUser, getTaxExpenseDocumentUrl } from '@/lib/supabase/tax_expense_document.supabase';
 import { archiveTenancyDocument, deleteTenancyDocument, getTenancyDocumentsByUser, getTenancyDocumentUrl } from '@/lib/supabase/tenancy_document.supabase';
 import { cn } from '@/lib/utils';
 import type { DocumentCategory, Property } from '@immoandthebrain/types';
@@ -21,7 +22,7 @@ type ViewMode = 'list' | 'byObject' | 'byCategory';
  *  per source, so it travels with the row for view/download/delete. */
 interface DisplayDocument {
     key: string;
-    source: 'document' | 'tenancy';
+    source: 'document' | 'tenancy' | 'taxExpense';
     id: number;
     name: string;
     category: DocumentCategory;
@@ -30,7 +31,7 @@ interface DisplayDocument {
     documentDate: string | null;
     fileName: string;
     storagePath: string;
-    bucket: 'documents' | 'tenancy-documents';
+    bucket: 'documents' | 'tenancy-documents' | 'tax-expense-documents';
     /** Only ever set for source: 'tenancy' rows — the `document` table has no
      *  versioning. Non-null = an old version, superseded by a later upload
      *  into the same slot; hidden by default, revealed via "Verlauf anzeigen". */
@@ -127,9 +128,10 @@ export default function DocumentsPage() {
         Promise.all([
             getDocumentsByUser(user.id),
             getTenancyDocumentsByUser(),
+            getTaxExpenseDocumentsByUser(),
             getProperties(user.id),
             getAllQuickChecks(true),
-        ]).then(([docs, tenancyDocs, props, qcs]) => {
+        ]).then(([docs, tenancyDocs, taxExpenseDocs, props, qcs]) => {
             const fromDocuments: DisplayDocument[] = docs.map((d) => ({
                 key: `document-${d.documentId}`,
                 source: 'document',
@@ -158,7 +160,21 @@ export default function DocumentsPage() {
                 bucket: 'tenancy-documents',
                 supersededAt: d.supersededAt,
             }));
-            setDocuments([...fromDocuments, ...fromTenancy]);
+            const fromTaxExpense: DisplayDocument[] = taxExpenseDocs.map((d) => ({
+                key: `taxExpense-${d.taxExpenseDocumentId}`,
+                source: 'taxExpense',
+                id: d.taxExpenseDocumentId,
+                name: 'Steuerbeleg',
+                category: 'Bestandsobjekt',
+                propertyId: d.propertyId,
+                quickCheckId: null,
+                documentDate: d.createdAt,
+                fileName: d.fileName,
+                storagePath: d.storagePath,
+                bucket: 'tax-expense-documents',
+                supersededAt: null,
+            }));
+            setDocuments([...fromDocuments, ...fromTenancy, ...fromTaxExpense]);
             setProperties(props);
             setQuickChecks(qcs);
             setIsLoading(false);
@@ -238,8 +254,11 @@ export default function DocumentsPage() {
         },
     ];
 
-    const resolveUrl = (doc: DisplayDocument): Promise<string | null> =>
-        doc.source === 'tenancy' ? getTenancyDocumentUrl(doc.storagePath) : getDocumentUrl(doc.storagePath);
+    const resolveUrl = (doc: DisplayDocument): Promise<string | null> => {
+        if (doc.source === 'tenancy') return getTenancyDocumentUrl(doc.storagePath);
+        if (doc.source === 'taxExpense') return getTaxExpenseDocumentUrl(doc.storagePath);
+        return getDocumentUrl(doc.storagePath);
+    };
 
     const handleView = async (doc: DisplayDocument) => {
         const url = await resolveUrl(doc);
@@ -273,7 +292,9 @@ export default function DocumentsPage() {
         try {
             const success = pendingDelete.source === 'tenancy'
                 ? await deleteTenancyDocument(pendingDelete.id, pendingDelete.storagePath)
-                : await deleteDocument(pendingDelete.id, pendingDelete.storagePath);
+                : pendingDelete.source === 'taxExpense'
+                    ? await deleteTaxExpenseDocument(pendingDelete.id) !== null
+                    : await deleteDocument(pendingDelete.id, pendingDelete.storagePath);
             if (success) {
                 setDocuments((prev) => prev.filter((d) => d.key !== pendingDelete.key));
                 setPendingDelete(null);

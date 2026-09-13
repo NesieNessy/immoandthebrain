@@ -1,8 +1,8 @@
 {
-  "name": "immoandthebrain-monorepo",
+  "name": "immoandthebrain",
   "version": "1.0.0",
   "private": true,
-  "description": "ImmoAndTheBrain - Real Estate Management Platform Monorepo",
+  "description": "ImmoAndTheBrain",
   "scripts": {
     "dev": "npm run dev --workspace=apps/web",
     "build": "npm run build --workspace=apps/web",

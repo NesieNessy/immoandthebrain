@@ -6,7 +6,7 @@ export enum ExistingPropertiesUseCases {
   TenantHistory = 'Mieterhistorie',
   TenancyTrends = 'Mietentwicklung',
   ServiceChargeSettlement = 'Nebenkostenabrechnung',
-  Contractors = 'Handwerker',
+  Contractors = 'Handwerkerleistungen',
   TaxDocuments = 'Steuerunterlagen',
   KeyMetrics = 'Kennzahlen',
   Sale = 'Verkauf',

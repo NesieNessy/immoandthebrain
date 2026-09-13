@@ -15,24 +15,36 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-http://localhost:54321}
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-local-dev-anon-key}
+        # Matches supabase/config.toml's [api] port — a `supabase start` stack
+        # runs alongside this compose stack for real Storage (AUTH_BYPASS mode
+        # skips Supabase Auth, so it never has a real session; Storage RLS is
+        # instead satisfied server-side via SUPABASE_SERVICE_ROLE_KEY below).
+        # The anon/service_role keys are Supabase CLI's fixed local-dev demo
+        # keys — identical on every `supabase start`, safe to default here.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-http://localhost:55321}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
         NEXT_PUBLIC_AUTH_BYPASS: ${NEXT_PUBLIC_AUTH_BYPASS:-true}
         DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/postgres}
     container_name: immoandthebrain-web
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-http://localhost:54321}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-local-dev-anon-key}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-http://localhost:55321}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
       NEXT_PUBLIC_AUTH_BYPASS: ${NEXT_PUBLIC_AUTH_BYPASS:-true}
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/postgres}
+      # Server-only — from inside the container "localhost" means the
+      # container itself, not the host running `supabase start`, hence
+      # host.docker.internal (Docker Desktop's route back to the host).
+      SUPABASE_ADMIN_URL: ${SUPABASE_ADMIN_URL:-http://host.docker.internal:55321}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}
     depends_on:
       db:
         condition: service_healthy
