@@ -217,32 +217,36 @@ type VerifyOtpSession = {
  * (this suite's CI runtime) doesn't have, and failed the whole test before
  * a single request went out.
  *
- * Signs in via admin password-set + password grant rather than
- * generateLink(type: 'magiclink'): the bypass user's auth.users row is
- * seeded directly by 20260224000006_zz_dev_user.sql, with no matching
- * auth.identities row (real signups create both together) — generateLink's
- * email lookup goes through identities, doesn't find this user, and tries
- * to create a new one, colliding on the email unique constraint. Setting
- * the password via PUT /admin/users/{id} (by the already-known bypass user
- * id, not an email lookup) and then signing in with it sidesteps that path
- * entirely.
+ * Sets the password directly via SQL rather than through any GoTrue Admin
+ * API call: the bypass user's auth.users row is seeded directly by
+ * 20260224000006_zz_dev_user.sql (not through a normal signup), and both
+ * generateLink(type: 'magiclink') (email lookup goes through auth.identities,
+ * which this row has none of, so it tries to create a new user and collides
+ * on the email unique constraint) and PUT /admin/users/{id} (plain 404 "user
+ * not found" for this same id) fail to see it as a valid existing user.
+ * pgcrypto's crypt()/gen_salt('bf') produces a standard bcrypt hash — the
+ * same format GoTrue itself writes to encrypted_password — so writing it
+ * directly and then signing in through the public (non-admin) password
+ * grant sidesteps GoTrue's admin user-lookup entirely.
  */
 async function signInBypassUserForStorage(page: Page) {
     const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
     const anonKey = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-    const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
     const password = `e2e-bypass-${Date.now()}`;
 
-    const setPasswordResponse = await fetch(`${supabaseUrl}/auth/v1/admin/users/${BYPASS_USER_ID}`, {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${serviceRoleKey}`,
-            apikey: serviceRoleKey,
-        },
-        body: JSON.stringify({ password, email_confirm: true }),
-    });
-    if (!setPasswordResponse.ok) throw new Error(`Setting bypass-user password failed: ${await setPasswordResponse.text()}`);
+    const dbClient = new Client({ connectionString: requireDatabaseUrl() });
+    await dbClient.connect();
+    try {
+        await dbClient.query(
+            `UPDATE auth.users
+             SET encrypted_password = crypt($1, gen_salt('bf')),
+                 email_confirmed_at = COALESCE(email_confirmed_at, NOW())
+             WHERE id = $2`,
+            [password, BYPASS_USER_ID],
+        );
+    } finally {
+        await dbClient.end();
+    }
 
     const tokenResponse = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
         method: 'POST',
