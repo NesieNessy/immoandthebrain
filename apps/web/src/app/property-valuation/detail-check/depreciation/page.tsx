@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Dropdown, LoadingScreen, PillOptions, ReadOnlyField, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
+import { Button, Dropdown, LoadingScreen, PillOptions, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
@@ -13,6 +13,7 @@ import {
   type ModernizationSelections,
   type PriceSplitMode,
 } from '@/lib/detailCheck/depreciation';
+import { deCurrencyFormatter, deNumberFormatter } from '@/lib/utils';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
@@ -45,24 +46,19 @@ type DepreciationResponse = {
   };
 };
 
-const currencyFormatter = new Intl.NumberFormat('de-DE', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-const numberFormatter = new Intl.NumberFormat('de-DE', {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
-
 const residentialTypeOptions = [
   { value: 'EIGENTUMSWOHNUNG', label: 'Eigentumswohnung (= Mehrfamilienhaus)' },
   { value: 'HOLZBAUWEISE', label: 'Holzbauweise / minderer Standard' },
   { value: 'DENKMALGESCHUETZT', label: 'Denkmalgeschütztes Gebäude (Einzelfall)' },
 ];
 
-const MODE_OPTIONS = [
-  { value: 'STANDARD', label: 'Standard' },
-  { value: 'INDIVIDUAL', label: 'Individuell' },
+// Matches the mode toggle on the existing-property RND/Kaufpreisaufteilung
+// editors (AdjustRnd, AdjustDistribution) exactly, so switching between
+// setting these up for the first time here and adjusting them later on an
+// existing property feels like the same control, not two different ones.
+const RND_MODE_OPTIONS = [
+  { value: 'STANDARD', label: 'Standard (50 Jahre)' },
+  { value: 'INDIVIDUAL', label: 'Individuell prüfen' },
 ];
 
 function valueString(value: number | string | null | undefined): string {
@@ -161,6 +157,19 @@ function DepreciationContent() {
     ? context?.standardSplit
     : individualSplit;
 
+  // Dynamic label mirrors AdjustDistribution's own Standard pill exactly —
+  // it doubles as the "which city default am I getting" indicator there, so
+  // it needs to say the same thing here.
+  const priceSplitModeOptions = [
+    {
+      value: 'STANDARD',
+      label: context
+        ? `Standard (${deNumberFormatter.format(context.standardSplit.buildingSharePercent)} / ${deNumberFormatter.format(context.standardSplit.landSharePercent)})`
+        : 'Standard',
+    },
+    { value: 'INDIVIDUAL', label: 'Individuell berechnen' },
+  ];
+
   const persist = async (): Promise<boolean> => {
     if (isSaving) return false;
     setIsSaving(true);
@@ -202,14 +211,6 @@ function DepreciationContent() {
       title="Restnutzungsdauer in Jahren"
       beforeStepChange={persist}
       showFieldLegend
-      actions={
-        <Button
-          label="Überspringen"
-          variant="outline"
-          hideLabelOnMobile
-          onClick={() => router.push(`/property-valuation/detail-check/renovation${suffix}`)}
-        />
-      }
     >
       <div className="pb-24">
         {error && (
@@ -234,27 +235,38 @@ function DepreciationContent() {
 
             <div className="flex flex-col gap-2">
               <SectionLabel>Berechnungsmodus</SectionLabel>
-              <div className="grid gap-4 pt-1 md:grid-cols-[220px_1fr_1fr] md:items-center">
+              <div className="pt-3">
                 <PillOptions
                   size="md"
-                  options={MODE_OPTIONS}
+                  options={RND_MODE_OPTIONS}
                   value={depreciationMode}
                   onChange={(value) => setDepreciationMode(value as DepreciationMode)}
                 />
-                <div className="grid grid-cols-[80px_minmax(0,1fr)] items-center gap-3">
-                  <span>RND:</span>
-                  <ReadOnlyField
-                    value={selectedRnd ? numberFormatter.format(selectedRnd.remainingUsefulLifeYears) : '-'}
-                    suffix="Jahre"
-                    align="right"
-                    helperText={!selectedRnd ? 'Bitte zunächst alle Modernisierungsangaben auswählen.' : undefined}
-                  />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/30 p-4 sm:flex-row sm:items-center">
+              <div className="flex shrink-0 gap-8">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">RND</p>
+                  <p className="text-lg font-semibold text-foreground">
+                    {selectedRnd ? `${deNumberFormatter.format(selectedRnd.remainingUsefulLifeYears)} Jahre` : '– Jahre'}
+                  </p>
                 </div>
-                <div className="grid grid-cols-[80px_minmax(0,1fr)] items-center gap-3">
-                  <span>AfA:</span>
-                  <ReadOnlyField value={selectedRnd ? numberFormatter.format(selectedRnd.afaPercent) : '-'} suffix="%" align="right" />
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">AfA</p>
+                  <p className="text-lg font-semibold text-foreground">
+                    {selectedRnd ? `${deNumberFormatter.format(selectedRnd.afaPercent)}%` : '– %'}
+                  </p>
                 </div>
               </div>
+              <p className="text-sm text-muted-foreground sm:ml-auto sm:text-right">
+                {depreciationMode === 'STANDARD'
+                  ? 'Standardwert gemäß gesetzlicher Regelung. Baujahr und Modernisierungen werden nicht berücksichtigt.'
+                  : selectedRnd
+                    ? 'Individuell ermittelt anhand von Baujahr, Objektkategorie und Modernisierungen.'
+                    : 'Bitte zunächst alle Modernisierungsangaben auswählen.'}
+              </p>
             </div>
 
             {depreciationMode === 'INDIVIDUAL' && (
@@ -289,12 +301,17 @@ function DepreciationContent() {
 
             <div className="flex flex-col gap-2">
               <SectionLabel>Kaufpreisaufteilung</SectionLabel>
-              <PillOptions
-                size="md"
-                options={MODE_OPTIONS}
-                value={priceSplitMode}
-                onChange={(value) => setPriceSplitMode(value as PriceSplitMode)}
-              />
+              <p className="pt-1 text-sm text-muted-foreground">
+                Kaufpreis {deCurrencyFormatter.format(context.purchasePrice)} €
+              </p>
+              <div className="pt-2">
+                <PillOptions
+                  size="md"
+                  options={priceSplitModeOptions}
+                  value={priceSplitMode}
+                  onChange={(value) => setPriceSplitMode(value as PriceSplitMode)}
+                />
+              </div>
             </div>
 
             {priceSplitMode === 'INDIVIDUAL' && (
@@ -311,16 +328,27 @@ function DepreciationContent() {
 
             <div className="flex flex-col gap-2">
               <SectionLabel>Berechnete Aufteilung</SectionLabel>
-              <p className="pt-1 text-lg text-foreground">
-                Für Ihre Stadt {context.city ? `(${context.city})` : ''} lautet die Aufteilung:
-              </p>
-              <div className="grid max-w-3xl gap-4 md:grid-cols-[220px_160px_220px] md:items-center">
-                <div className="text-lg font-medium">Gebäude</div>
-                <ReadOnlyField value={numberFormatter.format(selectedSplit.buildingSharePercent)} suffix="%" align="right" />
-                <ReadOnlyField value={currencyFormatter.format(selectedSplit.buildingValue)} suffix="€" align="right" />
-                <div className="text-lg font-medium">Grund und Boden</div>
-                <ReadOnlyField value={numberFormatter.format(selectedSplit.landSharePercent)} suffix="%" align="right" />
-                <ReadOnlyField value={currencyFormatter.format(selectedSplit.landValue)} suffix="€" align="right" />
+              <div className="grid grid-cols-1 gap-4 pt-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Gebäude</p>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-2xl font-semibold text-foreground">
+                      {deNumberFormatter.format(selectedSplit.buildingSharePercent)}
+                      <span className="ml-0.5 text-sm font-normal text-muted-foreground">%</span>
+                    </p>
+                    <p className="text-sm text-muted-foreground">{deCurrencyFormatter.format(selectedSplit.buildingValue)} €</p>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Grund und Boden</p>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-2xl font-semibold text-foreground">
+                      {deNumberFormatter.format(selectedSplit.landSharePercent)}
+                      <span className="ml-0.5 text-sm font-normal text-muted-foreground">%</span>
+                    </p>
+                    <p className="text-sm text-muted-foreground">{deCurrencyFormatter.format(selectedSplit.landValue)} €</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -332,6 +360,9 @@ function DepreciationContent() {
         ghostLabel={BUTTON_DETAILS.Back.label}
         ghostIcon={<BUTTON_DETAILS.Back.icon />}
         onGhost={() => void saveAndNavigate('/property-valuation/detail-check/financing')}
+        secondaryLabel={BUTTON_DETAILS.Skip.label}
+        secondaryIcon={<BUTTON_DETAILS.Skip.icon />}
+        onSecondary={() => router.push(`/property-valuation/detail-check/renovation${suffix}`)}
         primaryLabel="Weiter"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving}

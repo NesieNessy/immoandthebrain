@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, LoadingScreen, SectionLabel, StickyActionBar, Tag } from '@/components/ui';
+import { LoadingScreen, SectionLabel, StickyActionBar, Tag } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import {
@@ -148,14 +148,6 @@ function MacroLocationContent() {
     <PropertyValuationLayout
       currentStep={7}
       title="Mikro- und Makrolage"
-      actions={
-        <Button
-          label="Überspringen"
-          variant="outline"
-          hideLabelOnMobile
-          onClick={() => router.push(`/property-valuation/detail-check/comparison${suffix}`)}
-        />
-      }
     >
       <div className="pb-24">
         {error && (
@@ -217,6 +209,9 @@ function MacroLocationContent() {
         ghostLabel={BUTTON_DETAILS.Back.label}
         ghostIcon={<BUTTON_DETAILS.Back.icon />}
         onGhost={() => router.push(`/property-valuation/detail-check/calculator${suffix}`)}
+        secondaryLabel={BUTTON_DETAILS.Skip.label}
+        secondaryIcon={<BUTTON_DETAILS.Skip.icon />}
+        onSecondary={() => router.push(`/property-valuation/detail-check/comparison${suffix}`)}
         primaryLabel="Weiter"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving}

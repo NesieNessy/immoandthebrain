@@ -206,46 +206,52 @@ type VerifyOtpSession = {
  * uploads go straight from the browser to Supabase Storage (not through the
  * app's own API) and are RLS-gated on auth.uid(), which is NULL for an
  * unauthenticated anon request, so under bypass mode they're silently
- * rejected. Mint a real GoTrue session for the bypass user (magic-link +
- * verifyOtp, via the service-role key that's only ever available here in
- * the Node test process) and seed it into the page's localStorage under the
- * same key @supabase/supabase-js itself reads on boot, exactly as if the
- * browser had a session persisted from a previous, real login.
+ * rejected. Mint a real GoTrue session for the bypass user and seed it into
+ * the page's localStorage under the same key @supabase/supabase-js itself
+ * reads on boot, exactly as if the browser had a session persisted from a
+ * previous, real login.
  *
  * Talks to GoTrue's REST API directly with plain fetch rather than through
  * @supabase/supabase-js's createClient — that unconditionally spins up a
  * RealtimeClient, which needs a native WebSocket constructor that Node 20
  * (this suite's CI runtime) doesn't have, and failed the whole test before
- * a single request went out. Raw fetch sidesteps that entirely; the two
- * response shapes read below (hashed_token, then the flat session fields)
- * are exactly what the SDK's own generateLink/verifyOtp reshape from.
+ * a single request went out.
+ *
+ * Signs in via admin password-set + password grant rather than
+ * generateLink(type: 'magiclink'): the bypass user's auth.users row is
+ * seeded directly by 20260224000006_zz_dev_user.sql, with no matching
+ * auth.identities row (real signups create both together) — generateLink's
+ * email lookup goes through identities, doesn't find this user, and tries
+ * to create a new one, colliding on the email unique constraint. Setting
+ * the password via PUT /admin/users/{id} (by the already-known bypass user
+ * id, not an email lookup) and then signing in with it sidesteps that path
+ * entirely.
  */
 async function signInBypassUserForStorage(page: Page) {
     const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
     const anonKey = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
     const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
+    const password = `e2e-bypass-${Date.now()}`;
 
-    const linkResponse = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
-        method: 'POST',
+    const setPasswordResponse = await fetch(`${supabaseUrl}/auth/v1/admin/users/${BYPASS_USER_ID}`, {
+        method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${serviceRoleKey}`,
             apikey: serviceRoleKey,
         },
-        body: JSON.stringify({ type: 'magiclink', email: 'dev@immoandthebrain.local' }),
+        body: JSON.stringify({ password, email_confirm: true }),
     });
-    if (!linkResponse.ok) throw new Error(`generateLink failed: ${await linkResponse.text()}`);
-    const { hashed_token: tokenHash } = await linkResponse.json() as { hashed_token?: string };
-    if (!tokenHash) throw new Error('generateLink did not return a hashed_token.');
+    if (!setPasswordResponse.ok) throw new Error(`Setting bypass-user password failed: ${await setPasswordResponse.text()}`);
 
-    const verifyResponse = await fetch(`${supabaseUrl}/auth/v1/verify`, {
+    const tokenResponse = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', apikey: anonKey },
-        body: JSON.stringify({ type: 'magiclink', token_hash: tokenHash }),
+        body: JSON.stringify({ email: 'dev@immoandthebrain.local', password }),
     });
-    if (!verifyResponse.ok) throw new Error(`verifyOtp failed: ${await verifyResponse.text()}`);
-    const raw = await verifyResponse.json() as VerifyOtpSession;
-    if (!raw.access_token || !raw.refresh_token) throw new Error('verifyOtp did not return a session.');
+    if (!tokenResponse.ok) throw new Error(`Password sign-in failed: ${await tokenResponse.text()}`);
+    const raw = await tokenResponse.json() as VerifyOtpSession;
+    if (!raw.access_token || !raw.refresh_token) throw new Error('Password sign-in did not return a session.');
     const session: VerifyOtpSession = {
         ...raw,
         expires_at: raw.expires_at ?? Math.floor(Date.now() / 1000) + (raw.expires_in ?? 3600),

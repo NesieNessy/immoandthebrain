@@ -2040,17 +2040,7 @@ function CalculatorContent() {
       title="Mietkalkulator"
       beforeStepChange={leavePageGuard}
       showFieldLegend
-      actions={
-        <>
-          <SaveStatusIndicator isSaving={isSaving} isDirty={isDirty} />
-          <Button
-            label="Überspringen"
-            variant="outline"
-            hideLabelOnMobile
-            onClick={() => void navigateWithConfirmation(`/property-valuation/detail-check/macro-location${suffix}`)}
-          />
-        </>
-      }
+      actions={<SaveStatusIndicator isSaving={isSaving} isDirty={isDirty} />}
     >
       <div className="pb-24">
         {upstreamResetNotice && (
@@ -2414,6 +2404,9 @@ function CalculatorContent() {
         ghostLabel={BUTTON_DETAILS.Back.label}
         ghostIcon={<BUTTON_DETAILS.Back.icon />}
         onGhost={() => void navigateWithConfirmation(`/property-valuation/detail-check/renovation${suffix}`)}
+        secondaryLabel={BUTTON_DETAILS.Skip.label}
+        secondaryIcon={<BUTTON_DETAILS.Skip.icon />}
+        onSecondary={() => void navigateWithConfirmation(`/property-valuation/detail-check/macro-location${suffix}`)}
         primaryLabel="Weiter"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving}

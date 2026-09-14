@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, LoadingScreen, ReadOnlyField, SectionLabel, StickyActionBar, Tag } from '@/components/ui';
+import { LoadingScreen, ReadOnlyField, SectionLabel, StickyActionBar, Tag } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { type ReferenceProperty, type SubjectProperty } from '@/lib/detailCheck/comparison';
@@ -154,14 +154,6 @@ function ComparisonContent() {
       currentStep={8}
       title="Vergleich"
       showFieldLegend
-      actions={
-        <Button
-          label="Überspringen"
-          variant="outline"
-          hideLabelOnMobile
-          onClick={() => router.push(`/property-valuation/detail-check/result${suffix}`)}
-        />
-      }
     >
       <div className="pb-24">
         {error && (
@@ -200,6 +192,9 @@ function ComparisonContent() {
         ghostLabel={BUTTON_DETAILS.Back.label}
         ghostIcon={<BUTTON_DETAILS.Back.icon />}
         onGhost={() => router.push(`/property-valuation/detail-check/macro-location${suffix}`)}
+        secondaryLabel={BUTTON_DETAILS.Skip.label}
+        secondaryIcon={<BUTTON_DETAILS.Skip.icon />}
+        onSecondary={() => router.push(`/property-valuation/detail-check/result${suffix}`)}
         primaryLabel="Weiter"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving}

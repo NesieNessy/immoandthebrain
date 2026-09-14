@@ -11,6 +11,7 @@ import {
   Plus,
   Save,
   ScanLine,
+  SkipForward,
   Trash2,
   Undo2,
   Upload,
@@ -44,6 +45,7 @@ enum ButtonType {
   OpenDetailCheck = 'OpenDetailCheck',
   AddDetailCheck = 'AddDetailCheck',
   Publish = 'Publish',
+  Skip = 'Skip',
 }
 
 // 2. Define the structure for your button properties
@@ -79,4 +81,5 @@ export const BUTTON_DETAILS: Record<ButtonType, ButtonConfig> = {
   [ButtonType.OpenDetailCheck]:  { label: 'Detailbewertung öffnen',  icon: ExternalLink },
   [ButtonType.AddDetailCheck]:   { label: 'Neue Detailbewertung',    icon: Plus },
   [ButtonType.Publish]:          { label: 'Veröffentlichen',         icon: Globe },
+  [ButtonType.Skip]:             { label: 'Überspringen',            icon: SkipForward },
 };

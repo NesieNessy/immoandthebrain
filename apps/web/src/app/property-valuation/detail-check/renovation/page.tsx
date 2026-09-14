@@ -378,15 +378,6 @@ function RenovationContent() {
       title="Sanierungskosten"
       beforeStepChange={persistCurrent}
       showFieldLegend
-      actions={
-        <Button
-          label="Überspringen"
-          variant="outline"
-          hideLabelOnMobile
-          disabled={isLoading || isSaving || cases.length > 0}
-          onClick={() => void continueWithoutRenovations(true)}
-        />
-      }
     >
       <div className="pb-24">
         {error && (
@@ -695,6 +686,10 @@ function RenovationContent() {
         ghostLabel={BUTTON_DETAILS.Back.label}
         ghostIcon={<BUTTON_DETAILS.Back.icon />}
         onGhost={() => void handleBack()}
+        secondaryLabel={BUTTON_DETAILS.Skip.label}
+        secondaryIcon={<BUTTON_DETAILS.Skip.icon />}
+        secondaryDisabled={isLoading || isSaving || cases.length > 0}
+        onSecondary={() => void continueWithoutRenovations(true)}
         primaryLabel={primaryLabel}
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving}
