@@ -1,5 +1,5 @@
 import { clsx, type ClassValue } from "clsx";
-import { format } from "date-fns";
+import { differenceInCalendarDays, format } from "date-fns";
 import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
@@ -16,6 +16,20 @@ export const deCurrencyFormatter = new Intl.NumberFormat('de-DE', { minimumFract
 export function formatDeDate(value: string | null | undefined): string {
   if (!value) return '–';
   return format(new Date(value), 'dd.MM.yyyy');
+}
+
+/** "vor 2 Stunden" / "gestern" / "vor 3 Tagen", for activity feeds. */
+export function formatRelativeDe(value: string): string {
+  const date = new Date(value);
+  const now = new Date();
+  const days = differenceInCalendarDays(now, date);
+  if (days <= 0) {
+    const hours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+    if (hours < 1) return 'gerade eben';
+    return `vor ${hours} Stunde${hours === 1 ? '' : 'n'}`;
+  }
+  if (days === 1) return 'gestern';
+  return `vor ${days} Tagen`;
 }
 
 /**
