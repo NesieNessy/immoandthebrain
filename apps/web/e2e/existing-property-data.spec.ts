@@ -1,5 +1,6 @@
 import { Client } from 'pg';
-import { expect, test } from '@playwright/test';
+import { createClient } from '@supabase/supabase-js';
+import { expect, test, type Page } from '@playwright/test';
 
 /**
  * Objektdaten (existing-properties/[propertyId]/property-data) isn't part of
@@ -186,9 +187,63 @@ test('Anzahl Zimmer = 0 saves successfully, stored as not specified rather than 
 
 const TEST_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
+function requireEnv(name: string): string {
+    const value = process.env[name];
+    if (!value) throw new Error(`${name} is required for this test.`);
+    return value;
+}
+
+/**
+ * NEXT_PUBLIC_AUTH_BYPASS only fakes the app-level `user` object returned by
+ * useRequireAuth — it never creates a real Supabase Auth session. Storage
+ * uploads go straight from the browser to Supabase Storage (not through the
+ * app's own API) and are RLS-gated on auth.uid(), which is NULL for an
+ * unauthenticated anon request, so under bypass mode they're silently
+ * rejected. Mint a real GoTrue session for the bypass user (magic-link +
+ * verifyOtp, via the service-role key that's only ever available here in
+ * the Node test process) and seed it into the page's localStorage under the
+ * same key @supabase/supabase-js itself reads on boot, exactly as if the
+ * browser had a session persisted from a previous, real login.
+ */
+async function signInBypassUserForStorage(page: Page) {
+    const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
+    const anonKey = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
+
+    const admin = createClient(supabaseUrl, serviceRoleKey);
+    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+        type: 'magiclink',
+        email: 'dev@immoandthebrain.local',
+    });
+    if (linkError || !linkData.properties?.hashed_token) {
+        throw linkError ?? new Error('generateLink did not return a hashed_token.');
+    }
+
+    const anon = createClient(supabaseUrl, anonKey);
+    const { data: verifyData, error: verifyError } = await anon.auth.verifyOtp({
+        type: 'magiclink',
+        token_hash: linkData.properties.hashed_token,
+    });
+    if (verifyError || !verifyData.session) {
+        throw verifyError ?? new Error('verifyOtp did not return a session.');
+    }
+
+    // Matches @supabase/supabase-js's own default storageKey derivation
+    // (`sb-${new URL(url).hostname.split('.')[0]}-auth-token`) so the app's
+    // client picks this session up as if it had persisted it itself.
+    const storageKey = `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`;
+    await page.evaluate(
+        ({ key, session }) => window.localStorage.setItem(key, JSON.stringify(session)),
+        { key: storageKey, session: verifyData.session },
+    );
+    await page.reload();
+}
+
 test('uploading a photo shows it in the gallery as the cover, and it can be removed again', async ({ page, request }) => {
     const storageUp = await request.get('http://localhost:55321/storage/v1/status').catch(() => null);
     test.skip(!storageUp?.ok(), 'Requires the local `supabase start` Storage stack, which is not running.');
+
+    await signInBypassUserForStorage(page);
 
     await page.locator('input[type="file"]').setInputFiles({
         name: 'test-photo.png',
