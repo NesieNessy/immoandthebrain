@@ -437,6 +437,31 @@ export type PropertyPriceSplitInsert = Omit<PropertyPriceSplit, 'propertyPriceSp
 export type PropertyPriceSplitUpdate = Partial<Omit<PropertyPriceSplit, 'propertyPriceSplitId' | 'propertyId' | 'createdAt' | 'updatedAt'>>;
 
 // ----------------------------------------------------------------------------
+// PropertyFinancials
+// ----------------------------------------------------------------------------
+
+/**
+ * User-entered valuation/financing inputs that back the Kennzahlen screen
+ * (current market value, remaining loan, equity, interest/repayment rates) —
+ * none of these are captured anywhere else for an already-acquired property.
+ */
+export interface PropertyFinancials {
+  propertyFinancialsId: number;
+  propertyId: number;
+  currentMarketValue: number | null;
+  loanAmount: number | null;
+  equity: number | null;
+  interestRate: number | null;
+  repaymentRate: number | null;
+  fixedInterestPeriodYears: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PropertyFinancialsInsert = Omit<PropertyFinancials, 'propertyFinancialsId' | 'createdAt' | 'updatedAt'>;
+export type PropertyFinancialsUpdate = Partial<Omit<PropertyFinancials, 'propertyFinancialsId' | 'propertyId' | 'createdAt' | 'updatedAt'>>;
+
+// ----------------------------------------------------------------------------
 // Tenancy
 // ----------------------------------------------------------------------------
 

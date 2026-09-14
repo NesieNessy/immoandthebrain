@@ -90,6 +90,15 @@ const RESOURCES: Record<string, ResourceConfig> = {
     ],
     upsertProperty: true,
   },
+  'property-financials': {
+    table: 'property_financials',
+    primaryKey: 'property_financials_id',
+    columns: [
+      'property_id', 'current_market_value', 'loan_amount', 'equity',
+      'interest_rate', 'repayment_rate', 'fixed_interest_period_years',
+    ],
+    upsertProperty: true,
+  },
   'service-charge-settlements': {
     table: 'service_charge_settlement',
     primaryKey: 'service_charge_settlement_id',
