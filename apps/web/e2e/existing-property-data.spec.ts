@@ -237,13 +237,26 @@ async function signInBypassUserForStorage(page: Page) {
     const dbClient = new Client({ connectionString: requireDatabaseUrl() });
     await dbClient.connect();
     try {
-        await dbClient.query(
+        // Matches by email, not id: PUT /admin/users/{BYPASS_USER_ID} returned a
+        // plain 404 for this exact id even though the row demonstrably exists
+        // (generateLink's own attempt to create a user with this email hit the
+        // table's unique constraint) — so an id-based match is not trusted here.
+        // aud/role are set defensively too, in case GoTrue's password grant
+        // filters on them and this row (seeded by raw INSERT, not a real signup)
+        // never got them populated.
+        const { rows } = await dbClient.query(
             `UPDATE auth.users
              SET encrypted_password = crypt($1, gen_salt('bf')),
-                 email_confirmed_at = COALESCE(email_confirmed_at, NOW())
-             WHERE id = $2`,
-            [password, BYPASS_USER_ID],
+                 email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
+                 aud = COALESCE(NULLIF(aud, ''), 'authenticated'),
+                 role = COALESCE(NULLIF(role, ''), 'authenticated')
+             WHERE email = 'dev@immoandthebrain.local'
+             RETURNING id`,
+            [password],
         );
+        if (rows.length === 0) {
+            throw new Error('Bypass user (dev@immoandthebrain.local) not found in auth.users — check 20260224000006_zz_dev_user.sql seeded it.');
+        }
     } finally {
         await dbClient.end();
     }

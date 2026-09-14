@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Dropdown, LoadingScreen, PillOptions, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
+import { ComingSoonButton, Dropdown, LoadingScreen, PillOptions, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
@@ -13,7 +13,7 @@ import {
   type ModernizationSelections,
   type PriceSplitMode,
 } from '@/lib/detailCheck/depreciation';
-import { deCurrencyFormatter, deNumberFormatter } from '@/lib/utils';
+import { cn, deCurrencyFormatter, deNumberFormatter } from '@/lib/utils';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
@@ -272,13 +272,29 @@ function DepreciationContent() {
             {depreciationMode === 'INDIVIDUAL' && (
               <div className="flex flex-col gap-2">
                 <SectionLabel>Modernisierungen</SectionLabel>
-                <div className="grid gap-3 pt-1 md:grid-cols-[minmax(0,360px)_minmax(0,280px)_minmax(0,1fr)] md:items-center">
-                  {MODERNIZATION_FIELDS.map(([field, label]) => (
-                    <div key={field} className="contents">
-                      <label className="text-sm text-foreground">
-                        {label}
-                        <span className="font-normal text-muted-foreground"> (optional)</span>
-                      </label>
+                <div className="flex items-center justify-end pt-1">
+                  <ComingSoonButton
+                    label={BUTTON_DETAILS.RequestAppraisal.label}
+                    icon={<BUTTON_DETAILS.RequestAppraisal.icon />}
+                    variant="outline"
+                    size="sm"
+                    hideLabelOnMobile
+                  />
+                </div>
+                <div className="mt-1 overflow-hidden rounded-lg border border-border">
+                  <div className="grid grid-cols-2 gap-4 bg-muted/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <span>Maßnahme</span>
+                    <span>Zuletzt erneuert</span>
+                  </div>
+                  {MODERNIZATION_FIELDS.map(([field, label], index) => (
+                    <div
+                      key={field}
+                      className={cn(
+                        "grid grid-cols-2 items-center gap-4 px-4 py-3",
+                        index > 0 && "border-t border-border"
+                      )}
+                    >
+                      <span className="text-sm text-foreground">{label}</span>
                       <Dropdown
                         options={MODERNIZATION_OPTIONS}
                         value={modernization[field]}
@@ -286,16 +302,9 @@ function DepreciationContent() {
                           setModernization((prev) => ({ ...prev, [field]: event.target.value }))
                         }
                       />
-                      <div />
                     </div>
                   ))}
                 </div>
-                <Button
-                  label="Beauftragung RND-Gutachten"
-                  variant="outline"
-                  className="mt-1 self-start"
-                  disabled
-                />
               </div>
             )}
 
