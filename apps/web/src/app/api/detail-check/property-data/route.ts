@@ -20,12 +20,26 @@ function toNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// quick_check.portal_id is free text — sometimes a real URL/domain the user
+// typed, sometimes just a label like "Kleinanzeigen" (see getPlaceholderPortalUrl
+// in lib/quickCheck/display.ts). Only the former is usable to prefill this
+// wizard's sourceUrl field, which is validated as an actual URL on save.
+const DOMAIN_LIKE = /^(www\.)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i;
+
+function quickCheckSourceUrl(portalId: string | null | undefined): string {
+  const value = (portalId ?? '').trim();
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  if (DOMAIN_LIKE.test(value)) return `https://${value}`;
+  return '';
+}
+
 async function loadQuickCheck(userId: string, quickCheckId: string | null) {
   if (!quickCheckId) return null;
 
   const { rows } = await db.query(
     `
-      SELECT quick_check_id, street, postal_code, city, year_of_construction, data_entry_source
+      SELECT quick_check_id, street, postal_code, city, year_of_construction, data_entry_source, portal_id
       FROM quick_check
       WHERE user_id = $1
         AND quick_check_id = $2
@@ -65,7 +79,7 @@ export async function GET(request: Request) {
     propertyCategory: saved?.property_category ?? 'EIGENTUMSWOHNUNG',
     dataEntrySource: saved?.data_entry_source ?? quickCheck?.data_entry_source ?? '',
     tenancyType: saved?.tenancy_type ?? '',
-    sourceUrl: saved?.source_url ?? '',
+    sourceUrl: saved?.source_url ?? quickCheckSourceUrl(quickCheck?.portal_id),
     streetHouseNumber: saved?.street_house_number ?? quickCheck?.street ?? '',
     postalCode: saved?.postal_code ?? quickCheck?.postal_code ?? '',
     city: saved?.city ?? quickCheck?.city ?? '',

@@ -5,7 +5,7 @@ import { KpfAssessmentCard } from '@/components/features/KpfAssessmentCard';
 import { MobileResultBanner } from '@/components/features/MobileResultBanner';
 import { CONDITION_OPTIONS, getQuickCheckFieldErrors } from '@/components/features/QuickCheckDisplay';
 import { PortalImportSection } from '@/components/features/PortalImportSection';
-import { Button, Dropdown, Header, NumberField, PAGE_CONTAINER_CLASS, StickyActionBar, TextField, UnsavedChangesModal, useToast, type BreadcrumbItem } from '@/components/ui';
+import { Dropdown, Header, NumberField, PAGE_CONTAINER_CLASS, StickyActionBar, TextField, UnsavedChangesModal, useToast, type BreadcrumbItem } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { FieldLabels } from '@/constants/FieldLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
@@ -160,26 +160,14 @@ export default function QuickCheckPage() {
               } satisfies BreadcrumbItem,
               { label: 'Neue Ersteinschätzung' },
             ]}
-            actions={
-              <Button
-                label={BUTTON_DETAILS.StartDetailCheck.label}
-                icon={<BUTTON_DETAILS.StartDetailCheck.icon />}
-                variant="outline"
-                hideLabelOnMobile
-                disabled={!isFormValid || isSaving || authLoading || !user}
-                onClick={() => void handleStartDetailCheck()}
-              />
-            }
           />
-          <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
+          <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:gap-6">
             <MobileResultBanner show={isFormValid} resultId="qc-result" formTopId="qc-form-top" />
 
             {/* Form */}
             <div className="flex flex-col gap-3 p-5">
               {/* Address */}
               <section id="qc-form-top">
-                <h2 className="text-md font-semibold text-foreground mb-2">Informationen zur Berechnung</h2>
-
                 <PortalImportSection portalUrl={portalUrl} onPortalUrlChange={setPortalUrl} />
 
                 <div className="flex flex-col gap-2 pt-1.5">
@@ -263,7 +251,7 @@ export default function QuickCheckPage() {
             </div>
 
             {/* Result */}
-            <div id="qc-result" className="flex flex-col gap-4 p-5">
+            <div id="qc-result" className="flex h-full flex-col justify-center gap-4 p-5">
               {!isFormValid ? (
                 <NoResult />
               ) : (
@@ -289,6 +277,10 @@ export default function QuickCheckPage() {
           ghostLabel={BUTTON_DETAILS.Back.label}
           ghostIcon={<BUTTON_DETAILS.Back.icon />}
           onGhost={() => goTo('/property-valuation/quick-check')}
+          secondaryLabel={BUTTON_DETAILS.StartDetailCheck.label}
+          secondaryIcon={<BUTTON_DETAILS.StartDetailCheck.icon />}
+          secondaryDisabled={!isFormValid || isSaving || authLoading || !user}
+          onSecondary={() => void handleStartDetailCheck()}
           primaryLabel="Ersteinschätzung speichern"
           primaryIcon={<BUTTON_DETAILS.Save.icon />}
           primaryDisabled={!isFormValid || isSaving || authLoading || !user}
