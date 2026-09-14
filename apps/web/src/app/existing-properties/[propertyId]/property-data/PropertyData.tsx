@@ -154,7 +154,7 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                 postalCode: form.plz,
                 federalState: form.bundesland.trim(),
                 squareMeters: Number(form.wohnflaeche),
-                numberOfRooms: form.anzahlZimmer !== '' ? Number(form.anzahlZimmer) : null,
+                numberOfRooms: Number(form.anzahlZimmer) > 0 ? Number(form.anzahlZimmer) : null,
                 yearOfConstruction: Number(form.baujahr),
                 energyEfficient: (form.energieeffizienz || null) as EnergyEfficient | null,
                 propertyCategory: form.objektkategorie,
@@ -368,7 +368,7 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                                     placeholder="3"
                                     value={form.anzahlZimmer}
                                     onChange={(e) => update({ anzahlZimmer: e.target.value })}
-                                    min={0}
+                                    min={1}
                                 />
                             </div>
                             <div className="sm:col-span-4">
