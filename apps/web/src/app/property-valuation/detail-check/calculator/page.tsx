@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, CalculatedPanel, Dropdown, FixedOverlay, LoadingScreen, MetricCard, MonthField, ReadOnlyField, StickyActionBar, TextField } from '@/components/ui';
+import { Button, CalculatedPanel, Dropdown, FixedOverlay, LoadingScreen, MetricCard, MonthField, ReadOnlyField, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
@@ -2116,13 +2116,10 @@ function CalculatorContent() {
             </section>
 
             <section className="order-2 flex flex-col">
-              <div className="order-1 mb-4 flex items-center gap-4">
-                <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                  Parameter
-                </h2>
-                <div className="h-px flex-1 bg-border" />
+              <div className="order-1 mb-2">
+                <SectionLabel>Parameter</SectionLabel>
               </div>
-              <div className="order-2 grid gap-4 lg:grid-cols-4 md:grid-cols-2">
+              <div className="order-2 grid gap-4 pt-2 lg:grid-cols-4 md:grid-cols-2">
                 <MonthField label="Start in Jahr/Monat" value={startYyyymm} error={startMonthError} onChange={setStartYyyymm} />
                 <MonthField label="Letzte Mieterhöhung §558" value={last558Date} error={last558Error} optional years={LAST_558_YEARS} onChange={setLast558Date} />
                 <MonthField label="Letzte §559-Erhöhung" value={last559Date} error={last559Error} optional years={LAST_559_YEARS} onChange={setLast559Date} />

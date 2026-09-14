@@ -1,5 +1,4 @@
 import { Client } from 'pg';
-import { createClient } from '@supabase/supabase-js';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
@@ -193,6 +192,14 @@ function requireEnv(name: string): string {
     return value;
 }
 
+type VerifyOtpSession = {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    expires_at?: number;
+    [key: string]: unknown;
+};
+
 /**
  * NEXT_PUBLIC_AUTH_BYPASS only fakes the app-level `user` object returned by
  * useRequireAuth — it never creates a real Supabase Auth session. Storage
@@ -204,29 +211,45 @@ function requireEnv(name: string): string {
  * the Node test process) and seed it into the page's localStorage under the
  * same key @supabase/supabase-js itself reads on boot, exactly as if the
  * browser had a session persisted from a previous, real login.
+ *
+ * Talks to GoTrue's REST API directly with plain fetch rather than through
+ * @supabase/supabase-js's createClient — that unconditionally spins up a
+ * RealtimeClient, which needs a native WebSocket constructor that Node 20
+ * (this suite's CI runtime) doesn't have, and failed the whole test before
+ * a single request went out. Raw fetch sidesteps that entirely; the two
+ * response shapes read below (hashed_token, then the flat session fields)
+ * are exactly what the SDK's own generateLink/verifyOtp reshape from.
  */
 async function signInBypassUserForStorage(page: Page) {
     const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
     const anonKey = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
     const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
 
-    const admin = createClient(supabaseUrl, serviceRoleKey);
-    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-        type: 'magiclink',
-        email: 'dev@immoandthebrain.local',
+    const linkResponse = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${serviceRoleKey}`,
+            apikey: serviceRoleKey,
+        },
+        body: JSON.stringify({ type: 'magiclink', email: 'dev@immoandthebrain.local' }),
     });
-    if (linkError || !linkData.properties?.hashed_token) {
-        throw linkError ?? new Error('generateLink did not return a hashed_token.');
-    }
+    if (!linkResponse.ok) throw new Error(`generateLink failed: ${await linkResponse.text()}`);
+    const { hashed_token: tokenHash } = await linkResponse.json() as { hashed_token?: string };
+    if (!tokenHash) throw new Error('generateLink did not return a hashed_token.');
 
-    const anon = createClient(supabaseUrl, anonKey);
-    const { data: verifyData, error: verifyError } = await anon.auth.verifyOtp({
-        type: 'magiclink',
-        token_hash: linkData.properties.hashed_token,
+    const verifyResponse = await fetch(`${supabaseUrl}/auth/v1/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: anonKey },
+        body: JSON.stringify({ type: 'magiclink', token_hash: tokenHash }),
     });
-    if (verifyError || !verifyData.session) {
-        throw verifyError ?? new Error('verifyOtp did not return a session.');
-    }
+    if (!verifyResponse.ok) throw new Error(`verifyOtp failed: ${await verifyResponse.text()}`);
+    const raw = await verifyResponse.json() as VerifyOtpSession;
+    if (!raw.access_token || !raw.refresh_token) throw new Error('verifyOtp did not return a session.');
+    const session: VerifyOtpSession = {
+        ...raw,
+        expires_at: raw.expires_at ?? Math.floor(Date.now() / 1000) + (raw.expires_in ?? 3600),
+    };
 
     // Matches @supabase/supabase-js's own default storageKey derivation
     // (`sb-${new URL(url).hostname.split('.')[0]}-auth-token`) so the app's
@@ -234,7 +257,7 @@ async function signInBypassUserForStorage(page: Page) {
     const storageKey = `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`;
     await page.evaluate(
         ({ key, session }) => window.localStorage.setItem(key, JSON.stringify(session)),
-        { key: storageKey, session: verifyData.session },
+        { key: storageKey, session },
     );
     await page.reload();
 }

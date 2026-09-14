@@ -77,12 +77,16 @@ test.describe('Restnutzungsdauer (RND)', () => {
         await expect(page.getByRole('button', { name: 'Standard (50 Jahre)' })).toBeVisible();
         await expect(page.getByText('50 Jahre', { exact: true })).toBeVisible();
         await expect(page.getByText('2%', { exact: true })).toBeVisible();
-        await expect(page.getByText('Modernisierungen')).not.toBeVisible();
+        // Substring text match would also hit the mode-description paragraph
+        // ("...Baujahr und Modernisierungen werden nicht berücksichtigt."),
+        // which is always rendered — the SectionLabel heading is the actual
+        // modernization table's marker, so scope to that specifically.
+        await expect(page.getByRole('heading', { name: 'Modernisierungen' })).not.toBeVisible();
     });
 
     test('Individuell mode computes RND/AfA live from age + modernization, and persists on save', async ({ page }) => {
         await page.getByRole('button', { name: 'Individuell prüfen' }).click();
-        await expect(page.getByText('Modernisierungen')).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Modernisierungen' })).toBeVisible();
 
         // Every measure modernized within the last 5 years -> max modernization
         // credit (21 points). At 50 years of age (gnd 80 for EIGENTUMSWOHNUNG)

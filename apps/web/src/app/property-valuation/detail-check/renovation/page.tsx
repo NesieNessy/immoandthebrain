@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Dropdown, LoadingScreen, ReadOnlyField, StickyActionBar, TextArea, TextField } from '@/components/ui';
+import { Button, Dropdown, LoadingScreen, ReadOnlyField, SectionLabel, StickyActionBar, TextArea, TextField } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { authFetch } from '@/lib/api/authFetch';
@@ -398,16 +398,11 @@ function RenovationContent() {
         {isLoading ? (
           <LoadingScreen message="Sanierung wird geladen…" fullScreen={false} />
         ) : (
-          <div className="space-y-8">
-            <section>
-              <div className="mb-4 flex items-center gap-4">
-                <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                  Aufnahme der Modernisierungen
-                </h2>
-                <div className="h-px flex-1 bg-border" />
-              </div>
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Aufnahme der Modernisierungen</SectionLabel>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 pt-1 md:grid-cols-2">
                 <Dropdown
                   label="Kategorie"
                   value={category}
@@ -534,17 +529,12 @@ function RenovationContent() {
                   </table>
                 </div>
               )}
-            </section>
+            </div>
 
             {stage === 'PRICING' && (
               <>
-                <section>
-                  <div className="mb-4 flex items-center gap-4">
-                    <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                      Preisindikation
-                    </h2>
-                    <div className="h-px flex-1 bg-border" />
-                  </div>
+                <div className="flex flex-col gap-2">
+                  <SectionLabel>Preisindikation</SectionLabel>
                   <div className="overflow-hidden rounded-lg border border-border">
                     <table className="w-full text-left text-sm">
                       <thead className="bg-primary/8">
@@ -610,15 +600,10 @@ function RenovationContent() {
                       <ReadOnlyPill value={`Ausgewählt: ${formatCurrency(sumSelected)}`} />
                     </div>
                   </div>
-                </section>
+                </div>
 
-                <section>
-                  <div className="mb-4 flex items-center gap-4">
-                    <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                      Zusammenfassung
-                    </h2>
-                    <div className="h-px flex-1 bg-border" />
-                  </div>
+                <div className="flex flex-col gap-2">
+                  <SectionLabel>Zusammenfassung</SectionLabel>
                   <div className="overflow-hidden rounded-lg border border-border">
                     <table className="w-full text-left text-sm">
                       <thead className="bg-primary/8">
@@ -698,7 +683,7 @@ function RenovationContent() {
                   <p className="mt-3 text-xs text-muted-foreground">
                     Preisindikation aktuell per lokaler Fallback-Logik mit PLZ-Faktor{context?.postalCode ? ` (${context.postalCode})` : ''}; die KI- und Upload-Auswertung ist als nächster Integrationspunkt vorbereitet.
                   </p>
-                </section>
+                </div>
               </>
             )}
           </div>

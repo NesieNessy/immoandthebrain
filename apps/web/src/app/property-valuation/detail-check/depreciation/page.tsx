@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Dropdown, LoadingScreen, ReadOnlyField, StickyActionBar, TextField } from '@/components/ui';
+import { Button, Dropdown, LoadingScreen, PillOptions, ReadOnlyField, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
@@ -60,32 +60,14 @@ const residentialTypeOptions = [
   { value: 'DENKMALGESCHUETZT', label: 'Denkmalgeschütztes Gebäude (Einzelfall)' },
 ];
 
+const MODE_OPTIONS = [
+  { value: 'STANDARD', label: 'Standard' },
+  { value: 'INDIVIDUAL', label: 'Individuell' },
+];
+
 function valueString(value: number | string | null | undefined): string {
   if (value == null) return '';
   return String(value).replace('.', ',');
-}
-
-function ModeButton({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
-        active ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground'
-      }`}
-    >
-      {label}
-    </button>
-  );
 }
 
 function DepreciationContent() {
@@ -179,10 +161,6 @@ function DepreciationContent() {
     ? context?.standardSplit
     : individualSplit;
 
-  const setMode = (mode: DepreciationMode) => {
-    setDepreciationMode(mode);
-  };
-
   const persist = async (): Promise<boolean> => {
     if (isSaving) return false;
     setIsSaving(true);
@@ -243,46 +221,46 @@ function DepreciationContent() {
         {isLoading || !context || !selectedSplit ? (
           <LoadingScreen message="Abschreibung wird geladen…" fullScreen={false} />
         ) : (
-          <div className="space-y-8">
-            <section className="max-w-xl">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2 max-w-xl">
+              <SectionLabel>Wohnart</SectionLabel>
               <Dropdown
-                label="Wohnart"
                 options={residentialTypeOptions}
                 value={propertyCategory}
                 onChange={(event) => setPropertyCategory(event.target.value)}
                 helperText="Die Wohnart beeinflusst die individuelle Restnutzungsdauer."
               />
-            </section>
+            </div>
 
-            <section className="grid gap-4 md:grid-cols-[220px_1fr_1fr] md:items-center">
-              <div className="flex gap-3">
-                <ModeButton label="Standard" active={depreciationMode === 'STANDARD'} onClick={() => setDepreciationMode('STANDARD')} />
-                <ModeButton label="Individuell" active={depreciationMode === 'INDIVIDUAL'} onClick={() => setMode('INDIVIDUAL')} />
-              </div>
-              <div className="grid grid-cols-[80px_minmax(0,1fr)] items-center gap-3">
-                <span>RND:</span>
-                <ReadOnlyField
-                  value={selectedRnd ? numberFormatter.format(selectedRnd.remainingUsefulLifeYears) : '-'}
-                  suffix="Jahre"
-                  align="right"
-                  helperText={!selectedRnd ? 'Bitte zunächst alle Modernisierungsangaben auswählen.' : undefined}
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Berechnungsmodus</SectionLabel>
+              <div className="grid gap-4 pt-1 md:grid-cols-[220px_1fr_1fr] md:items-center">
+                <PillOptions
+                  size="md"
+                  options={MODE_OPTIONS}
+                  value={depreciationMode}
+                  onChange={(value) => setDepreciationMode(value as DepreciationMode)}
                 />
+                <div className="grid grid-cols-[80px_minmax(0,1fr)] items-center gap-3">
+                  <span>RND:</span>
+                  <ReadOnlyField
+                    value={selectedRnd ? numberFormatter.format(selectedRnd.remainingUsefulLifeYears) : '-'}
+                    suffix="Jahre"
+                    align="right"
+                    helperText={!selectedRnd ? 'Bitte zunächst alle Modernisierungsangaben auswählen.' : undefined}
+                  />
+                </div>
+                <div className="grid grid-cols-[80px_minmax(0,1fr)] items-center gap-3">
+                  <span>AfA:</span>
+                  <ReadOnlyField value={selectedRnd ? numberFormatter.format(selectedRnd.afaPercent) : '-'} suffix="%" align="right" />
+                </div>
               </div>
-              <div className="grid grid-cols-[80px_minmax(0,1fr)] items-center gap-3">
-                <span>AfA:</span>
-                <ReadOnlyField value={selectedRnd ? numberFormatter.format(selectedRnd.afaPercent) : '-'} suffix="%" align="right" />
-              </div>
-            </section>
+            </div>
 
             {depreciationMode === 'INDIVIDUAL' && (
-              <section>
-                <div className="mb-4 flex items-center gap-4">
-                  <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                    Letzte Modernisierung angeben
-                  </h2>
-                  <div className="h-px flex-1 bg-border" />
-                </div>
-                <div className="grid gap-3 md:grid-cols-[minmax(0,360px)_minmax(0,280px)_minmax(0,1fr)] md:items-center">
+              <div className="flex flex-col gap-2">
+                <SectionLabel>Modernisierungen</SectionLabel>
+                <div className="grid gap-3 pt-1 md:grid-cols-[minmax(0,360px)_minmax(0,280px)_minmax(0,1fr)] md:items-center">
                   {MODERNIZATION_FIELDS.map(([field, label]) => (
                     <div key={field} className="contents">
                       <label className="text-sm text-foreground">
@@ -303,35 +281,37 @@ function DepreciationContent() {
                 <Button
                   label="Beauftragung RND-Gutachten"
                   variant="outline"
-                  className="mt-4"
+                  className="mt-1 self-start"
                   disabled
                 />
-              </section>
+              </div>
             )}
 
-            <section>
-              <div className="mb-4 flex items-center gap-4">
-                <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                  Kaufpreisaufteilung
-                </h2>
-                <div className="h-px flex-1 bg-border" />
-              </div>
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Kaufpreisaufteilung</SectionLabel>
+              <PillOptions
+                size="md"
+                options={MODE_OPTIONS}
+                value={priceSplitMode}
+                onChange={(value) => setPriceSplitMode(value as PriceSplitMode)}
+              />
+            </div>
 
-              <div className="mb-5 flex gap-3">
-                <ModeButton label="Standard" active={priceSplitMode === 'STANDARD'} onClick={() => setPriceSplitMode('STANDARD')} />
-                <ModeButton label="Individuell" active={priceSplitMode === 'INDIVIDUAL'} onClick={() => setPriceSplitMode('INDIVIDUAL')} />
-              </div>
-
-              {priceSplitMode === 'INDIVIDUAL' && (
-                <div className="mb-8 grid gap-4 md:grid-cols-4">
+            {priceSplitMode === 'INDIVIDUAL' && (
+              <div className="flex flex-col gap-2">
+                <SectionLabel>Grundstücksdaten</SectionLabel>
+                <div className="grid gap-4 pt-1 md:grid-cols-4">
                   <TextField label="Grundstücksgröße" optional value={plotAreaM2} suffix="m²" inputMode="decimal" onChange={(e) => setPlotAreaM2(e.target.value)} />
                   <TextField label="Bodenrichtwert" optional value={landReferenceValue} suffix="€" inputMode="decimal" onChange={(e) => setLandReferenceValue(e.target.value)} />
                   <TextField label="Miteigentumsanteil Zähler" optional value={coOwnershipNumerator} inputMode="decimal" onChange={(e) => setCoOwnershipNumerator(e.target.value)} />
                   <TextField label="Miteigentumsanteil Nenner" optional value={coOwnershipDenominator} inputMode="decimal" onChange={(e) => setCoOwnershipDenominator(e.target.value)} />
                 </div>
-              )}
+              </div>
+            )}
 
-              <p className="mb-5 text-lg text-foreground">
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Berechnete Aufteilung</SectionLabel>
+              <p className="pt-1 text-lg text-foreground">
                 Für Ihre Stadt {context.city ? `(${context.city})` : ''} lautet die Aufteilung:
               </p>
               <div className="grid max-w-3xl gap-4 md:grid-cols-[220px_160px_220px] md:items-center">
@@ -342,7 +322,7 @@ function DepreciationContent() {
                 <ReadOnlyField value={numberFormatter.format(selectedSplit.landSharePercent)} suffix="%" align="right" />
                 <ReadOnlyField value={currencyFormatter.format(selectedSplit.landValue)} suffix="€" align="right" />
               </div>
-            </section>
+            </div>
           </div>
         )}
       </div>

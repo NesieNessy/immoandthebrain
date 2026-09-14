@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, StickyActionBar, Tag, type TagVariant } from '@/components/ui';
+import { Button, SectionLabel, StickyActionBar, Tag, type TagVariant } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { type MetricStatus, type RecommendationLevel, type RecommendationMetric, type RecommendationScorePart } from '@/lib/detailCheck/recommendation';
@@ -183,8 +183,8 @@ function ResultContent() {
         {isLoading || !data ? (
           <p className="text-sm text-muted-foreground">Empfehlung wird berechnet...</p>
         ) : (
-          <div className="space-y-8">
-            <section className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <div className="flex flex-col gap-6">
+            <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
               <div className="rounded-lg border border-border bg-card p-5">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <span className="text-sm font-medium text-muted-foreground">Investment-Score</span>
@@ -205,15 +205,10 @@ function ResultContent() {
                   Gewählte Finanzierung: <span className="font-medium text-foreground">{data.selectedFinancingVariant === 'INDIVIDUAL' ? 'Individuell' : 'Angebot'}</span>
                 </p>
               </div>
-            </section>
+            </div>
 
-            <section>
-              <div className="mb-4 flex items-center gap-4">
-                <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                  Kennzahlen
-                </h2>
-                <div className="h-px flex-1 bg-border" />
-              </div>
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Kennzahlen</SectionLabel>
               <div className="overflow-hidden rounded-lg border border-border bg-card">
                 <table className="w-full border-collapse">
                   <thead className="bg-primary/8">
@@ -231,23 +226,18 @@ function ResultContent() {
                   </tbody>
                 </table>
               </div>
-            </section>
+            </div>
 
-            <section>
-              <div className="mb-4 flex items-center gap-4">
-                <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                  Score-Bausteine
-                </h2>
-                <div className="h-px flex-1 bg-border" />
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Score-Bausteine</SectionLabel>
+              <div className="grid gap-4 pt-1 md:grid-cols-2 xl:grid-cols-5">
                 {data.scoreParts.map((part) => (
                   <ScorePartCard key={part.key} part={part} />
                 ))}
               </div>
-            </section>
+            </div>
 
-            <section className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-card p-5">
                 <h2 className="text-lg font-semibold text-foreground">Noch nicht definierte Ermittlung</h2>
                 <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
@@ -264,7 +254,7 @@ function ResultContent() {
                   ))}
                 </ul>
               </div>
-            </section>
+            </div>
           </div>
         )}
       </div>
