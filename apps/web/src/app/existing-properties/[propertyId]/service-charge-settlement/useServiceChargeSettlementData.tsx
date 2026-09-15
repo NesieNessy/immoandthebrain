@@ -11,7 +11,9 @@ import {
 } from '@/lib/supabase/service_charge_cost_item.supabase';
 import {
     createSettlement,
+    getSettlementByPeriod,
     getSettlementSourceDocumentUrl,
+    getSettlementsByProperty,
     removeSettlementSourceDocument,
     updateSettlement,
     uploadSettlementSourceDocument,
@@ -125,13 +127,26 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const [previewAdjustmentHtml, setPreviewAdjustmentHtml] = useState<string | null>(null);
     const [isLoadingAdjustmentPreview, setIsLoadingAdjustmentPreview] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // Every settlement ever saved for this property — lets the picker reopen
+    // one whose period isn't reachable via the year chevron (a custom range,
+    // or a year other than the currently loaded one).
+    const [savedSettlements, setSavedSettlements] = useState<ServiceChargeSettlement[]>([]);
+    const refreshSavedSettlements = useCallback(async () => {
+        setSavedSettlements(await getSettlementsByProperty(property.propertyId));
+    }, [property.propertyId]);
+    useEffect(() => { void refreshSavedSettlements(); }, [refreshSavedSettlements]);
 
-    const load = useCallback(async () => {
+    // `explicitPeriod` set means "load the settlement for exactly this
+    // period" (browsing settlement history via the year picker) rather than
+    // the initial "most recent settlement" load.
+    const load = useCallback(async (explicitPeriod?: { start: Date; end: Date }) => {
         setIsLoading(true);
         setError(null);
         try {
             const { getAggregatedSettlementData } = await import('@/lib/supabase/settlementAggregate.supabase');
-            const { units: loadedUnits, settlement: currentSettlement, tenancy: currentTenancy, costItems: loadedCostItems } = await getAggregatedSettlementData(property.propertyId, unit.propertyUnitId);
+            const periodStartParam = explicitPeriod ? format(explicitPeriod.start, 'yyyy-MM-dd') : undefined;
+            const periodEndParam = explicitPeriod ? format(explicitPeriod.end, 'yyyy-MM-dd') : undefined;
+            const { units: loadedUnits, settlement: currentSettlement, tenancy: currentTenancy, costItems: loadedCostItems } = await getAggregatedSettlementData(property.propertyId, unit.propertyUnitId, periodStartParam, periodEndParam);
             setUnits(loadedUnits);
             setTenancy(currentTenancy);
             setSettlement(currentSettlement);
@@ -161,6 +176,16 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 const items = loadedItems.length > 0 ? loadedItems : defaultItems();
                 setCostItems(items);
                 setOriginalSnapshot(loadedItems.length > 0 ? serializeCostItems(items, new Date(currentSettlement.periodStart), new Date(currentSettlement.periodEnd)) : '');
+            } else if (explicitPeriod) {
+                // Navigated (via the year picker) to a period that has no
+                // saved settlement yet — start a fresh draft for exactly
+                // that period rather than falling back to the "brand new
+                // settlement" defaulting logic below.
+                setPeriodStart(explicitPeriod.start);
+                setPeriodEnd(explicitPeriod.end);
+                setPeriodModeState(isFullCalendarYear(explicitPeriod.start, explicitPeriod.end) ? 'year' : 'custom');
+                setCostItems(defaultItems());
+                setOriginalSnapshot('');
             } else {
                 // Default the period to the tenant's Mietauszug date when
                 // there is one — a settlement for a moved-out tenant almost
@@ -183,6 +208,12 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     useEffect(() => { void load(); }, [load]);
 
+    // ── Browsing a different billing period (per-period settlement history) ──
+    // Navigating years must never discard an unsaved edit silently — guard
+    // it the same way PropertyData.tsx guards route navigation. (Defined
+    // after `isEditing` below, which it closes over.)
+    const [pendingPeriod, setPendingPeriod] = useState<{ start: Date; end: Date } | null>(null);
+
     useEffect(() => {
         if (!user) return;
         let cancelled = false;
@@ -203,9 +234,25 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             setPeriodEnd(new Date(year, 11, 31));
         }
     };
+    // Navigating to a different year means "load that year's settlement" —
+    // guarded the same way PropertyData.tsx guards route navigation away
+    // from an unsaved edit, since this replaces periodStart/periodEnd,
+    // costItems and settlement wholesale (see `load`'s explicitPeriod branch).
+    const switchToPeriod = (start: Date, end: Date) => {
+        if (isEditing) {
+            setPendingPeriod({ start, end });
+        } else {
+            void load({ start, end });
+        }
+    };
+    const confirmPeriodSwitch = () => {
+        if (pendingPeriod) void load(pendingPeriod);
+        setPendingPeriod(null);
+    };
+    const cancelPeriodSwitch = () => setPendingPeriod(null);
+
     const setSettlementYear = (year: number) => {
-        setPeriodStart(new Date(year, 0, 1));
-        setPeriodEnd(new Date(year, 11, 31));
+        switchToPeriod(new Date(year, 0, 1), new Date(year, 11, 31));
     };
 
     // ── Allocation & summary math ───────────────────────────────────────────
@@ -313,6 +360,15 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             const periodEndStr = periodEnd ? format(periodEnd, 'yyyy-MM-dd') : format(new Date(currentYear, 11, 31), 'yyyy-MM-dd');
 
             let activeSettlement = settlement;
+            // Once true, `activeSettlement` is a settlement row that didn't
+            // exist when this edit session started — none of the current
+            // cost-item rows' ids belong to it (they're either unset, or
+            // still carry ids from whatever settlement/period was loaded
+            // before), so every item must be (re)created there, and
+            // deletedCostItemIds — which target that OTHER settlement — must
+            // not be applied to this one.
+            let isNewSettlementForThisSave = false;
+
             if (!activeSettlement) {
                 activeSettlement = await createSettlement({
                     propertyId: property.propertyId,
@@ -323,12 +379,34 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 });
                 if (!activeSettlement) throw new Error('Konnte Abrechnung nicht anlegen.');
                 setSettlement(activeSettlement);
+                isNewSettlementForThisSave = true;
             } else if (activeSettlement.periodStart !== periodStartStr || activeSettlement.periodEnd !== periodEndStr) {
-                const updated = await updateSettlement(activeSettlement.serviceChargeSettlementId, { periodStart: periodStartStr, periodEnd: periodEndStr });
-                if (updated) { activeSettlement = updated; setSettlement(updated); }
+                // The period was changed away from the settlement that's
+                // loaded. That settlement is a distinct billing period with
+                // its own saved history and must not be overwritten by
+                // renaming its period (the old bug) — instead, this edit
+                // belongs to a settlement for the *new* target period.
+                // Check whether one already exists there first, since
+                // blindly creating could duplicate it.
+                const conflict = await getSettlementByPeriod(property.propertyId, periodStartStr, periodEndStr);
+                if (conflict) throw new Error('PERIOD_CONFLICT');
+                const created = await createSettlement({
+                    propertyId: property.propertyId,
+                    periodStart: periodStartStr,
+                    periodEnd: periodEndStr,
+                    sourceDocumentName: null,
+                    sourceDocumentPath: null,
+                });
+                if (!created) throw new Error('createSettlement failed');
+                activeSettlement = created;
+                setSettlement(created);
+                isNewSettlementForThisSave = true;
             }
 
-            await Promise.all(deletedCostItemIds.map((id) => deleteCostItem(id)));
+            const deleteResults = isNewSettlementForThisSave
+                ? []
+                : await Promise.all(deletedCostItemIds.map((id) => deleteCostItem(id)));
+            if (deleteResults.some((ok) => !ok)) throw new Error('deleteCostItem failed');
 
             const savedItems: CostItemForm[] = [];
             for (let index = 0; index < costItems.length; index++) {
@@ -344,20 +422,27 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                     actualShareOverride: item.actualShareOverride === '' ? null : Number(item.actualShareOverride),
                     budgetShareOverride: item.budgetShareOverride === '' ? null : Number(item.budgetShareOverride),
                 };
-                if (item.id != null) {
+                if (item.id != null && !isNewSettlementForThisSave) {
                     const updated = await updateCostItem(item.id, payload);
-                    savedItems.push(updated ? toCostItemForm(updated) : item);
+                    if (!updated) throw new Error('updateCostItem failed');
+                    savedItems.push(toCostItemForm(updated));
                 } else {
                     const created = await createCostItem(payload);
-                    savedItems.push(created ? toCostItemForm(created) : item);
+                    if (!created) throw new Error('createCostItem failed');
+                    savedItems.push(toCostItemForm(created));
                 }
             }
             setCostItems(savedItems);
             setDeletedCostItemIds([]);
             setOriginalSnapshot(serializeCostItems(savedItems, periodStart, periodEnd));
+            if (isNewSettlementForThisSave) void refreshSavedSettlements();
             showToast('Nebenkostenabrechnung gespeichert.', 'success');
-        } catch {
-            setError('Die Nebenkostenabrechnung konnte nicht gespeichert werden.');
+        } catch (err) {
+            setError(
+                err instanceof Error && err.message === 'PERIOD_CONFLICT'
+                    ? 'Für diesen Zeitraum existiert bereits eine gespeicherte Abrechnung. Bitte über „Gespeicherte Abrechnungen" dorthin wechseln, um sie zu bearbeiten.'
+                    : 'Die Nebenkostenabrechnung konnte nicht gespeichert werden.',
+            );
         } finally {
             setIsSaving(false);
         }
@@ -381,7 +466,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             // after applying a new NK-Vorauszahlung.
             const newWarmRent = Math.round(((tenancy.coldRent ?? 0) + newMonthlyPrepayment + (tenancy.parkingSpaceRent ?? 0)) * 100) / 100;
             const updatedTenancy = await updateTenancy(tenancy.tenancyId, { miscRent: newMonthlyPrepayment, warmRent: newWarmRent });
-            if (updatedTenancy) setTenancy(updatedTenancy);
+            if (!updatedTenancy) throw new Error('updateTenancy failed');
+            setTenancy(updatedTenancy);
 
             const effectiveDate = format(new Date(settlementYear + 1, 0, 1), 'yyyy-MM-dd');
             const historyEntry = await addAdjustmentHistoryEntry({
@@ -392,7 +478,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 amount: prepaymentDelta,
                 note: 'NK-Vorauszahlung aus Nebenkostenabrechnung übernommen',
             });
-            if (historyEntry) setMiscRentHistory((prev) => [historyEntry, ...prev]);
+            if (!historyEntry) throw new Error('addAdjustmentHistoryEntry failed');
+            setMiscRentHistory((prev) => [historyEntry, ...prev]);
 
             // This maintenance_costs record is displayed as *this tenant's own*
             // Nebenkosten breakdown (see "Nebenkosten" on the Vertragsdaten
@@ -427,7 +514,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 if (!createdCosts) throw new Error('createMaintenanceCosts failed');
                 setMaintenanceCosts(createdCosts);
                 const tenancyWithCosts = await updateTenancy(tenancy.tenancyId, { maintenanceCostsId: createdCosts.maintenanceCostsId });
-                if (tenancyWithCosts) setTenancy(tenancyWithCosts);
+                if (!tenancyWithCosts) throw new Error('updateTenancy failed');
+                setTenancy(tenancyWithCosts);
             }
 
             showToast('Neue NK-Vorauszahlung übernommen.', 'success');
@@ -640,7 +728,10 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     };
 
     // ── PDF generation ───────────────────────────────────────────────────────
-    const canGeneratePdf = tenancy != null && settlement != null;
+    // landlord is required too (matches the Mieterbescheinigung generator's
+    // own gate) — without it landlordName/-Street/-City below all fall back
+    // to '', producing a Nebenkostenabrechnung with a blank sender.
+    const canGeneratePdf = tenancy != null && settlement != null && landlord != null;
 
     const buildStatementHtml = async (): Promise<string | null> => {
         if (!tenancy || !settlement) return null;
@@ -714,7 +805,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     // Informs the tenant of the settlement outcome (Nachzahlung/Erstattung)
     // and the new NK-Vorauszahlung — as an editable .docx (not a PDF), so the
     // landlord can still adjust wording before sending it.
-    const canGenerateAdjustmentDocx = tenancy != null && settlement != null;
+    const canGenerateAdjustmentDocx = tenancy != null && settlement != null && landlord != null;
 
     // Shared field-gathering for both the .docx builder and the HTML preview
     // (adjustmentLetterHtml) — same content, two different renderers.
@@ -792,6 +883,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         isGeneratingPdf, isGeneratingAdjustmentDocx, isApplyingPrepayment,
         settlement, periodStart, setPeriodStart, periodEnd, setPeriodEnd,
         periodMode, setPeriodMode, setSettlementYear,
+        pendingPeriod, confirmPeriodSwitch, cancelPeriodSwitch,
+        savedSettlements, switchToPeriod,
         costItems, tenancy, landlord, useCaseMenuItems, backHref,
         previewHtml, isLoadingPreview,
         previewAdjustmentHtml, isLoadingAdjustmentPreview,

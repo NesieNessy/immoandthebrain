@@ -194,6 +194,7 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                                         value={person.lastName}
                                         onChange={(e) => data.updatePerson(index, { lastName: e.target.value })}
                                         disabled={data.isArchived}
+                                        error={index === data.primaryPersonIndex ? data.primaryPersonFieldErrors?.lastName : undefined}
                                     />
                                     <TextField
                                         label="Vorname"
@@ -201,6 +202,7 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                                         value={person.firstName}
                                         onChange={(e) => data.updatePerson(index, { firstName: e.target.value })}
                                         disabled={data.isArchived}
+                                        error={index === data.primaryPersonIndex ? data.primaryPersonFieldErrors?.firstName : undefined}
                                     />
                                     <TextField
                                         label="Steuer-ID"
@@ -209,6 +211,7 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                                         value={person.taxId}
                                         onChange={(e) => data.updatePerson(index, { taxId: e.target.value })}
                                         disabled={data.isArchived}
+                                        error={index === data.primaryPersonIndex ? data.primaryPersonFieldErrors?.taxId : undefined}
                                     />
                                     <CalendarField
                                         label="Einzugsdatum"
@@ -216,6 +219,7 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                                         value={person.moveInDate}
                                         onChange={(date) => data.updatePerson(index, { moveInDate: date })}
                                         disabled={data.isArchived}
+                                        error={index === data.primaryPersonIndex ? data.primaryPersonFieldErrors?.moveInDate : undefined}
                                     />
                                 </div>
                             </div>
@@ -339,7 +343,7 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                 onPrimary={data.isArchived ? () => setReactivateModalOpen(true) : () => void data.handleSave()}
                 primaryLabel={data.isArchived ? 'Mieter reaktivieren' : 'Mieterdaten speichern'}
                 primaryIcon={data.isArchived ? <RotateCcw className="w-4 h-4" /> : <BUTTON_DETAILS.Save.icon />}
-                primaryDisabled={data.isArchived ? isReactivating : (!data.isEditing || data.isSaving)}
+                primaryDisabled={data.isArchived ? isReactivating : (!data.isEditing || data.isSaving || !data.isPrimaryPersonValid)}
             />
 
             <Modal

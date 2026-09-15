@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, LoadingScreen, ReadOnlyField, StickyActionBar, Tag } from '@/components/ui';
+import { LoadingScreen, ReadOnlyField, SectionLabel, StickyActionBar, Tag } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { type ReferenceProperty, type SubjectProperty } from '@/lib/detailCheck/comparison';
@@ -154,14 +154,6 @@ function ComparisonContent() {
       currentStep={8}
       title="Vergleich"
       showFieldLegend
-      actions={
-        <Button
-          label="Überspringen"
-          variant="outline"
-          hideLabelOnMobile
-          onClick={() => router.push(`/property-valuation/detail-check/result${suffix}`)}
-        />
-      }
     >
       <div className="pb-24">
         {error && (
@@ -173,29 +165,24 @@ function ComparisonContent() {
         {isLoading || !data ? (
           <LoadingScreen message="Vergleich wird geladen…" fullScreen={false} />
         ) : (
-          <div className="space-y-10">
+          <div className="flex flex-col gap-8">
             <SubjectCard subject={data.subject} />
 
-            <section>
-              <div className="mb-4 flex items-center gap-4">
-                <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                  Andere Kunden
-                </h2>
-                <div className="h-px flex-1 bg-border" />
-              </div>
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Andere Kunden</SectionLabel>
 
               {data.references.length === 0 ? (
                 <div className="rounded-lg border border-border bg-card px-4 py-5 text-sm text-muted-foreground">
                   Keine passenden Referenzobjekte gefunden. Für Ballungsgebiete muss die Postleitzahl identisch sein; zusätzlich gelten Kaltmiete +/- 200 €, Wohnfläche +/- 10 m² und Baujahr +/- 5 Jahre.
                 </div>
               ) : (
-                <div className="grid gap-4 xl:grid-cols-3">
+                <div className="grid gap-4 pt-1 xl:grid-cols-3">
                   {data.references.map((item, index) => (
                     <ReferenceCard key={item.id} item={item} index={index} />
                   ))}
                 </div>
               )}
-            </section>
+            </div>
           </div>
         )}
       </div>
@@ -205,6 +192,9 @@ function ComparisonContent() {
         ghostLabel={BUTTON_DETAILS.Back.label}
         ghostIcon={<BUTTON_DETAILS.Back.icon />}
         onGhost={() => router.push(`/property-valuation/detail-check/macro-location${suffix}`)}
+        secondaryLabel={BUTTON_DETAILS.Skip.label}
+        secondaryIcon={<BUTTON_DETAILS.Skip.icon />}
+        onSecondary={() => router.push(`/property-valuation/detail-check/result${suffix}`)}
         primaryLabel="Weiter"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving}

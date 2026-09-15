@@ -58,13 +58,15 @@ export async function POST(request: Request) {
   const numberOfRooms = input.numberOfRooms == null ? null : Number(input.numberOfRooms);
   const numberOfUnits = Number(input.numberOfUnits ?? 1);
 
+  const currentYear = new Date().getFullYear();
+
   if (
     !String(input.street ?? '').trim() ||
     !String(input.city ?? '').trim() ||
-    !String(input.postalCode ?? '').trim() ||
-    !Number.isInteger(yearOfConstruction) ||
-    (squareMeters != null && !Number.isFinite(squareMeters)) ||
-    (numberOfRooms != null && !Number.isFinite(numberOfRooms)) ||
+    !/^\d{5}$/.test(String(input.postalCode ?? '')) ||
+    !Number.isInteger(yearOfConstruction) || yearOfConstruction < 1800 || yearOfConstruction > currentYear ||
+    (squareMeters != null && (!Number.isFinite(squareMeters) || squareMeters <= 0)) ||
+    (numberOfRooms != null && (!Number.isFinite(numberOfRooms) || numberOfRooms <= 0)) ||
     !Number.isInteger(numberOfUnits) || numberOfUnits < 1
   ) {
     return NextResponse.json({ error: 'Ungültige Objektdaten.' }, { status: 400 });
@@ -121,6 +123,37 @@ const UPDATE_COLUMNS = {
   archivedAt: 'archived_at',
 } as const;
 
+/** Validates only the fields actually present in a PATCH's `updates` — this
+ *  endpoint is shared by many partial-update use cases (Objektdaten form,
+ *  archiving, image updates, ...), so a field absent from this particular
+ *  call is never required. Mirrors POST's rules for whichever fields a
+ *  caller does include, so a bad value fails with a clean 400 here instead
+ *  of an empty string silently satisfying a NOT NULL column, or a raw DB
+ *  CHECK-constraint violation surfacing as an unhandled 500. */
+function findUpdateError(updates: Record<string, unknown>): string | null {
+  if (Object.hasOwn(updates, 'street') && !String(updates.street ?? '').trim()) return 'street';
+  if (Object.hasOwn(updates, 'city') && !String(updates.city ?? '').trim()) return 'city';
+  if (Object.hasOwn(updates, 'postalCode') && !/^\d{5}$/.test(String(updates.postalCode ?? ''))) return 'postalCode';
+  if (Object.hasOwn(updates, 'yearOfConstruction')) {
+    const year = Number(updates.yearOfConstruction);
+    const currentYear = new Date().getFullYear();
+    if (!Number.isInteger(year) || year < 1800 || year > currentYear) return 'yearOfConstruction';
+  }
+  if (Object.hasOwn(updates, 'squareMeters') && updates.squareMeters != null) {
+    const value = Number(updates.squareMeters);
+    if (!Number.isFinite(value) || value <= 0) return 'squareMeters';
+  }
+  if (Object.hasOwn(updates, 'numberOfRooms') && updates.numberOfRooms != null) {
+    const value = Number(updates.numberOfRooms);
+    if (!Number.isFinite(value) || value <= 0) return 'numberOfRooms';
+  }
+  if (Object.hasOwn(updates, 'numberOfUnits')) {
+    const value = Number(updates.numberOfUnits);
+    if (!Number.isInteger(value) || value < 1) return 'numberOfUnits';
+  }
+  return null;
+}
+
 export async function PATCH(request: Request) {
   const userId = await requireUserId(request);
   const input = await request.json();
@@ -129,15 +162,25 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Ungültige Objekt-ID.' }, { status: 400 });
   }
 
+  const updates = input.updates ?? {};
   const entries = Object.entries(UPDATE_COLUMNS)
-    .filter(([key]) => Object.hasOwn(input.updates ?? {}, key));
+    .filter(([key]) => Object.hasOwn(updates, key));
   if (entries.length === 0) {
     return NextResponse.json({ error: 'Keine Änderungen übermittelt.' }, { status: 400 });
   }
 
+  const invalidField = findUpdateError(updates);
+  if (invalidField) {
+    return NextResponse.json({ error: `Ungültiger Wert für Feld "${invalidField}".` }, { status: 400 });
+  }
+
   const assignments = entries.map(([, column], index) => `${column} = $${index + 3}`);
   assignments.push('updated_at = NOW()');
-  const values = entries.map(([key]) => input.updates[key]);
+  const values = entries.map(([key]) =>
+    key === 'street' || key === 'city' || key === 'postalCode'
+      ? String(updates[key]).trim()
+      : updates[key],
+  );
   const { rows } = await db.query(
     `UPDATE property SET ${assignments.join(', ')} WHERE property_id = $1 AND user_id = $2 RETURNING *`,
     [propertyId, userId, ...values],

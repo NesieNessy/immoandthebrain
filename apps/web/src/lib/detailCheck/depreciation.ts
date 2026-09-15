@@ -110,7 +110,13 @@ export function computePriceSplitIndividual(args: {
   const share = args.coOwnershipDenominator > 0
     ? args.coOwnershipNumerator / args.coOwnershipDenominator
     : 0;
-  const landValue = roundCurrency(Math.max(0, args.landReferenceValue * args.plotAreaM2 * share));
+  const rawLandValue = Math.max(0, args.landReferenceValue * args.plotAreaM2 * share);
+  // Capped to the purchase price (a Bodenrichtwert-based land value can
+  // exceed it, e.g. bad input data) so buildingValue/landValue and their
+  // percentages always add back up to the full purchase price / 100%,
+  // the same guarantee computePriceSplitStandard gets for free from taking
+  // buildingSharePercent as its input instead of deriving it.
+  const landValue = roundCurrency(Math.min(rawLandValue, Math.max(0, args.purchasePrice)));
   const buildingValue = roundCurrency(Math.max(0, args.purchasePrice - landValue));
   return {
     buildingValue,

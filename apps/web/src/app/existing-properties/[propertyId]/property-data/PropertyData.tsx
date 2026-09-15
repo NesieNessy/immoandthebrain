@@ -14,6 +14,7 @@ import { EnergyEfficient, type AcquisitionCosts, type ParkingSpace, type Propert
 import { format, parseISO } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { isPropertyDataFormValid, normalizeNumberOfRooms } from './validation';
 
 const ENERGY_OPTIONS = [
     { value: '', label: 'Bitte wählen...' },
@@ -128,15 +129,7 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
     const update = (patch: Partial<FormState>) => setForm((prev) => ({ ...prev, ...patch }));
 
     const currentYear = new Date().getFullYear();
-    const isValid =
-        form.objektkategorie !== '' &&
-        form.strasseHausnummer.trim() !== '' &&
-        /^\d{5}$/.test(form.plz) &&
-        form.ort.trim() !== '' &&
-        /^\d{4}$/.test(form.baujahr) && Number(form.baujahr) >= 1800 && Number(form.baujahr) <= currentYear &&
-        Number(form.wohnflaeche) > 0 &&
-        form.stellplaetze !== '' && Number(form.stellplaetze) >= 0 &&
-        form.kaufpreis !== '' && Number(form.kaufpreis) > 0;
+    const isValid = isPropertyDataFormValid(form, currentYear);
 
     const handleCancel = () => {
         goTo(`/existing-properties/${propertyId}`);
@@ -154,7 +147,7 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                 postalCode: form.plz,
                 federalState: form.bundesland.trim(),
                 squareMeters: Number(form.wohnflaeche),
-                numberOfRooms: form.anzahlZimmer !== '' ? Number(form.anzahlZimmer) : null,
+                numberOfRooms: normalizeNumberOfRooms(form.anzahlZimmer),
                 yearOfConstruction: Number(form.baujahr),
                 energyEfficient: (form.energieeffizienz || null) as EnergyEfficient | null,
                 propertyCategory: form.objektkategorie,
@@ -368,7 +361,7 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                                     placeholder="3"
                                     value={form.anzahlZimmer}
                                     onChange={(e) => update({ anzahlZimmer: e.target.value })}
-                                    min={0}
+                                    min={1}
                                 />
                             </div>
                             <div className="sm:col-span-4">

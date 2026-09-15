@@ -98,10 +98,14 @@ function toCostItem(row: Record<string, unknown>): ServiceChargeCostItem {
   };
 }
 
-export async function getAggregatedSettlementData(propertyId: number, propertyUnitId?: number) {
+export async function getAggregatedSettlementData(propertyId: number, propertyUnitId?: number, periodStart?: string, periodEnd?: string) {
   const q = new URLSearchParams();
   q.set('propertyId', String(propertyId));
   if (propertyUnitId !== undefined) q.set('propertyUnitId', String(propertyUnitId));
+  if (periodStart && periodEnd) {
+    q.set('periodStart', periodStart);
+    q.set('periodEnd', periodEnd);
+  }
   const response = await authFetch(`/api/settlement-aggregate?${q.toString()}`, { cache: 'no-store' });
   if (!response.ok) return { units: [], settlement: null, tenancy: null, costItems: [] };
   const data = await response.json() as { units: Record<string, unknown>[]; settlement: Record<string, unknown> | null; tenancy: Record<string, unknown> | null; costItems: Record<string, unknown>[] };

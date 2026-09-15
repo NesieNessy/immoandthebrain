@@ -239,16 +239,12 @@ export function QuickCheckResultView({ id }: Props) {
             ]}
           />
 
-          <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
+          <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:gap-6">
             <MobileResultBanner show={canShowResult} resultId="qc-result" formTopId="qc-form-top" />
 
             {/* Form */}
             <div className="flex flex-col gap-3">
               <section id="qc-form-top">
-                <h2 className="text-md font-semibold text-foreground mb-2">
-                  Informationen zur Berechnung
-                </h2>
-
                 <PortalImportSection portalUrl={portalUrl} onPortalUrlChange={setPortalUrl} />
 
                 <div className="flex flex-col gap-2 pt-1.5">
@@ -328,7 +324,7 @@ export function QuickCheckResultView({ id }: Props) {
             </div>
 
             {/* Result */}
-            <div id="qc-result" className="flex flex-col gap-4">
+            <div id="qc-result" className="flex h-full flex-col justify-center gap-4">
               {!canShowResult ? (
                 <NoResult />
               ) : (
