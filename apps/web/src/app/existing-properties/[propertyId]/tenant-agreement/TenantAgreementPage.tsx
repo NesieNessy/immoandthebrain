@@ -106,6 +106,7 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                                 label="Einzugsdatum"
                                 value={data.persons[0]?.moveInDate}
                                 onChange={(date) => data.updatePerson(0, { moveInDate: date })}
+                                error={data.primaryPersonFieldErrors?.moveInDate}
                             />
                             <div>
                                 <CalendarField
@@ -437,7 +438,7 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                 ghostIcon={<BUTTON_DETAILS.Back.icon />}
                 primaryLabel="Mietvertrag speichern"
                 primaryIcon={<BUTTON_DETAILS.Save.icon />}
-                primaryDisabled={!data.isEditing || data.isSaving}
+                primaryDisabled={!data.isEditing || data.isSaving || !data.isPrimaryPersonValid}
             />
 
             <ConfirmDeleteModal

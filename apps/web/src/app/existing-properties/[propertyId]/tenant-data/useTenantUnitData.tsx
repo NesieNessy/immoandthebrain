@@ -24,6 +24,7 @@ import {
 import { createUseCaseMenuItems } from '@/lib/propertyUseCaseMenu';
 import { cn, deCurrencyFormatter, formatDeDate } from '@/lib/utils';
 import { renovationAdjustmentLetterHtml, rentIncreaseLetterHtml } from './adjustmentLetters';
+import { hasOrphanedRentalData } from './orphanedRentalData';
 import { validatePrimaryPerson } from './primaryPersonValidation';
 import { htmlToPdfBlob } from '@/lib/pdf/htmlToPdf';
 import type { MaintenanceCostItem, MaintenanceCosts, PersonalData, Property, PropertyUnit, Tenancy, TenancyAdjustmentHistoryEntry, TenancyAdjustmentType, TenancyDocument, TenancyDocumentType } from '@immoandthebrain/types';
@@ -684,7 +685,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                 if (!created) throw new Error('createTenancy failed');
                 activeTenancyId = created.tenancyId;
             } else if (tenancy) {
-                await updateTenancy(tenancy.tenancyId, {
+                const updated = await updateTenancy(tenancy.tenancyId, {
                     deposit: depositValue,
                     tenancyStartDate: startDateValue,
                     tenancyEndDate: endDateValue,
@@ -693,6 +694,11 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                     parkingSpaceRent: parkingSpaceRentValue,
                     ...adjustmentFields,
                 });
+                if (!updated) throw new Error('updateTenancy failed');
+            } else {
+                if (hasOrphanedRentalData({ ...rentalForm, persons })) {
+                    throw new Error('Bitte zuerst einen Mieternamen unter „Mieterdaten“ erfassen, bevor Mietvertragsdaten gespeichert werden können.');
+                }
             }
 
             if (activeTenancyId) {
