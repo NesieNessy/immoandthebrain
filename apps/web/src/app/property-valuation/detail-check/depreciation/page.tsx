@@ -1,6 +1,7 @@
 "use client";
 
-import { ComingSoonButton, Dropdown, LoadingScreen, PillOptions, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
+import { ComingSoonButton, Dropdown, LoadingScreen, PillOptions, ReadOnlyField, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
+import { PROPERTY_CATEGORY_LABEL } from '@/components/features/PropertyDisplay';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
@@ -45,12 +46,6 @@ type DepreciationResponse = {
     landSharePercent: number;
   };
 };
-
-const residentialTypeOptions = [
-  { value: 'EIGENTUMSWOHNUNG', label: 'Eigentumswohnung (= Mehrfamilienhaus)' },
-  { value: 'HOLZBAUWEISE', label: 'Holzbauweise / minderer Standard' },
-  { value: 'DENKMALGESCHUETZT', label: 'Denkmalgeschütztes Gebäude (Einzelfall)' },
-];
 
 // Matches the mode toggle on the existing-property RND/Kaufpreisaufteilung
 // editors (AdjustRnd, AdjustDistribution) exactly, so switching between
@@ -223,14 +218,14 @@ function DepreciationContent() {
           <LoadingScreen message="Abschreibung wird geladen…" fullScreen={false} />
         ) : (
           <div className="flex flex-col gap-6">
-            <div className="flex flex-col gap-2 max-w-xl">
+            <div className="flex flex-col gap-2">
               <SectionLabel>Wohnart</SectionLabel>
-              <Dropdown
-                options={residentialTypeOptions}
-                value={propertyCategory}
-                onChange={(event) => setPropertyCategory(event.target.value)}
-                helperText="Die Wohnart beeinflusst die individuelle Restnutzungsdauer."
-              />
+              <div className="max-w-xl pt-1">
+                <ReadOnlyField
+                  value={PROPERTY_CATEGORY_LABEL[propertyCategory] ?? propertyCategory}
+                  helperText="Übernommen aus den Objektdaten. Beeinflusst die individuelle Restnutzungsdauer."
+                />
+              </div>
             </div>
 
             <div className="flex flex-col gap-2">
