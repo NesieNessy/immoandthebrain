@@ -107,7 +107,10 @@ test('saving rental terms for a named tenant persists them to the tenancy row', 
 
     await page.goto(`/existing-properties/${propertyId}/tenant-agreement/${tenantedUnitId}`);
     await page.getByLabel('Netto-Mieteinnahmen', { exact: true }).fill('1200');
-    await page.getByLabel('NK-Vorauszahlung', { exact: true }).fill('250');
+    // Always rendered with the "optional" prop on this page (unconditionally,
+    // unlike Einzugsdatum/coldRent) -> FieldLabel appends "(optional)" to the
+    // accessible name, so an exact match against the bare label never resolves.
+    await page.getByLabel('NK-Vorauszahlung').fill('250');
 
     const saveButton = page.getByRole('button', { name: 'Mietvertrag speichern' });
     await expect(saveButton).toBeEnabled();

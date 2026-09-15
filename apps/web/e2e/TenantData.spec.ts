@@ -103,10 +103,12 @@ test('saving persists the Hauptmieter and an additional person, requiring Steuer
     await page.getByLabel('Einzugsdatum', { exact: true }).fill('01.01.2024');
 
     await page.getByRole('button', { name: 'Person hinzufügen' }).click();
-    // The second person is not primary -> only a name is required of it, and
-    // even that isn't required to save (an unnamed extra row is just dropped).
-    await page.getByLabel('Vorname', { exact: true }).nth(1).fill('Maria');
-    await page.getByLabel('Nachname', { exact: true }).nth(1).fill('Schmidt');
+    // The second person is not primary -> its fields are marked "(optional)"
+    // in the label itself (FieldLabel appends that suffix), so an exact
+    // match against plain "Vorname" only ever finds the Hauptmieter's field.
+    // Match loosely here and rely on DOM order for .nth(1).
+    await page.getByLabel('Vorname').nth(1).fill('Maria');
+    await page.getByLabel('Nachname').nth(1).fill('Schmidt');
 
     const saveButton = page.getByRole('button', { name: 'Mieterdaten speichern' });
     await expect(saveButton).toBeEnabled();
