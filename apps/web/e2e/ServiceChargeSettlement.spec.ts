@@ -113,7 +113,9 @@ test('filling in a cost item and saving persists the settlement and computes the
     await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId}`);
 
     const firstRow = page.locator('tbody tr').first();
-    await expect(firstRow).toContainText('Grundsteuer');
+    // The label cell is an editable TextField (an <input>), so its value
+    // never shows up in the row's text content — toContainText can't see it.
+    await expect(firstRow.getByRole('textbox').first()).toHaveValue('Grundsteuer');
 
     const numberInputs = firstRow.locator('input[type="number"]');
     // index 0 = actualAmount, 1 = actualShareOverride (disabled until an
@@ -165,7 +167,7 @@ test('navigating to a different year creates a separate settlement instead of ov
 
     // This year's settlement, saved by the previous test, loads by default.
     const firstRow = page.locator('tbody tr').first();
-    await expect(firstRow).toContainText('Grundsteuer');
+    await expect(firstRow.getByRole('textbox').first()).toHaveValue('Grundsteuer');
     await expect(firstRow.locator('input[type="number"]').nth(0)).toHaveValue('1000');
 
     const currentYear = new Date().getFullYear();

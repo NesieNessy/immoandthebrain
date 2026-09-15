@@ -13,6 +13,7 @@ import {
     createSettlement,
     getSettlementByPeriod,
     getSettlementSourceDocumentUrl,
+    getSettlementsByProperty,
     removeSettlementSourceDocument,
     updateSettlement,
     uploadSettlementSourceDocument,
@@ -126,6 +127,14 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const [previewAdjustmentHtml, setPreviewAdjustmentHtml] = useState<string | null>(null);
     const [isLoadingAdjustmentPreview, setIsLoadingAdjustmentPreview] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // Every settlement ever saved for this property — lets the picker reopen
+    // one whose period isn't reachable via the year chevron (a custom range,
+    // or a year other than the currently loaded one).
+    const [savedSettlements, setSavedSettlements] = useState<ServiceChargeSettlement[]>([]);
+    const refreshSavedSettlements = useCallback(async () => {
+        setSavedSettlements(await getSettlementsByProperty(property.propertyId));
+    }, [property.propertyId]);
+    useEffect(() => { void refreshSavedSettlements(); }, [refreshSavedSettlements]);
 
     // `explicitPeriod` set means "load the settlement for exactly this
     // period" (browsing settlement history via the year picker) rather than
@@ -426,11 +435,12 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             setCostItems(savedItems);
             setDeletedCostItemIds([]);
             setOriginalSnapshot(serializeCostItems(savedItems, periodStart, periodEnd));
+            if (isNewSettlementForThisSave) void refreshSavedSettlements();
             showToast('Nebenkostenabrechnung gespeichert.', 'success');
         } catch (err) {
             setError(
                 err instanceof Error && err.message === 'PERIOD_CONFLICT'
-                    ? 'Für diesen Zeitraum existiert bereits eine gespeicherte Abrechnung. Bitte über die Jahresauswahl dorthin wechseln, um sie zu bearbeiten.'
+                    ? 'Für diesen Zeitraum existiert bereits eine gespeicherte Abrechnung. Bitte über „Gespeicherte Abrechnungen" dorthin wechseln, um sie zu bearbeiten.'
                     : 'Die Nebenkostenabrechnung konnte nicht gespeichert werden.',
             );
         } finally {
@@ -874,6 +884,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         settlement, periodStart, setPeriodStart, periodEnd, setPeriodEnd,
         periodMode, setPeriodMode, setSettlementYear,
         pendingPeriod, confirmPeriodSwitch, cancelPeriodSwitch,
+        savedSettlements, switchToPeriod,
         costItems, tenancy, landlord, useCaseMenuItems, backHref,
         previewHtml, isLoadingPreview,
         previewAdjustmentHtml, isLoadingAdjustmentPreview,

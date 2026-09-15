@@ -18,15 +18,24 @@ import {
     TextField,
     UnsavedChangesModal,
     type BreadcrumbItem,
+    type MenuItem,
 } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
-import type { Property, PropertyUnit } from '@immoandthebrain/types';
+import { isFullCalendarYear } from '@/lib/serviceCharge/settlementMath';
+import { formatDeDate } from '@/lib/utils';
+import type { Property, PropertyUnit, ServiceChargeSettlement } from '@immoandthebrain/types';
 import { useRouter } from 'next/navigation';
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { Sparkles } from 'lucide-react';
 
 import { euro, useServiceChargeSettlementData } from './useServiceChargeSettlementData';
+
+function settlementPeriodLabel(s: ServiceChargeSettlement): string {
+    const start = new Date(s.periodStart);
+    const end = new Date(s.periodEnd);
+    return isFullCalendarYear(start, end) ? `Abrechnungsjahr ${end.getFullYear()}` : `${formatDeDate(s.periodStart)} – ${formatDeDate(s.periodEnd)}`;
+}
 
 interface ServiceChargeSettlementViewProps {
     propertyId: string;
@@ -56,6 +65,15 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
             { label: ExistingPropertiesUseCases.ServiceChargeSettlement },
         ];
 
+    // Reopens a previously saved settlement whose period isn't reachable via
+    // the year chevron (a custom range, or simply a year other than the one
+    // currently loaded) — the only browse path for "Individueller Zeitraum".
+    const savedSettlementMenuItems: MenuItem[] = useMemo(() => data.savedSettlements.map((s) => ({
+        label: settlementPeriodLabel(s),
+        icon: data.settlement?.serviceChargeSettlementId === s.serviceChargeSettlementId ? <Icons.Check /> : undefined,
+        onClick: () => data.switchToPeriod(new Date(s.periodStart), new Date(s.periodEnd)),
+    })), [data]);
+
     if (data.isLoading) return <LoadingScreen />;
 
     return (
@@ -75,12 +93,21 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                     {/* Abrechnungszeitraum */}
                     <div>
                         <SectionLabel>Abrechnungszeitraum & Kostenpositionen</SectionLabel>
-                        <div className="mt-3">
+                        <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
                             <Switch
                                 label="Individueller Zeitraum"
                                 checked={data.periodMode === 'custom'}
                                 onCheckedChange={(checked) => data.setPeriodMode(checked ? 'custom' : 'year')}
                             />
+                            {savedSettlementMenuItems.length > 0 && (
+                                <Button
+                                    label="Gespeicherte Abrechnungen"
+                                    icon={<Icons.History className="w-4 h-4" />}
+                                    variant="outline"
+                                    size="sm"
+                                    menuItems={savedSettlementMenuItems}
+                                />
+                            )}
                         </div>
                         {data.periodMode === 'year' ? (
                             <div className="mt-3 flex items-center gap-2">
