@@ -235,28 +235,51 @@ async function signInBypassUserForStorage(page: Page) {
     const password = `e2e-bypass-${Date.now()}`;
 
     const dbClient = new Client({ connectionString: requireDatabaseUrl() });
-    await dbClient.connect();
+    let diagnostics: Record<string, unknown> | undefined;
     try {
         // Matches by email, not id: PUT /admin/users/{BYPASS_USER_ID} returned a
         // plain 404 for this exact id even though the row demonstrably exists
         // (generateLink's own attempt to create a user with this email hit the
         // table's unique constraint) — so an id-based match is not trusted here.
-        // aud/role are set defensively too, in case GoTrue's password grant
-        // filters on them and this row (seeded by raw INSERT, not a real signup)
-        // never got them populated.
+        // aud/role/instance_id are set defensively too, in case GoTrue's admin
+        // and password-grant lookups filter on them and this row (seeded by a
+        // raw INSERT, not a real signup) never got them populated to whatever
+        // this GoTrue instance expects.
         const { rows } = await dbClient.query(
             `UPDATE auth.users
              SET encrypted_password = crypt($1, gen_salt('bf')),
                  email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
+                 confirmed_at = COALESCE(confirmed_at, NOW()),
                  aud = COALESCE(NULLIF(aud, ''), 'authenticated'),
-                 role = COALESCE(NULLIF(role, ''), 'authenticated')
+                 role = COALESCE(NULLIF(role, ''), 'authenticated'),
+                 instance_id = COALESCE(instance_id, '00000000-0000-0000-0000-000000000000'),
+                 is_sso_user = COALESCE(is_sso_user, false),
+                 banned_until = NULL,
+                 deleted_at = NULL
              WHERE email = 'dev@immoandthebrain.local'
-             RETURNING id`,
+             RETURNING id, instance_id, aud, role, is_sso_user, banned_until, deleted_at,
+                       email_confirmed_at IS NOT NULL AS email_confirmed,
+                       encrypted_password IS NOT NULL AS has_password`,
             [password],
         );
         if (rows.length === 0) {
             throw new Error('Bypass user (dev@immoandthebrain.local) not found in auth.users — check 20260224000006_zz_dev_user.sql seeded it.');
         }
+        diagnostics = rows[0] as Record<string, unknown>;
+        const userId = diagnostics.id as string;
+
+        // A real signup also creates a matching auth.identities row (provider
+        // 'email', provider_id = user id) — confirmed against a real, working
+        // user on the hosted project. This raw-seeded row never got one, and
+        // GoTrue's own lookups (admin get-by-id, password grant) appear to
+        // depend on it existing, not just the auth.users row.
+        await dbClient.query(
+            `INSERT INTO auth.identities (user_id, provider, provider_id, identity_data, email, created_at, updated_at)
+             VALUES ($1, 'email', $1::text, jsonb_build_object('sub', $1::text, 'email', $2::text, 'email_verified', true, 'phone_verified', false), $2, NOW(), NOW())
+             ON CONFLICT (provider_id, provider) DO UPDATE
+             SET identity_data = EXCLUDED.identity_data, email = EXCLUDED.email, updated_at = NOW()`,
+            [userId, 'dev@immoandthebrain.local'],
+        );
     } finally {
         await dbClient.end();
     }
@@ -266,7 +289,9 @@ async function signInBypassUserForStorage(page: Page) {
         headers: { 'Content-Type': 'application/json', apikey: anonKey },
         body: JSON.stringify({ email: 'dev@immoandthebrain.local', password }),
     });
-    if (!tokenResponse.ok) throw new Error(`Password sign-in failed: ${await tokenResponse.text()}`);
+    if (!tokenResponse.ok) {
+        throw new Error(`Password sign-in failed: ${await tokenResponse.text()} — row state after update: ${JSON.stringify(diagnostics)}`);
+    }
     const raw = await tokenResponse.json() as VerifyOtpSession;
     if (!raw.access_token || !raw.refresh_token) throw new Error('Password sign-in did not return a session.');
     const session: VerifyOtpSession = {
