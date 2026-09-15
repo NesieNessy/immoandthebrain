@@ -38,6 +38,16 @@ export async function getCurrentSettlementByProperty(propertyId: number): Promis
     return toSettlement(data);
 }
 
+/** The settlement for one exact billing period — null when nothing has been
+ *  saved for that period yet. Used to tell "editing the settlement that's
+ *  already loaded" apart from "navigating to a different period", and to
+ *  avoid creating a duplicate settlement for a period that already has one. */
+export async function getSettlementByPeriod(propertyId: number, periodStart: string, periodEnd: string): Promise<ServiceChargeSettlement | null> {
+    const data = await propertyResourceRequest<Record<string, unknown>>('service-charge-settlements', {}, { propertyId, periodStart, periodEnd, single: true });
+    if (!data) return null;
+    return toSettlement(data);
+}
+
 // ----------------------------------------------------------------------------
 // Mutations
 // ----------------------------------------------------------------------------

@@ -107,8 +107,12 @@ test('reactivating a past tenancy clears its move-out date and marks it rented a
     await row.getByRole('button').click();
     await page.getByRole('button', { name: 'Reaktivieren' }).click();
 
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByText('Mietverhältnis reaktivieren?')).toBeVisible();
+    // Radix's Popover.Content (the still-open row menu behind this modal)
+    // also renders with role="dialog", so an unqualified getByRole('dialog')
+    // matches both — scope by the confirm modal's own accessible name
+    // (aria-labelledby -> its title) to get only the real confirm dialog.
+    const dialog = page.getByRole('dialog', { name: 'Mietverhältnis reaktivieren?' });
+    await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Reaktivieren' }).click();
 
     await expect(page.getByText('Mietverhältnis reaktiviert.')).toBeVisible();
@@ -135,8 +139,10 @@ test('deleting a past tenancy removes it permanently', async ({ page }) => {
     await row.getByRole('button').click();
     await page.getByRole('button', { name: 'Löschen' }).click();
 
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByText('Eintrag löschen?')).toBeVisible();
+    // Same Popover/Dialog role collision as the reactivate test above —
+    // scope by the confirm modal's own accessible name.
+    const dialog = page.getByRole('dialog', { name: 'Eintrag löschen?' });
+    await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Löschen' }).click();
 
     await expect(page.getByText('Mietverhältnis gelöscht.')).toBeVisible();

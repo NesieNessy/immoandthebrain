@@ -16,6 +16,7 @@ import {
     StickyActionBar,
     Switch,
     TextField,
+    UnsavedChangesModal,
     type BreadcrumbItem,
 } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
@@ -559,6 +560,13 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                 primaryLabel="Abrechnung speichern"
                 primaryIcon={<BUTTON_DETAILS.Save.icon />}
                 primaryDisabled={!data.isEditing || data.isSaving}
+            />
+
+            <UnsavedChangesModal
+                open={data.pendingPeriod !== null}
+                onCancel={data.cancelPeriodSwitch}
+                onDiscard={data.confirmPeriodSwitch}
+                context="an der Nebenkostenabrechnung"
             />
         </div>
     );
