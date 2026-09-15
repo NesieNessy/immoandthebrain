@@ -234,7 +234,7 @@ async function signInBypassUserForStorage(page: Page) {
     const anonKey = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
     const password = `e2e-bypass-${Date.now()}`;
 
-    const dbClient = new Client({ connectionString: requireDatabaseUrl() });
+    const dbClient = new Client({ connectionString: requireDatabaseUrl(), connectionTimeoutMillis: 10000 });
     let diagnostics: Record<string, unknown> | undefined;
     try {
         // Matches by email, not id: PUT /admin/users/{BYPASS_USER_ID} returned a
@@ -288,6 +288,9 @@ async function signInBypassUserForStorage(page: Page) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', apikey: anonKey },
         body: JSON.stringify({ email: 'dev@immoandthebrain.local', password }),
+        // A hang here (vs. a clear rejection) would otherwise silently eat the
+        // whole test timeout with no diagnostic — fail fast and loud instead.
+        signal: AbortSignal.timeout(10000),
     });
     if (!tokenResponse.ok) {
         throw new Error(`Password sign-in failed: ${await tokenResponse.text()} — row state after update: ${JSON.stringify(diagnostics)}`);
@@ -311,6 +314,12 @@ async function signInBypassUserForStorage(page: Page) {
 }
 
 test('uploading a photo shows it in the gallery as the cover, and it can be removed again', async ({ page, request }) => {
+    // The default 30s budget is tight for this test specifically: unlike the
+    // rest of this suite it does two extra DB round-trips and two GoTrue auth
+    // requests (signInBypassUserForStorage) plus a full page reload before it
+    // even gets to the actual upload + Storage round-trip.
+    test.setTimeout(60000);
+
     const storageUp = await request.get('http://localhost:55321/storage/v1/status').catch(() => null);
     test.skip(!storageUp?.ok(), 'Requires the local `supabase start` Storage stack, which is not running.');
 
