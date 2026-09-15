@@ -24,6 +24,7 @@ import {
 import { createUseCaseMenuItems } from '@/lib/propertyUseCaseMenu';
 import { cn, deCurrencyFormatter, formatDeDate } from '@/lib/utils';
 import { renovationAdjustmentLetterHtml, rentIncreaseLetterHtml } from './adjustmentLetters';
+import { validatePrimaryPerson } from './primaryPersonValidation';
 import { htmlToPdfBlob } from '@/lib/pdf/htmlToPdf';
 import type { MaintenanceCostItem, MaintenanceCosts, PersonalData, Property, PropertyUnit, Tenancy, TenancyAdjustmentHistoryEntry, TenancyAdjustmentType, TenancyDocument, TenancyDocumentType } from '@immoandthebrain/types';
 import { format } from 'date-fns';
@@ -335,6 +336,10 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
         || serializePersons(persons) !== originalPersonsSnapshot
         || serializeRentalForm(rentalForm) !== originalRentalFormSnapshot
         || JSON.stringify(costItems) !== originalCostItemsSnapshot;
+
+    const primaryPersonIndex = persons.findIndex((p) => p.isPrimary);
+    const { fieldErrors: primaryPersonFieldErrors, isValid: isPrimaryPersonValid } =
+        validatePrimaryPerson(primaryPersonIndex >= 0 ? persons[primaryPersonIndex] : null);
 
     // Any navigation away from an unsaved edit is routed through here so it
     // can be confirmed first (breadcrumb links, the back button, the use-case menu).
@@ -650,7 +655,8 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                         deposit: depositValue,
                         ...adjustmentFields,
                     });
-                    activeTenancyId = created?.tenancyId ?? null;
+                    if (!created) throw new Error('createTenancy failed');
+                    activeTenancyId = created.tenancyId;
                 } else {
                     activeTenancyId = null;
                 }
@@ -675,7 +681,8 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                     deposit: depositValue,
                     ...adjustmentFields,
                 });
-                activeTenancyId = created?.tenancyId ?? null;
+                if (!created) throw new Error('createTenancy failed');
+                activeTenancyId = created.tenancyId;
             } else if (tenancy) {
                 await updateTenancy(tenancy.tenancyId, {
                     deposit: depositValue,
@@ -720,14 +727,21 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                     const p = persons[i];
                     const moveInDate = p.moveInDate ? format(p.moveInDate, 'yyyy-MM-dd') : null;
                     if (p.id) {
-                        await updateTenancyPerson(p.id, {
+                        const updated = await updateTenancyPerson(p.id, {
                             lastName: p.lastName || null,
                             firstName: p.firstName || null,
                             taxId: p.taxId || null,
                             moveInDate,
                         });
+                        // The DB rejects a primary tenant with a blank Steuer-ID/
+                        // Einzugsdatum (tenancy_person_primary_*_required CHECK
+                        // constraints) — isPrimaryPersonValid should already have
+                        // kept Save disabled before this point, but silently
+                        // swallowing a failure here would otherwise report
+                        // "gespeichert" while this person's edits were dropped.
+                        if (!updated) throw new Error(`Mieterdaten für Person ${i + 1} konnten nicht gespeichert werden.`);
                     } else if (p.lastName.trim() !== '' || p.firstName.trim() !== '') {
-                        await createTenancyPerson({
+                        const created = await createTenancyPerson({
                             tenancyId: activeTenancyId,
                             lastName: p.lastName || null,
                             firstName: p.firstName || null,
@@ -736,6 +750,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                             sortOrder: i,
                             moveInDate,
                         });
+                        if (!created) throw new Error(`Mieterdaten für Person ${i + 1} konnten nicht gespeichert werden.`);
                     }
                 }
             }
@@ -1263,6 +1278,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
         // computed
         isArchived: Boolean(archivedTenancyId),
         status, isEditing, landlordMissing, costBreakdownActive, computedTotalCosts,
+        primaryPersonIndex, primaryPersonFieldErrors, isPrimaryPersonValid,
         effectiveRentReminderDate, effectiveRenovationReminderDate,
         documentRows, mietvertrag, mietvertragRows, mieterbescheinigungRow,
         rentIncreaseLetterRow, renovationLetterRow, documentColumns, documentTableData,
