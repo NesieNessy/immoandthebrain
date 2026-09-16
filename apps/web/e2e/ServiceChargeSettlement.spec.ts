@@ -109,7 +109,12 @@ test.afterAll(async () => {
     }
 });
 
-test('filling in a cost item and saving persists the settlement and computes the unit share', async ({ page }) => {
+test('filling in a cost item and saving persists the settlement and computes the unit share, and navigating to a different year creates a separate settlement instead of overwriting it', async ({ page }) => {
+    // Kept as one test (rather than two that build on each other) so that a
+    // CI retry — which Playwright runs in a fresh worker, re-seeding the
+    // fixture via beforeAll — always replays the whole scenario instead of
+    // a later part silently depending on state a skipped earlier test would
+    // otherwise have committed.
     await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId}`);
 
     const firstRow = page.locator('tbody tr').first();
@@ -160,23 +165,17 @@ test('filling in a cost item and saving persists the settlement and computes the
     // 20260224000006_zz_dev_user.sql) — all three are present now, so the
     // PDF button should be enabled.
     await expect(page.getByRole('button', { name: 'PDF generieren' })).toBeEnabled();
-});
 
-test('navigating to a different year creates a separate settlement instead of overwriting the loaded one, and guards unsaved edits', async ({ page }) => {
-    await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId}`);
-
-    // This year's settlement, saved by the previous test, loads by default.
-    const firstRow = page.locator('tbody tr').first();
-    await expect(firstRow.getByRole('textbox').first()).toHaveValue('Grundsteuer');
-    await expect(firstRow.locator('input[type="number"]').nth(0)).toHaveValue('1000');
-
+    // ── Now browse to a different year: must not overwrite the settlement above ──
     const currentYear = new Date().getFullYear();
     const nextYear = currentYear + 1;
-    await expect(page.getByText(`Abrechnungsjahr ${currentYear}`)).toBeVisible();
+    // "Abrechnungsjahr {year}" also appears in the "Gesamtkosten Objekt"
+    // MetricCard's detail text — .first() picks the year-picker's own display.
+    await expect(page.getByText(`Abrechnungsjahr ${currentYear}`).first()).toBeVisible();
 
     // No unsaved edits yet -> switching years reloads immediately, no confirm dialog.
     await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
-    await expect(page.getByText(`Abrechnungsjahr ${nextYear}`)).toBeVisible();
+    await expect(page.getByText(`Abrechnungsjahr ${nextYear}`).first()).toBeVisible();
     // No settlement saved for the new period yet -> the default BetrKV
     // template, not a copy of the previous year's saved amount.
     await expect(firstRow.locator('input[type="number"]').nth(0)).toHaveValue('');
@@ -192,7 +191,7 @@ test('navigating to a different year creates a separate settlement instead of ov
     await discardDialog.getByRole('button', { name: 'Abbrechen' }).click();
     await expect(discardDialog).not.toBeVisible();
     // Cancelling kept the edit and stayed on the next-year draft.
-    await expect(page.getByText(`Abrechnungsjahr ${nextYear}`)).toBeVisible();
+    await expect(page.getByText(`Abrechnungsjahr ${nextYear}`).first()).toBeVisible();
     await expect(firstRow.locator('input[type="number"]').nth(0)).toHaveValue('2000');
 
     await page.getByRole('button', { name: 'Abrechnung speichern' }).click();
