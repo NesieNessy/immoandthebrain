@@ -90,6 +90,12 @@ test.afterAll(async () => {
     const client = new Client({ connectionString: requireDatabaseUrl() });
     await client.connect();
     try {
+        // The custom category created below is synced by name to every one
+        // of the bypass user's active properties, not just A/B — clean it up
+        // everywhere it may have landed, or a later run finds it already
+        // present on every other property and the sync becomes a no-op
+        // (breaking the "was just added" toast assertion).
+        await client.query('DELETE FROM tax_expense_category WHERE label = $1', [customCategoryLabel]);
         // ON DELETE CASCADE takes property_unit/tax_expense_category/tax_expense_document along with it.
         await client.query('DELETE FROM property WHERE postal_code = $1', [POSTAL_CODE]);
     } finally {
@@ -154,7 +160,10 @@ test("uploading a receipt, marking a category complete, and deleting a category 
     await page.setInputFiles('#tax-expense-document-upload', testFilePath);
     await uploadDialog.getByRole('button', { name: 'Hochladen' }).click();
     await expect(uploadDialog).not.toBeVisible();
-    await expect(fahrtkostenRow.getByText('42 €')).toBeVisible();
+    // Scoped to the Betrag column specifically — the freshly uploaded
+    // receipt's own chip in the Belege column shows the same "42 €" text,
+    // which would otherwise make this an ambiguous, strict-mode-violating match.
+    await expect(fahrtkostenRow.locator('td').nth(2)).toHaveText('42 €');
 
     // ── Als vollständig markieren, then back to unvollständig ─────────────
     const mahlzeitenRow = rows.nth(MAHLZEITEN_ROW);
@@ -253,7 +262,8 @@ test('year cards reflect the selected year, and the Steuerübersicht link opens 
     await lastYearCard.click();
 
     await expect(page.getByText(`Kostenkategorien ${lastYear}`)).toBeVisible();
-    await expect(rows.nth(FAHRTKOSTEN_ROW).getByText('77 €')).toBeVisible();
+    // Scoped to the Betrag column — see the identical fix above.
+    await expect(rows.nth(FAHRTKOSTEN_ROW).locator('td').nth(2)).toHaveText('77 €');
     // Every other category has no receipt in the backdated year.
     await expect(rows.nth(MAHLZEITEN_ROW).getByText('Beleg fehlt')).toBeVisible();
 
