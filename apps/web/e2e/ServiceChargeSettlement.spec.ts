@@ -197,10 +197,10 @@ test('filling in a cost item and saving persists the settlement and computes the
     await page.getByRole('button', { name: 'Abrechnung speichern' }).click();
     await expect(page.getByText('Nebenkostenabrechnung gespeichert.')).toBeVisible();
 
-    const client = new Client({ connectionString: requireDatabaseUrl() });
-    await client.connect();
+    const secondClient = new Client({ connectionString: requireDatabaseUrl() });
+    await secondClient.connect();
     try {
-        const { rows: settlementRows } = await client.query(
+        const { rows: settlementRows } = await secondClient.query(
             'SELECT service_charge_settlement_id, period_start FROM service_charge_settlement WHERE property_id = $1 ORDER BY period_start',
             [propertyId],
         );
@@ -209,19 +209,19 @@ test('filling in a cost item and saving persists the settlement and computes the
         expect(settlementRows).toHaveLength(2);
         const [thisYearSettlement, nextYearSettlement] = settlementRows;
 
-        const { rows: originalItems } = await client.query(
+        const { rows: originalItems } = await secondClient.query(
             `SELECT actual_amount FROM service_charge_cost_item WHERE service_charge_settlement_id = $1 AND label = 'Grundsteuer'`,
             [thisYearSettlement.service_charge_settlement_id],
         );
         expect(Number(originalItems[0].actual_amount)).toBe(1000);
 
-        const { rows: nextYearItems } = await client.query(
+        const { rows: nextYearItems } = await secondClient.query(
             `SELECT actual_amount, budget_amount FROM service_charge_cost_item WHERE service_charge_settlement_id = $1 AND label = 'Grundsteuer'`,
             [nextYearSettlement.service_charge_settlement_id],
         );
         expect(Number(nextYearItems[0].actual_amount)).toBe(2000);
         expect(Number(nextYearItems[0].budget_amount)).toBe(2200);
     } finally {
-        await client.end();
+        await secondClient.end();
     }
 });
