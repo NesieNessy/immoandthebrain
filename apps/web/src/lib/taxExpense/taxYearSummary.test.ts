@@ -121,4 +121,16 @@ describe('summarizeTaxYear', () => {
         expect(result.categories[0].amount).toBe(0);
         expect(result.categories[0].documents).toHaveLength(0);
     });
+
+    it('documentCount is the actual number of receipts, not the number of covered categories — a category can have more than one', () => {
+        const categories = [category({ taxExpenseCategoryId: 1 }), category({ taxExpenseCategoryId: 2 })];
+        const docs = [
+            document({ taxExpenseCategoryId: 1, amount: 10 }),
+            document({ taxExpenseCategoryId: 1, amount: 15 }),
+            document({ taxExpenseCategoryId: 1, amount: 5 }),
+        ];
+        const result = summarizeTaxYear(categories, docs, 2025);
+        expect(result.uploadedCategoryCount).toBe(1);
+        expect(result.documentCount).toBe(3);
+    });
 });

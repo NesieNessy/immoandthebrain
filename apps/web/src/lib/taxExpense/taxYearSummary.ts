@@ -23,7 +23,13 @@ export interface TaxYearBreakdown {
     categories: TaxYearCategoryBreakdown[];
     totalAmount: number;
     categoryCount: number;
+    /** Categories with at least one receipt (or manually marked complete) —
+     *  a category count, not a receipt count; a category can have more than
+     *  one receipt. Drives missingCount/status. */
     uploadedCategoryCount: number;
+    /** The actual number of receipts uploaded this year, across every
+     *  category — unlike uploadedCategoryCount, this can exceed categoryCount. */
+    documentCount: number;
     missingCount: number;
     status: TaxCompletionStatus;
 }
@@ -78,6 +84,7 @@ export function summarizeTaxYear(categories: TaxExpenseCategory[], documents: Ta
         totalAmount: categoryBreakdowns.reduce((sum, category) => sum + category.amount, 0),
         categoryCount: categoryBreakdowns.length,
         uploadedCategoryCount,
+        documentCount: categoryBreakdowns.reduce((sum, category) => sum + category.documents.length, 0),
         missingCount,
         status,
     };

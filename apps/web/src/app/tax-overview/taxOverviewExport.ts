@@ -25,7 +25,7 @@ export function buildTaxOverviewReportHtml(year: number, properties: TaxOverview
                 `).join('')}
             </tbody>
             <tfoot>
-                <tr><td colspan="2">Gesamtkosten Objekt ${year}</td><td>${euro(property.totalAmount)}</td></tr>
+                <tr><td>Gesamtkosten Objekt ${year}</td><td>${euro(property.totalAmount)}</td><td></td></tr>
             </tfoot>
         </table>
     `).join('');

@@ -146,8 +146,9 @@ function PropertyCard({
                                 </tbody>
                                 <tfoot>
                                     <tr className="border-t border-border font-semibold">
-                                        <td className="px-4 py-2.5" colSpan={3}>Gesamtkosten Objekt {year}</td>
-                                        <td className="px-4 py-2.5 text-foreground">{euro(property.totalAmount)}</td>
+                                        <td className="px-4 py-2.5 whitespace-nowrap">Gesamtkosten Objekt {year}</td>
+                                        <td className="px-4 py-2.5 text-foreground whitespace-nowrap">{euro(property.totalAmount)}</td>
+                                        <td className="px-4 py-2.5" colSpan={2}></td>
                                     </tr>
                                 </tfoot>
                             </table>

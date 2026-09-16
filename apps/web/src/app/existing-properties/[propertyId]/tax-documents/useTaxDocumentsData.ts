@@ -11,6 +11,7 @@ import {
 } from '@/lib/supabase/tax_expense_category.supabase';
 import {
     deleteTaxExpenseDocument,
+    deleteTaxExpenseDocumentsForYear,
     getTaxExpenseDocumentsByCategory,
     getTaxExpenseDocumentUrl,
     uploadTaxExpenseDocument,
@@ -38,6 +39,18 @@ export function useTaxDocumentsData(propertyId: string) {
     const [pendingDelete, setPendingDelete] = useState<TaxExpenseCategory | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [selectedYear, setSelectedYear] = useState<number | null>(null);
+    // Years with a real receipt (or the current calendar year) show up on
+    // their own — this adds a year on top of that, for planning ahead before
+    // any receipt for it exists yet. Local/session-only: once the user
+    // actually adds a category or receipt in it, it becomes a "real" year
+    // (derived from that data) and no longer depends on this.
+    const [manuallyAddedYears, setManuallyAddedYears] = useState<number[]>([]);
+    // Archiving just hides a year from the cards row (session-only, nothing
+    // persisted or deleted) — "Archivierte Jahre anzeigen" brings it back.
+    const [archivedYears, setArchivedYears] = useState<Set<number>>(new Set());
+    const [showArchivedYears, setShowArchivedYears] = useState(false);
+    const [pendingDeleteYear, setPendingDeleteYear] = useState<number | null>(null);
+    const [isDeletingYear, setIsDeletingYear] = useState(false);
 
     useEffect(() => {
         const id = parseInt(propertyId, 10);
@@ -98,7 +111,10 @@ export function useTaxDocumentsData(propertyId: string) {
     const hasEmptyCategoryLabel = rows.some((row) => !row.category.label.trim());
 
     const allDocuments = useMemo(() => rows.flatMap((row) => row.documents), [rows]);
-    const availableYears = useMemo(() => availableTaxYears(allDocuments), [allDocuments]);
+    const availableYears = useMemo(() => {
+        const years = new Set([...availableTaxYears(allDocuments), ...manuallyAddedYears]);
+        return Array.from(years).sort((a, b) => b - a);
+    }, [allDocuments, manuallyAddedYears]);
     // One breakdown per available year — backs the "Dieses Objekt · nach
     // Jahr" cards, letting the user pick which year the table below shows.
     const yearSummaries = useMemo(
@@ -111,6 +127,83 @@ export function useTaxDocumentsData(propertyId: string) {
     );
     const isCategoryUploading = (categoryId: number): boolean =>
         rows.find((row) => row.category.taxExpenseCategoryId === categoryId)?.isUploading ?? false;
+
+    // "Dieses Objekt · nach Jahr" already shows every year with a real
+    // receipt, plus the current calendar year automatically — this adds one
+    // more on top (the next year after whatever's already shown), for
+    // planning ahead before the calendar actually rolls over or before any
+    // receipt exists yet.
+    const addNextYear = () => {
+        const nextYear = Math.max(...availableYears) + 1;
+        setManuallyAddedYears((prev) => prev.includes(nextYear) ? prev : [...prev, nextYear]);
+        setSelectedYear(nextYear);
+    };
+
+    const visibleYearSummaries = useMemo(
+        () => showArchivedYears ? yearSummaries : yearSummaries.filter((summary) => !archivedYears.has(summary.year)),
+        [yearSummaries, archivedYears, showArchivedYears],
+    );
+
+    const jumpAwayFromYear = (year: number) => {
+        const nextVisible = yearSummaries.find((summary) => summary.year !== year && !archivedYears.has(summary.year));
+        setSelectedYear(nextVisible?.year ?? new Date().getFullYear());
+    };
+
+    // Archiving only hides a year from the cards row — nothing is deleted or
+    // persisted, so it's back as soon as "Archivierte Jahre anzeigen" is on.
+    const archiveYear = (year: number) => {
+        setArchivedYears((prev) => new Set(prev).add(year));
+        if (selectedYear === year) jumpAwayFromYear(year);
+    };
+    const unarchiveYear = (year: number) => {
+        setArchivedYears((prev) => {
+            const next = new Set(prev);
+            next.delete(year);
+            return next;
+        });
+    };
+
+    const requestDeleteYear = (year: number) => setPendingDeleteYear(year);
+    const cancelDeleteYear = () => setPendingDeleteYear(null);
+
+    // Unlike categories, receipts are never cross-property synced — deleting
+    // a year's receipts only ever touches this property.
+    const confirmDeleteYear = async () => {
+        if (pendingDeleteYear == null || !property) return;
+        const year = pendingDeleteYear;
+        setIsDeletingYear(true);
+        try {
+            const result = await deleteTaxExpenseDocumentsForYear(property.propertyId, year);
+            if (!result) {
+                showToast('Jahr konnte nicht gelöscht werden.', 'error');
+                return;
+            }
+            setRows((prev) => prev.map((row) => {
+                const updatedCategory = result.categories.find((c) => c.taxExpenseCategoryId === row.category.taxExpenseCategoryId);
+                return {
+                    ...row,
+                    category: updatedCategory ?? row.category,
+                    documents: row.documents.filter((d) => new Date(d.createdAt).getFullYear() !== year),
+                };
+            }));
+            setManuallyAddedYears((prev) => prev.filter((y) => y !== year));
+            setArchivedYears((prev) => {
+                const next = new Set(prev);
+                next.delete(year);
+                return next;
+            });
+            setPendingDeleteYear(null);
+            if (selectedYear === year) jumpAwayFromYear(year);
+            showToast(
+                result.deletedCount > 0
+                    ? `${result.deletedCount} Beleg${result.deletedCount === 1 ? '' : 'e'} aus ${year} gelöscht.`
+                    : `Jahr ${year} entfernt.`,
+                'success',
+            );
+        } finally {
+            setIsDeletingYear(false);
+        }
+    };
 
     const updateLocalLabel = (categoryId: number, label: string) => {
         setRows((prev) => prev.map((row) => row.category.taxExpenseCategoryId === categoryId ? { ...row, category: { ...row.category, label } } : row));
@@ -300,7 +393,19 @@ export function useTaxDocumentsData(propertyId: string) {
         selectedYear,
         setSelectedYear,
         availableYears,
-        yearSummaries,
+        addNextYear,
+        yearSummaries: visibleYearSummaries,
+        archivedYears,
+        archivedYearCount: yearSummaries.length - visibleYearSummaries.length,
+        showArchivedYears,
+        setShowArchivedYears,
+        archiveYear,
+        unarchiveYear,
+        pendingDeleteYear,
+        isDeletingYear,
+        requestDeleteYear,
+        cancelDeleteYear,
+        confirmDeleteYear,
         currentYearBreakdown,
         isCategoryUploading,
         hasEmptyCategoryLabel,
