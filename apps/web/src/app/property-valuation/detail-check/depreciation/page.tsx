@@ -1,6 +1,7 @@
 "use client";
 
-import { Button, Dropdown, LoadingScreen, ReadOnlyField, StickyActionBar, TextField } from '@/components/ui';
+import { ComingSoonButton, Dropdown, LoadingScreen, PillOptions, ReadOnlyField, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
+import { PROPERTY_CATEGORY_LABEL } from '@/components/features/PropertyDisplay';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
@@ -13,6 +14,7 @@ import {
   type ModernizationSelections,
   type PriceSplitMode,
 } from '@/lib/detailCheck/depreciation';
+import { cn, deCurrencyFormatter, deNumberFormatter } from '@/lib/utils';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
@@ -45,47 +47,18 @@ type DepreciationResponse = {
   };
 };
 
-const currencyFormatter = new Intl.NumberFormat('de-DE', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-const numberFormatter = new Intl.NumberFormat('de-DE', {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
-
-const residentialTypeOptions = [
-  { value: 'EIGENTUMSWOHNUNG', label: 'Eigentumswohnung (= Mehrfamilienhaus)' },
-  { value: 'HOLZBAUWEISE', label: 'Holzbauweise / minderer Standard' },
-  { value: 'DENKMALGESCHUETZT', label: 'Denkmalgeschütztes Gebäude (Einzelfall)' },
+// Matches the mode toggle on the existing-property RND/Kaufpreisaufteilung
+// editors (AdjustRnd, AdjustDistribution) exactly, so switching between
+// setting these up for the first time here and adjusting them later on an
+// existing property feels like the same control, not two different ones.
+const RND_MODE_OPTIONS = [
+  { value: 'STANDARD', label: 'Standard (50 Jahre)' },
+  { value: 'INDIVIDUAL', label: 'Individuell prüfen' },
 ];
 
 function valueString(value: number | string | null | undefined): string {
   if (value == null) return '';
   return String(value).replace('.', ',');
-}
-
-function ModeButton({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
-        active ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground'
-      }`}
-    >
-      {label}
-    </button>
-  );
 }
 
 function DepreciationContent() {
@@ -179,9 +152,18 @@ function DepreciationContent() {
     ? context?.standardSplit
     : individualSplit;
 
-  const setMode = (mode: DepreciationMode) => {
-    setDepreciationMode(mode);
-  };
+  // Dynamic label mirrors AdjustDistribution's own Standard pill exactly —
+  // it doubles as the "which city default am I getting" indicator there, so
+  // it needs to say the same thing here.
+  const priceSplitModeOptions = [
+    {
+      value: 'STANDARD',
+      label: context
+        ? `Standard (${deNumberFormatter.format(context.standardSplit.buildingSharePercent)} / ${deNumberFormatter.format(context.standardSplit.landSharePercent)})`
+        : 'Standard',
+    },
+    { value: 'INDIVIDUAL', label: 'Individuell berechnen' },
+  ];
 
   const persist = async (): Promise<boolean> => {
     if (isSaving) return false;
@@ -224,14 +206,6 @@ function DepreciationContent() {
       title="Restnutzungsdauer in Jahren"
       beforeStepChange={persist}
       showFieldLegend
-      actions={
-        <Button
-          label="Überspringen"
-          variant="outline"
-          hideLabelOnMobile
-          onClick={() => router.push(`/property-valuation/detail-check/renovation${suffix}`)}
-        />
-      }
     >
       <div className="pb-24">
         {error && (
@@ -243,52 +217,79 @@ function DepreciationContent() {
         {isLoading || !context || !selectedSplit ? (
           <LoadingScreen message="Abschreibung wird geladen…" fullScreen={false} />
         ) : (
-          <div className="space-y-8">
-            <section className="max-w-xl">
-              <Dropdown
-                label="Wohnart"
-                options={residentialTypeOptions}
-                value={propertyCategory}
-                onChange={(event) => setPropertyCategory(event.target.value)}
-                helperText="Die Wohnart beeinflusst die individuelle Restnutzungsdauer."
-              />
-            </section>
-
-            <section className="grid gap-4 md:grid-cols-[220px_1fr_1fr] md:items-center">
-              <div className="flex gap-3">
-                <ModeButton label="Standard" active={depreciationMode === 'STANDARD'} onClick={() => setDepreciationMode('STANDARD')} />
-                <ModeButton label="Individuell" active={depreciationMode === 'INDIVIDUAL'} onClick={() => setMode('INDIVIDUAL')} />
-              </div>
-              <div className="grid grid-cols-[80px_minmax(0,1fr)] items-center gap-3">
-                <span>RND:</span>
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Wohnart</SectionLabel>
+              <div className="max-w-xl pt-1">
                 <ReadOnlyField
-                  value={selectedRnd ? numberFormatter.format(selectedRnd.remainingUsefulLifeYears) : '-'}
-                  suffix="Jahre"
-                  align="right"
-                  helperText={!selectedRnd ? 'Bitte zunächst alle Modernisierungsangaben auswählen.' : undefined}
+                  value={PROPERTY_CATEGORY_LABEL[propertyCategory] ?? propertyCategory}
+                  helperText="Übernommen aus den Objektdaten. Beeinflusst die individuelle Restnutzungsdauer."
                 />
               </div>
-              <div className="grid grid-cols-[80px_minmax(0,1fr)] items-center gap-3">
-                <span>AfA:</span>
-                <ReadOnlyField value={selectedRnd ? numberFormatter.format(selectedRnd.afaPercent) : '-'} suffix="%" align="right" />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Berechnungsmodus</SectionLabel>
+              <div className="pt-3">
+                <PillOptions
+                  size="md"
+                  options={RND_MODE_OPTIONS}
+                  value={depreciationMode}
+                  onChange={(value) => setDepreciationMode(value as DepreciationMode)}
+                />
               </div>
-            </section>
+            </div>
+
+            <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/30 p-4 sm:flex-row sm:items-center">
+              <div className="flex shrink-0 gap-8">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">RND</p>
+                  <p className="text-lg font-semibold text-foreground">
+                    {selectedRnd ? `${deNumberFormatter.format(selectedRnd.remainingUsefulLifeYears)} Jahre` : '– Jahre'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">AfA</p>
+                  <p className="text-lg font-semibold text-foreground">
+                    {selectedRnd ? `${deNumberFormatter.format(selectedRnd.afaPercent)}%` : '– %'}
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground sm:ml-auto sm:text-right">
+                {depreciationMode === 'STANDARD'
+                  ? 'Standardwert gemäß gesetzlicher Regelung. Baujahr und Modernisierungen werden nicht berücksichtigt.'
+                  : selectedRnd
+                    ? 'Individuell ermittelt anhand von Baujahr, Objektkategorie und Modernisierungen.'
+                    : 'Bitte zunächst alle Modernisierungsangaben auswählen.'}
+              </p>
+            </div>
 
             {depreciationMode === 'INDIVIDUAL' && (
-              <section>
-                <div className="mb-4 flex items-center gap-4">
-                  <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                    Letzte Modernisierung angeben
-                  </h2>
-                  <div className="h-px flex-1 bg-border" />
+              <div className="flex flex-col gap-2">
+                <SectionLabel>Modernisierungen</SectionLabel>
+                <div className="flex items-center justify-end pt-1">
+                  <ComingSoonButton
+                    label={BUTTON_DETAILS.RequestAppraisal.label}
+                    icon={<BUTTON_DETAILS.RequestAppraisal.icon />}
+                    variant="outline"
+                    size="sm"
+                    hideLabelOnMobile
+                  />
                 </div>
-                <div className="grid gap-3 md:grid-cols-[minmax(0,360px)_minmax(0,280px)_minmax(0,1fr)] md:items-center">
-                  {MODERNIZATION_FIELDS.map(([field, label]) => (
-                    <div key={field} className="contents">
-                      <label className="text-sm text-foreground">
-                        {label}
-                        <span className="font-normal text-muted-foreground"> (optional)</span>
-                      </label>
+                <div className="mt-1 overflow-hidden rounded-lg border border-border">
+                  <div className="grid grid-cols-2 gap-4 bg-muted/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <span>Maßnahme</span>
+                    <span>Zuletzt erneuert</span>
+                  </div>
+                  {MODERNIZATION_FIELDS.map(([field, label], index) => (
+                    <div
+                      key={field}
+                      className={cn(
+                        "grid grid-cols-2 items-center gap-4 px-4 py-3",
+                        index > 0 && "border-t border-border"
+                      )}
+                    >
+                      <span className="text-sm text-foreground">{label}</span>
                       <Dropdown
                         options={MODERNIZATION_OPTIONS}
                         value={modernization[field]}
@@ -296,53 +297,64 @@ function DepreciationContent() {
                           setModernization((prev) => ({ ...prev, [field]: event.target.value }))
                         }
                       />
-                      <div />
                     </div>
                   ))}
                 </div>
-                <Button
-                  label="Beauftragung RND-Gutachten"
-                  variant="outline"
-                  className="mt-4"
-                  disabled
-                />
-              </section>
+              </div>
             )}
 
-            <section>
-              <div className="mb-4 flex items-center gap-4">
-                <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                  Kaufpreisaufteilung
-                </h2>
-                <div className="h-px flex-1 bg-border" />
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Kaufpreisaufteilung</SectionLabel>
+              <p className="pt-1 text-sm text-muted-foreground">
+                Kaufpreis {deCurrencyFormatter.format(context.purchasePrice)} €
+              </p>
+              <div className="pt-2">
+                <PillOptions
+                  size="md"
+                  options={priceSplitModeOptions}
+                  value={priceSplitMode}
+                  onChange={(value) => setPriceSplitMode(value as PriceSplitMode)}
+                />
               </div>
+            </div>
 
-              <div className="mb-5 flex gap-3">
-                <ModeButton label="Standard" active={priceSplitMode === 'STANDARD'} onClick={() => setPriceSplitMode('STANDARD')} />
-                <ModeButton label="Individuell" active={priceSplitMode === 'INDIVIDUAL'} onClick={() => setPriceSplitMode('INDIVIDUAL')} />
-              </div>
-
-              {priceSplitMode === 'INDIVIDUAL' && (
-                <div className="mb-8 grid gap-4 md:grid-cols-4">
+            {priceSplitMode === 'INDIVIDUAL' && (
+              <div className="flex flex-col gap-2">
+                <SectionLabel>Grundstücksdaten</SectionLabel>
+                <div className="grid gap-4 pt-1 md:grid-cols-4">
                   <TextField label="Grundstücksgröße" optional value={plotAreaM2} suffix="m²" inputMode="decimal" onChange={(e) => setPlotAreaM2(e.target.value)} />
                   <TextField label="Bodenrichtwert" optional value={landReferenceValue} suffix="€" inputMode="decimal" onChange={(e) => setLandReferenceValue(e.target.value)} />
                   <TextField label="Miteigentumsanteil Zähler" optional value={coOwnershipNumerator} inputMode="decimal" onChange={(e) => setCoOwnershipNumerator(e.target.value)} />
                   <TextField label="Miteigentumsanteil Nenner" optional value={coOwnershipDenominator} inputMode="decimal" onChange={(e) => setCoOwnershipDenominator(e.target.value)} />
                 </div>
-              )}
-
-              <p className="mb-5 text-lg text-foreground">
-                Für Ihre Stadt {context.city ? `(${context.city})` : ''} lautet die Aufteilung:
-              </p>
-              <div className="grid max-w-3xl gap-4 md:grid-cols-[220px_160px_220px] md:items-center">
-                <div className="text-lg font-medium">Gebäude</div>
-                <ReadOnlyField value={numberFormatter.format(selectedSplit.buildingSharePercent)} suffix="%" align="right" />
-                <ReadOnlyField value={currencyFormatter.format(selectedSplit.buildingValue)} suffix="€" align="right" />
-                <div className="text-lg font-medium">Grund und Boden</div>
-                <ReadOnlyField value={numberFormatter.format(selectedSplit.landSharePercent)} suffix="%" align="right" />
-                <ReadOnlyField value={currencyFormatter.format(selectedSplit.landValue)} suffix="€" align="right" />
               </div>
-            </section>
+            )}
+
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Berechnete Aufteilung</SectionLabel>
+              <div className="grid grid-cols-1 gap-4 pt-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Gebäude</p>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-2xl font-semibold text-foreground">
+                      {deNumberFormatter.format(selectedSplit.buildingSharePercent)}
+                      <span className="ml-0.5 text-sm font-normal text-muted-foreground">%</span>
+                    </p>
+                    <p className="text-sm text-muted-foreground">{deCurrencyFormatter.format(selectedSplit.buildingValue)} €</p>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Grund und Boden</p>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-2xl font-semibold text-foreground">
+                      {deNumberFormatter.format(selectedSplit.landSharePercent)}
+                      <span className="ml-0.5 text-sm font-normal text-muted-foreground">%</span>
+                    </p>
+                    <p className="text-sm text-muted-foreground">{deCurrencyFormatter.format(selectedSplit.landValue)} €</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -352,6 +364,9 @@ function DepreciationContent() {
         ghostLabel={BUTTON_DETAILS.Back.label}
         ghostIcon={<BUTTON_DETAILS.Back.icon />}
         onGhost={() => void saveAndNavigate('/property-valuation/detail-check/financing')}
+        secondaryLabel={BUTTON_DETAILS.Skip.label}
+        secondaryIcon={<BUTTON_DETAILS.Skip.icon />}
+        onSecondary={() => router.push(`/property-valuation/detail-check/renovation${suffix}`)}
         primaryLabel="Weiter"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving}

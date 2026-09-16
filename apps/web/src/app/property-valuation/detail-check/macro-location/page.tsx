@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, LoadingScreen, StickyActionBar, Tag } from '@/components/ui';
+import { LoadingScreen, SectionLabel, StickyActionBar, Tag } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import {
@@ -148,14 +148,6 @@ function MacroLocationContent() {
     <PropertyValuationLayout
       currentStep={7}
       title="Mikro- und Makrolage"
-      actions={
-        <Button
-          label="Überspringen"
-          variant="outline"
-          hideLabelOnMobile
-          onClick={() => router.push(`/property-valuation/detail-check/comparison${suffix}`)}
-        />
-      }
     >
       <div className="pb-24">
         {error && (
@@ -167,64 +159,47 @@ function MacroLocationContent() {
         {isLoading || !data ? (
           <LoadingScreen message="Lagebewertung wird geladen…" fullScreen={false} />
         ) : (
-          <div className="space-y-8">
-            <section>
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-                <div>
-                  <p className="text-sm text-muted-foreground">Adresse</p>
-                  <h2 className="mt-1 text-xl font-semibold text-foreground">{data.address || 'Adresse noch nicht vollständig erfasst'}</h2>
-                  <p className="mt-4 text-foreground">{data.summary}</p>
-                  <p className="mt-3 text-sm text-muted-foreground">{data.dataQuality}</p>
-                </div>
-                <div className="space-y-4 rounded-lg border border-border bg-card p-5">
-                  <ScoreBar label="Gesamtscore" score={data.totalScore} light={data.totalLight} />
-                  <ScoreBar label="Makrolage (40%)" score={data.macroScore} light={data.macroScore >= 70 ? 'GREEN' : data.macroScore >= 50 ? 'YELLOW' : 'RED'} />
-                  <ScoreBar label="Mikrolage (60%)" score={data.microScore} light={data.microScore >= 70 ? 'GREEN' : data.microScore >= 50 ? 'YELLOW' : 'RED'} />
-                </div>
+          <div className="flex flex-col gap-6">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+              <div>
+                <p className="text-sm text-muted-foreground">Adresse</p>
+                <h2 className="mt-1 text-xl font-semibold text-foreground">{data.address || 'Adresse noch nicht vollständig erfasst'}</h2>
+                <p className="mt-4 text-foreground">{data.summary}</p>
+                <p className="mt-3 text-sm text-muted-foreground">{data.dataQuality}</p>
               </div>
-            </section>
+              <div className="space-y-4 rounded-lg border border-border bg-card p-5">
+                <ScoreBar label="Gesamtscore" score={data.totalScore} light={data.totalLight} />
+                <ScoreBar label="Makrolage (40%)" score={data.macroScore} light={data.macroScore >= 70 ? 'GREEN' : data.macroScore >= 50 ? 'YELLOW' : 'RED'} />
+                <ScoreBar label="Mikrolage (60%)" score={data.microScore} light={data.microScore >= 70 ? 'GREEN' : data.microScore >= 50 ? 'YELLOW' : 'RED'} />
+              </div>
+            </div>
 
-            <section>
-              <div className="mb-4 flex items-center gap-4">
-                <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                  Makrolage-Score
-                </h2>
-                <div className="h-px flex-1 bg-border" />
-              </div>
-              <div className="grid gap-4 xl:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Makrolage-Score</SectionLabel>
+              <div className="grid gap-4 pt-1 xl:grid-cols-2">
                 {data.macroCategories.map((item) => (
                   <CategoryPanel key={item.label} item={item} />
                 ))}
               </div>
-            </section>
+            </div>
 
-            <section>
-              <div className="mb-4 flex items-center gap-4">
-                <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                  Mikrolage-Score
-                </h2>
-                <div className="h-px flex-1 bg-border" />
-              </div>
-              <div className="grid gap-4 xl:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Mikrolage-Score</SectionLabel>
+              <div className="grid gap-4 pt-1 xl:grid-cols-2">
                 {data.microCategories.map((item) => (
                   <CategoryPanel key={item.label} item={item} />
                 ))}
               </div>
-            </section>
+            </div>
 
-            <section>
-              <div className="mb-4 flex items-center gap-4">
-                <h2 className="rounded-lg border border-border bg-card px-4 py-2 text-lg font-medium text-foreground">
-                  Spezialscores
-                </h2>
-                <div className="h-px flex-1 bg-border" />
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Spezialscores</SectionLabel>
+              <div className="grid gap-4 pt-1 md:grid-cols-2 xl:grid-cols-4">
                 {data.specialScores.map((item) => (
                   <SpecialScoreCard key={item.label} item={item} />
                 ))}
               </div>
-            </section>
+            </div>
           </div>
         )}
       </div>
@@ -234,6 +209,9 @@ function MacroLocationContent() {
         ghostLabel={BUTTON_DETAILS.Back.label}
         ghostIcon={<BUTTON_DETAILS.Back.icon />}
         onGhost={() => router.push(`/property-valuation/detail-check/calculator${suffix}`)}
+        secondaryLabel={BUTTON_DETAILS.Skip.label}
+        secondaryIcon={<BUTTON_DETAILS.Skip.icon />}
+        onSecondary={() => router.push(`/property-valuation/detail-check/comparison${suffix}`)}
         primaryLabel="Weiter"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving}

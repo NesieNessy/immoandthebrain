@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { formatUnitLabel } from '@/components/features/PropertyDisplay';
-import { Button, ConfirmDeleteModal, Header, Icons, Modal, PAGE_CONTAINER_CLASS, Table, TextFieldWithIcon, type BreadcrumbItem, type MenuItem, type TableColumn } from '@/components/ui';
+import { Button, ConfirmDeleteModal, Header, Icons, Modal, PAGE_CONTAINER_CLASS, Table, TextFieldWithIcon, useToast, type BreadcrumbItem, type MenuItem, type TableColumn } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { getAdjustmentHistoryByTenancy } from '@/lib/supabase/tenancy_adjustment_history.supabase';
 import { deleteTenancy, getCurrentTenancyByUnit, getTenanciesByUnit, updateTenancy } from '@/lib/supabase/tenancy.supabase';
@@ -10,11 +10,12 @@ import { deleteTenancyDocument, getTenancyDocumentsByTenancy, getTenancyDocument
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
 import { formatDeDate } from '@/lib/utils';
 import type { Property, PropertyUnit, Tenancy, TenancyDocument, TenancyPerson } from '@immoandthebrain/types';
-import { differenceInCalendarMonths, format } from 'date-fns';
+import { format } from 'date-fns';
 import { Circle, RotateCcw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import { euro } from '../tenant-data/useTenantUnitData';
+import { formatDuration, personName } from './tenantHistoryFormatting';
 
 interface HistoryRow {
     tenancy: Tenancy;
@@ -29,20 +30,6 @@ const BOOLEAN_FILTER_OPTIONS = [
     { value: 'true', label: 'Erledigt' },
     { value: 'false', label: 'Offen' },
 ];
-
-function personName(p: TenancyPerson | undefined): string {
-    if (!p) return '–';
-    return `${p.lastName ?? ''}, ${p.firstName ?? ''}`.trim();
-}
-
-function formatDuration(start: string | null, end: string | null): string {
-    if (!start || !end) return '–';
-    const totalMonths = differenceInCalendarMonths(new Date(end), new Date(start));
-    if (totalMonths < 0) return '–';
-    const years = Math.floor(totalMonths / 12);
-    const months = totalMonths % 12;
-    return years > 0 ? `${years} J. ${months} Mo.` : `${months} Mo.`;
-}
 
 async function loadHistoryRow(tenancy: Tenancy): Promise<HistoryRow> {
     const [persons, history, documents] = await Promise.all([
@@ -69,6 +56,7 @@ interface UnitHistoryTableProps {
 
 export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits }: UnitHistoryTableProps) {
     const router = useRouter();
+    const { showToast } = useToast();
     const [rows, setRows] = useState<HistoryRow[] | null>(null);
     const [search, setSearch] = useState('');
     const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
@@ -167,11 +155,16 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
         try {
             const current = await getCurrentTenancyByUnit(unit.propertyUnitId);
             if (current && current.tenancyId !== reactivateRow.tenancy.tenancyId) {
-                await updateTenancy(current.tenancyId, { tenancyEndDate: format(new Date(), 'yyyy-MM-dd') });
+                const endedCurrent = await updateTenancy(current.tenancyId, { tenancyEndDate: format(new Date(), 'yyyy-MM-dd') });
+                if (!endedCurrent) throw new Error('updateTenancy failed');
             }
-            await updateTenancy(reactivateRow.tenancy.tenancyId, { tenancyEndDate: null, isRented: true });
+            const reactivated = await updateTenancy(reactivateRow.tenancy.tenancyId, { tenancyEndDate: null, isRented: true });
+            if (!reactivated) throw new Error('updateTenancy failed');
             setReactivateRow(null);
             await load();
+            showToast('Mietverhältnis reaktiviert.', 'success');
+        } catch {
+            showToast('Mietverhältnis konnte nicht reaktiviert werden.', 'error');
         } finally {
             setIsReactivating(false);
         }
@@ -181,10 +174,15 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
         if (!deleteRow) return;
         setIsDeleting(true);
         try {
-            await Promise.all(deleteRow.documents.map((doc) => deleteTenancyDocument(doc.tenancyDocumentId, doc.storagePath)));
-            await deleteTenancy(deleteRow.tenancy.tenancyId);
+            const documentResults = await Promise.all(deleteRow.documents.map((doc) => deleteTenancyDocument(doc.tenancyDocumentId, doc.storagePath)));
+            if (documentResults.some((ok) => !ok)) throw new Error('deleteTenancyDocument failed');
+            const deleted = await deleteTenancy(deleteRow.tenancy.tenancyId);
+            if (!deleted) throw new Error('deleteTenancy failed');
             setDeleteRow(null);
             await load();
+            showToast('Mietverhältnis gelöscht.', 'success');
+        } catch {
+            showToast('Mietverhältnis konnte nicht gelöscht werden.', 'error');
         } finally {
             setIsDeleting(false);
         }

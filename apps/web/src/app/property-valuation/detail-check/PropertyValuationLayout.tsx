@@ -24,7 +24,10 @@ interface PropertyValuationLayoutProps {
   /** Current step's page title — usually more specific than the generic
    *  Stepper label (e.g. "Restnutzungsdauer in Jahren" vs. "Abschreibung"). */
   title: string;
-  /** Optional action(s) shown next to the breadcrumb, e.g. a "Überspringen" button. */
+  /** Optional action(s) shown next to the breadcrumb, e.g. a save-status
+   *  indicator. A "Überspringen" action belongs in the step's own
+   *  StickyActionBar (onSecondary/secondaryLabel) instead, between "Zurück"
+   *  and "Weiter" — not here. */
   actions?: React.ReactNode;
   /** Persists the current step before direct navigation through the stepper. */
   beforeStepChange?: () => Promise<boolean>;

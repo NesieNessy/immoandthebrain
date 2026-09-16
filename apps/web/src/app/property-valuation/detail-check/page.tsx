@@ -9,8 +9,10 @@ import { authFetch } from '@/lib/api/authFetch';
 import { createAcquisitionCosts } from '@/lib/supabase/acquisition_costs.supabase';
 import { createParkingSpace } from '@/lib/supabase/parking_space.supabase';
 import { createProperty } from '@/lib/supabase/property.supabase';
+import { upsertPropertyRnd } from '@/lib/supabase/property_rnd.supabase';
+import { upsertPropertyPriceSplit } from '@/lib/supabase/property_price_split.supabase';
 import { cn } from '@/lib/utils';
-import type { EnergyEfficient } from '@immoandthebrain/types';
+import type { EnergyEfficient, PriceSplitMode, RndMode } from '@immoandthebrain/types';
 import { MoreVertical, Building2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -50,6 +52,25 @@ interface DetailCheckRow extends Record<string, unknown> {
    *  otherwise the step right after the furthest one completed ("result"
    *  once every step up to Vergleich is done). */
   resumeRoute: string;
+  /** Restnutzungsdauer/Kaufpreisaufteilung — only set once the Abschreibung
+   *  step has been saved (hasDepreciation), so "In Bestandsobjekte
+   *  übernehmen" can carry them over instead of losing that work. */
+  hasDepreciation: boolean;
+  rndMode: RndMode;
+  modernizationRoof: string | null;
+  modernizationWindows: string | null;
+  modernizationLines: string | null;
+  modernizationHeating: string | null;
+  modernizationFacade: string | null;
+  modernizationBathrooms: string | null;
+  modernizationInterior: string | null;
+  remainingUsefulLifeYears: number;
+  afaPercent: number;
+  priceSplitMode: PriceSplitMode;
+  plotAreaM2: number | null;
+  landReferenceValue: number | null;
+  coOwnershipNumerator: number | null;
+  coOwnershipDenominator: number | null;
 }
 
 // "Nicht begonnen" stays the actual status value (used for sorting/filtering
@@ -87,6 +108,21 @@ interface DetailCheckApiRow {
   has_calculator: boolean;
   has_location_score: boolean;
   has_comparison: boolean;
+  depreciation_mode: RndMode | null;
+  price_split_mode: PriceSplitMode | null;
+  modernization_roof: string | null;
+  modernization_windows: string | null;
+  modernization_lines: string | null;
+  modernization_heating: string | null;
+  modernization_facade: string | null;
+  modernization_bathrooms: string | null;
+  modernization_interior: string | null;
+  remaining_useful_life_years: string | number | null;
+  afa_percent: string | number | null;
+  plot_area_m2: string | number | null;
+  land_reference_value: string | number | null;
+  co_ownership_numerator: string | number | null;
+  co_ownership_denominator: string | number | null;
 }
 
 function computeResumeState(row: DetailCheckApiRow): { resumed: boolean; resumeRoute: string } {
@@ -171,6 +207,22 @@ export default function DetailCheckOverviewPage() {
             status,
             updatedAt: row.updated_at,
             ...resumeState,
+            hasDepreciation: row.has_depreciation,
+            rndMode: row.depreciation_mode ?? 'STANDARD',
+            modernizationRoof: row.modernization_roof,
+            modernizationWindows: row.modernization_windows,
+            modernizationLines: row.modernization_lines,
+            modernizationHeating: row.modernization_heating,
+            modernizationFacade: row.modernization_facade,
+            modernizationBathrooms: row.modernization_bathrooms,
+            modernizationInterior: row.modernization_interior,
+            remainingUsefulLifeYears: Number(row.remaining_useful_life_years ?? 50),
+            afaPercent: Number(row.afa_percent ?? 2),
+            priceSplitMode: row.price_split_mode ?? 'STANDARD',
+            plotAreaM2: row.plot_area_m2 == null ? null : Number(row.plot_area_m2),
+            landReferenceValue: row.land_reference_value == null ? null : Number(row.land_reference_value),
+            coOwnershipNumerator: row.co_ownership_numerator == null ? null : Number(row.co_ownership_numerator),
+            coOwnershipDenominator: row.co_ownership_denominator == null ? null : Number(row.co_ownership_denominator),
           };
         }));
       } catch (loadError) {
@@ -249,6 +301,33 @@ export default function DetailCheckOverviewPage() {
           propertyId: created.propertyId,
           parkingSpaceType: 'OTHER',
           numberOfParkingSpaces: row.parkingSpaces,
+        });
+      }
+
+      // Carries over the Abschreibung step's RND/Kaufpreisaufteilung work
+      // (mode, modernization selections, and the already-computed values) so
+      // it doesn't have to be redone from scratch on the new Bestandsobjekt.
+      if (row.hasDepreciation) {
+        await upsertPropertyRnd({
+          propertyId: created.propertyId,
+          rndMode: row.rndMode,
+          modernizationRoof: row.modernizationRoof,
+          modernizationWindows: row.modernizationWindows,
+          modernizationLines: row.modernizationLines,
+          modernizationHeating: row.modernizationHeating,
+          modernizationFacade: row.modernizationFacade,
+          modernizationBathrooms: row.modernizationBathrooms,
+          modernizationInterior: row.modernizationInterior,
+          remainingUsefulLifeYears: row.remainingUsefulLifeYears,
+          afaPercent: row.afaPercent,
+        });
+        await upsertPropertyPriceSplit({
+          propertyId: created.propertyId,
+          splitMode: row.priceSplitMode,
+          plotAreaM2: row.plotAreaM2,
+          landReferenceValue: row.landReferenceValue,
+          coOwnershipNumerator: row.coOwnershipNumerator,
+          coOwnershipDenominator: row.coOwnershipDenominator,
         });
       }
 

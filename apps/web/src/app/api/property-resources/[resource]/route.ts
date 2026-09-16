@@ -187,6 +187,8 @@ export async function GET(request: Request, context: RouteContext) {
   const settlementId = url.searchParams.get('settlementId');
   const measureId = url.searchParams.get('measureId');
   const categoryId = url.searchParams.get('categoryId');
+  const periodStart = url.searchParams.get('periodStart');
+  const periodEnd = url.searchParams.get('periodEnd');
   const filters: string[] = [];
   const values: unknown[] = [userId];
   if (id) {
@@ -216,6 +218,15 @@ export async function GET(request: Request, context: RouteContext) {
   if (categoryId && config.table === 'tax_expense_document') {
     values.push(Number(categoryId));
     filters.push(`r.tax_expense_category_id = $${values.length}`);
+  }
+  // Exact-period lookup for service_charge_settlement — settlements are
+  // per billing period (see the "per period" fix), so finding the one for
+  // a specific period needs an exact match, not just "most recent".
+  if (periodStart && periodEnd && config.table === 'service_charge_settlement') {
+    values.push(periodStart);
+    filters.push(`r.period_start = $${values.length}`);
+    values.push(periodEnd);
+    filters.push(`r.period_end = $${values.length}`);
   }
   // "Current" excludes a tenancy whose move-out date has already passed
   // entirely, rather than merely deprioritizing it — a unit whose only

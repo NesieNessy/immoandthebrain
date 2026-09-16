@@ -202,7 +202,11 @@ export function useTenantMoveOutData(propertyId: string, property: Property, uni
         const damage = damages.find((d) => d.id === damageId);
         const photo = damage?.photos.find((p) => p.id === photoId);
         if (!photo) return;
-        await deleteMoveOutDamagePhoto(photo.path);
+        const deleted = await deleteMoveOutDamagePhoto(photo.path);
+        if (!deleted) {
+            setError('Das Foto konnte nicht entfernt werden.');
+            return;
+        }
         setDamages((prev) => prev.map((d) => d.id === damageId ? { ...d, photos: d.photos.filter((p) => p.id !== photoId) } : d));
     };
 
@@ -287,6 +291,7 @@ export function useTenantMoveOutData(propertyId: string, property: Property, uni
     const handleGenerateProtocol = async () => {
         if (!user || !tenancy) return;
         setIsGeneratingProtocol(true);
+        setError(null);
         try {
             const html = buildProtocolHtml();
             if (!html) return;
@@ -297,11 +302,15 @@ export function useTenantMoveOutData(propertyId: string, property: Property, uni
                 tenancyPersonId: null,
                 documentType: 'Abnahme',
             });
-            if (uploaded) setProtocolDocument(uploaded);
+            if (!uploaded) throw new Error('uploadTenancyDocument failed');
+            setProtocolDocument(uploaded);
             const updated = await updateTenancy(tenancy.tenancyId, { acceptanceProtocol: true });
-            if (updated) setTenancy(updated);
+            if (!updated) throw new Error('updateTenancy failed');
+            setTenancy(updated);
             window.open(URL.createObjectURL(blob), '_blank', 'noopener,noreferrer');
             showToast('Abnahmeprotokoll erstellt.', 'success');
+        } catch {
+            setError('Das Abnahmeprotokoll konnte nicht erstellt werden.');
         } finally {
             setIsGeneratingProtocol(false);
         }
@@ -310,17 +319,21 @@ export function useTenantMoveOutData(propertyId: string, property: Property, uni
     const handleUploadProtocol = async (file: File) => {
         if (!user || !tenancy) return;
         setIsUploadingProtocol(true);
+        setError(null);
         try {
             const uploaded = await uploadTenancyDocument(user.id, file, {
                 tenancyId: tenancy.tenancyId,
                 tenancyPersonId: null,
                 documentType: 'Abnahme',
             });
-            if (!uploaded) return;
+            if (!uploaded) throw new Error('uploadTenancyDocument failed');
             setProtocolDocument(uploaded);
             const updated = await updateTenancy(tenancy.tenancyId, { acceptanceProtocol: true });
-            if (updated) setTenancy(updated);
+            if (!updated) throw new Error('updateTenancy failed');
+            setTenancy(updated);
             showToast('Abnahmeprotokoll hochgeladen.', 'success');
+        } catch {
+            setError('Das Abnahmeprotokoll konnte nicht hochgeladen werden.');
         } finally {
             setIsUploadingProtocol(false);
         }
@@ -341,10 +354,14 @@ export function useTenantMoveOutData(propertyId: string, property: Property, uni
     const handleReleaseDeposit = async () => {
         if (!tenancy) return;
         setIsReleasingDeposit(true);
+        setError(null);
         try {
             const updated = await updateTenancy(tenancy.tenancyId, { depositPaidOut: true });
-            if (updated) setTenancy(updated);
+            if (!updated) throw new Error('updateTenancy failed');
+            setTenancy(updated);
             showToast('Mietkaution als ausgezahlt markiert.', 'success');
+        } catch {
+            setError('Die Mietkaution konnte nicht als ausgezahlt markiert werden.');
         } finally {
             setIsReleasingDeposit(false);
         }

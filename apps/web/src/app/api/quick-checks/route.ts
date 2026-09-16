@@ -107,17 +107,18 @@ export async function POST(request: Request) {
   const coldRent = Number(input.coldRent);
   const yearOfConstruction = Number(input.yearOfConstruction);
   const kpfMultiplier = Number(input.kpfMultiplier);
+  const postalCode = String(input.postalCode ?? '');
   const dataEntrySource = input.dataEntrySource === 'PORTAL_IMPORT' || input.portalId
     ? 'PORTAL_IMPORT'
     : 'MANUELL';
 
   if (
-    !Number.isFinite(purchasePrice) ||
-    !Number.isFinite(coldRent) ||
+    !Number.isFinite(purchasePrice) || purchasePrice <= 0 ||
+    !Number.isFinite(coldRent) || coldRent <= 0 ||
     !Number.isFinite(yearOfConstruction) ||
     !Number.isFinite(kpfMultiplier) ||
     !input.street ||
-    !input.postalCode ||
+    !/^\d{5}$/.test(postalCode) ||
     !input.city ||
     !input.condition
   ) {
@@ -149,7 +150,7 @@ export async function POST(request: Request) {
       purchasePrice,
       coldRent,
       String(input.street).trim(),
-      String(input.postalCode),
+      postalCode,
       String(input.city).trim(),
       yearOfConstruction,
       input.condition,
@@ -187,7 +188,17 @@ export async function PATCH(request: Request) {
   const coldRent = Number(values.coldRent);
   const yearOfConstruction = Number(values.yearOfConstruction);
   const kpfMultiplier = Number(values.kpfMultiplier);
-  if (![purchasePrice, coldRent, yearOfConstruction, kpfMultiplier].every(Number.isFinite)) {
+  const postalCode = String(values.postalCode ?? '');
+  if (
+    !Number.isFinite(purchasePrice) || purchasePrice <= 0 ||
+    !Number.isFinite(coldRent) || coldRent <= 0 ||
+    !Number.isFinite(yearOfConstruction) ||
+    !Number.isFinite(kpfMultiplier) ||
+    !values.street ||
+    !/^\d{5}$/.test(postalCode) ||
+    !values.city ||
+    !values.condition
+  ) {
     return NextResponse.json({ error: 'Invalid quick-check payload' }, { status: 400 });
   }
   const { rows } = await db.query<QuickCheckRow>(
@@ -201,8 +212,8 @@ export async function PATCH(request: Request) {
     `,
     [
       id, userId, values.portalId ?? null, purchasePrice, coldRent,
-      String(values.street ?? '').trim(), String(values.postalCode ?? ''),
-      String(values.city ?? '').trim(), yearOfConstruction, values.condition, kpfMultiplier,
+      String(values.street).trim(), postalCode,
+      String(values.city).trim(), yearOfConstruction, values.condition, kpfMultiplier,
     ],
   );
   if (!rows[0]) return NextResponse.json({ error: 'Quick-check not found' }, { status: 404 });
