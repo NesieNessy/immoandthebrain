@@ -18,13 +18,13 @@ export default function RootLayout({
     <html lang="de">
       <body className="antialiased bg-background text-foreground">
         <ToastProvider>
-          {/* AppNavigation is fixed (see NavigationBar) — this spacer reserves
-              its h-16 height in normal flow so content doesn't start underneath
-              it. The page scrolls normally; nav bar and (per-page) breadcrumb
-              stay pinned via fixed/sticky positioning, not a custom scroll
-              container — the same proven approach StickyActionBar already
-              uses at the bottom. */}
-          <div className="h-16" aria-hidden="true" />
+          {/* AppNavigation renders its own h-16 spacer alongside the fixed
+              nav bar (see NavigationBar) — together they disappear on public
+              routes like /login, where there's no app chrome to reserve
+              space for. The page scrolls normally; nav bar and (per-page)
+              breadcrumb stay pinned via fixed/sticky positioning, not a
+              custom scroll container — the same proven approach
+              StickyActionBar already uses at the bottom. */}
           <AppNavigation />
           {children}
         </ToastProvider>

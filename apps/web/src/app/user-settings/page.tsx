@@ -1,8 +1,7 @@
 "use client";
 
 import { Header, Icons, LoadingScreen, PAGE_CONTAINER_CLASS, StickyActionBar, TextField, Tile, useToast } from '@/components/ui';
-import { authBypassUser, isAuthBypassEnabled } from '@/lib/auth/authBypass';
-import { supabase } from '@/lib/supabase/client.supabase';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { getPersonalData, PersonalDataSaveError, upsertPersonalData } from '@/lib/supabase/personal_data.supabase';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { getLabel } from '@/constants/FieldLabels';
@@ -44,7 +43,11 @@ function SettingsPageContent() {
     const { showToast } = useToast();
     const searchParams = useSearchParams();
     const isOnboarding = searchParams.get('onboarding') === '1';
-    const [user, setUser] = useState<{ id: string } | null>(null);
+    // useRequireAuth redirects to /login when there's no session — this page
+    // used to do its own separate, incomplete `supabase.auth.getUser()` check
+    // that never redirected, so an unauthenticated visitor landed here on a
+    // blank/broken form instead of being sent to /login.
+    const { user, isLoading: authLoading } = useRequireAuth();
     const [formData, setFormData] = useState<FormData>(emptyForm);
     const [savedData, setSavedData] = useState<FormData>(emptyForm);
     const [isEditing, setIsEditing] = useState(false);
@@ -84,33 +87,9 @@ function SettingsPageContent() {
     }, []);
 
     useEffect(() => {
-        if (isAuthBypassEnabled()) {
-            setUser(authBypassUser);
-            setFormData({
-                ...emptyForm,
-                firstName: 'ImmoAndTheBrain',
-                lastName: 'Dev User',
-                emailAddress: authBypassUser.email ?? 'dev@immoandthebrain.local',
-            });
-            setSavedData({
-                ...emptyForm,
-                firstName: 'ImmoAndTheBrain',
-                lastName: 'Dev User',
-                emailAddress: authBypassUser.email ?? 'dev@immoandthebrain.local',
-            });
-            setIsLoading(false);
-            return;
-        }
-
-        supabase.auth.getUser().then(({ data }) => {
-            if (data.user) {
-                setUser(data.user);
-                loadData(data.user.id, data.user.email ?? '');
-            } else {
-                setIsLoading(false);
-            }
-        });
-    }, [loadData]);
+        if (!user) return;
+        void loadData(user.id, user.email ?? '');
+    }, [user, loadData]);
 
     const handleInputChange = (field: keyof FormData, value: string) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -159,7 +138,7 @@ function SettingsPageContent() {
         setIsSaving(false);
     };
 
-    if (isLoading) return <LoadingScreen />;
+    if (authLoading || isLoading) return <LoadingScreen />;
 
     return (
         <div className="min-h-screen bg-background pb-24">

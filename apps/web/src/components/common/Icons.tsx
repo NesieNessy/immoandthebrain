@@ -34,6 +34,7 @@ import {
   Download,
   ExternalLink,
   Eye,
+  EyeOff,
   File,
   FileSignature,
   FileText,
@@ -49,6 +50,7 @@ import {
   List,
   ListChecks,
   Loader2,
+  Lock,
   Mail,
   Map,
   MapPin,
@@ -192,6 +194,8 @@ export const Icons = {
   RefreshCw,
   MoreVertical,
   Eye,
+  EyeOff,
+  Lock,
   Rename: PencilLine,
 
   // Status

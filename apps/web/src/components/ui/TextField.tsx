@@ -15,6 +15,13 @@ interface TextFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   /** Appends a muted "(optional)" to the label instead of the mandatory
    *  default (no marker). */
   optional?: boolean;
+  /** Icon rendered inside the field, left-aligned (e.g. Mail/Lock on a
+   *  login form) — automatically reserves left padding for it. */
+  icon?: React.ReactNode;
+  /** Interactive element anchored to the right edge, inside the field (e.g.
+   *  a show/hide-password toggle) — automatically reserves right padding.
+   *  Unlike `suffix` (plain, non-interactive text), this can hold a button. */
+  endElement?: React.ReactNode;
 }
 
 export function TextField({
@@ -24,6 +31,8 @@ export function TextField({
   suffix,
   pillSuffix,
   optional,
+  icon,
+  endElement,
   className,
   readOnly,
   disabled,
@@ -44,6 +53,11 @@ export function TextField({
         <FieldLabel label={label} optional={optional} htmlFor={controlId} className="mb-2 block text-sm font-medium text-foreground" />
       )}
       <div className="relative">
+        {icon && (
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none [&>svg]:w-4 [&>svg]:h-4">
+            {icon}
+          </span>
+        )}
         <input
           id={controlId}
           aria-invalid={invalid}
@@ -55,7 +69,8 @@ export function TextField({
             "read-only:border-primary/20 read-only:bg-primary/5 read-only:shadow-none read-only:hover:border-primary/20 read-only:focus:ring-0",
             "disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:hover:border-border",
             error && "border-destructive focus:ring-destructive/50",
-            suffix && "pr-12",
+            icon && "pl-10",
+            (suffix || endElement) && "pr-12",
             className
           )}
           readOnly={readOnly}
@@ -72,6 +87,11 @@ export function TextField({
               {suffix}
             </span>
           )
+        )}
+        {endElement && (
+          <span className="absolute right-3 top-1/2 -translate-y-1/2">
+            {endElement}
+          </span>
         )}
       </div>
       {error && (
