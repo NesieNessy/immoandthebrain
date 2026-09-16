@@ -34,6 +34,11 @@ const DEFAULT_LABELS = ['Fahrtkosten', 'Übernachtungskosten', 'Mahlzeiten', 'Sp
 const FAHRTKOSTEN_ROW = 0;
 const MAHLZEITEN_ROW = 2;
 const SONDERUMLAGEN_ROW = 5;
+// Unique per run — the category sync propagates to every one of the bypass
+// user's active properties (not just this file's A/B pair), so a fixed
+// label would already exist everywhere by the second CI run and the "just
+// synced" toast would never fire.
+const customCategoryLabel = `Sonstiges Custom ${Date.now()}`;
 
 function requireDatabaseUrl(): string {
     const databaseUrl = process.env.DATABASE_URL;
@@ -119,16 +124,16 @@ test('shows the default categories on first visit, and naming a newly added cate
     await expect(nameInput).toHaveAttribute('placeholder', 'Neue Kategorie');
     await expect(nameInput).toHaveValue('');
 
-    await nameInput.fill('Sonstiges Custom');
+    await nameInput.fill(customCategoryLabel);
     await nameInput.blur();
-    await expect(page.getByText('Kategorie "Sonstiges Custom" zu 1 weiteren Objekt hinzugefügt.')).toBeVisible();
+    await expect(page.getByText(new RegExp(`^Kategorie "${customCategoryLabel}" zu \\d+ weiteren Objekten? hinzugefügt\\.$`))).toBeVisible();
 
     const client = new Client({ connectionString: requireDatabaseUrl() });
     await client.connect();
     try {
         const { rows: dbRows } = await client.query(
-            `SELECT 1 FROM tax_expense_category WHERE property_id = $1 AND label = 'Sonstiges Custom'`,
-            [propertyIdB],
+            `SELECT 1 FROM tax_expense_category WHERE property_id = $1 AND label = $2`,
+            [propertyIdB, customCategoryLabel],
         );
         expect(dbRows).toHaveLength(1);
     } finally {
