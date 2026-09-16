@@ -9,6 +9,7 @@ function toCategory(row: Record<string, unknown>): TaxExpenseCategory {
         label: row.label as string,
         amount: Number(row.amount ?? 0),
         elsterReference: row.elster_reference as string | null,
+        manuallyComplete: Boolean(row.manually_complete),
         createdAt: row.created_at as string,
         updatedAt: row.updated_at as string,
     };
@@ -23,6 +24,14 @@ export async function getTaxExpenseCategoriesByProperty(propertyId: number): Pro
     return data?.map(toCategory) ?? [];
 }
 
+/** Every tax expense category the current user owns, across all their
+ *  properties — no propertyId filter, relying on the dispatcher's own
+ *  ownership check. Used by the Steuerübersicht dashboard overview. */
+export async function getTaxExpenseCategoriesByUser(): Promise<TaxExpenseCategory[]> {
+    const data = await propertyResourceRequest<Record<string, unknown>[]>('tax-expense-categories');
+    return data?.map(toCategory) ?? [];
+}
+
 // ----------------------------------------------------------------------------
 // Mutations
 // ----------------------------------------------------------------------------
@@ -34,6 +43,7 @@ export async function createTaxExpenseCategory(payload: TaxExpenseCategoryInsert
         label: payload.label,
         amount: payload.amount,
         elster_reference: payload.elsterReference,
+        manually_complete: payload.manuallyComplete ?? false,
     } }));
     if (!data) return null;
     return toCategory(data);
@@ -48,6 +58,7 @@ export async function updateTaxExpenseCategory(
     if (updates.label !== undefined) dbUpdates.label = updates.label;
     if (updates.amount !== undefined) dbUpdates.amount = updates.amount;
     if (updates.elsterReference !== undefined) dbUpdates.elster_reference = updates.elsterReference;
+    if (updates.manuallyComplete !== undefined) dbUpdates.manually_complete = updates.manuallyComplete;
 
     const data = await propertyResourceRequest<Record<string, unknown>>('tax-expense-categories', jsonRequest('PATCH', { id: taxExpenseCategoryId, values: dbUpdates }));
     if (!data) return null;

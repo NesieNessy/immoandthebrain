@@ -143,7 +143,7 @@ const RESOURCES: Record<string, ResourceConfig> = {
   'tax-expense-categories': {
     table: 'tax_expense_category',
     primaryKey: 'tax_expense_category_id',
-    columns: ['property_id', 'sort_order', 'label', 'amount', 'elster_reference'],
+    columns: ['property_id', 'sort_order', 'label', 'amount', 'elster_reference', 'manually_complete'],
     orderBy: 'sort_order, tax_expense_category_id',
   },
   'tax-expense-documents': {

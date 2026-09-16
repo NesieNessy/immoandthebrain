@@ -856,11 +856,16 @@ export interface TaxExpenseCategory {
   label: string;
   amount: number;
   elsterReference: string | null;
+  /** Manual override: marks this category as done regardless of whether it
+   *  has any receipts — for a category that genuinely has nothing to upload
+   *  (e.g. no Sonderumlagen this year), so it doesn't keep showing as
+   *  "Beleg fehlt" everywhere completeness is reported. */
+  manuallyComplete: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
-export type TaxExpenseCategoryInsert = Omit<TaxExpenseCategory, 'taxExpenseCategoryId' | 'createdAt' | 'updatedAt'>;
+export type TaxExpenseCategoryInsert = Omit<TaxExpenseCategory, 'taxExpenseCategoryId' | 'createdAt' | 'updatedAt' | 'manuallyComplete'> & { manuallyComplete?: boolean };
 export type TaxExpenseCategoryUpdate = Partial<Omit<TaxExpenseCategory, 'taxExpenseCategoryId' | 'propertyId' | 'createdAt' | 'updatedAt'>>;
 
 /** One uploaded receipt attached to a tax expense category. Its amount is

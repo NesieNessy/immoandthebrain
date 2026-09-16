@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { useDashboardData, type DashboardPropertyRow, type PropertyRowStatus } from '@/hooks/useDashboardData';
+import { getPersonalData } from '@/lib/supabase/personal_data.supabase';
 import { Icons, LoadingScreen, PAGE_CONTAINER_CLASS, Table, Tag, type TableColumn } from '@/components/ui';
 import { cn, deCurrencyFormatter, formatRelativeDe } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -102,6 +104,24 @@ export function HomeClient() {
   const { user, isLoading: authLoading } = useRequireAuth();
   const router = useRouter();
   const data = useDashboardData(user?.id);
+  const [firstName, setFirstName] = useState<string | null>(null);
+  const [expandedTaxYears, setExpandedTaxYears] = useState<Set<number>>(new Set());
+  const toggleTaxYear = (year: number) => {
+    setExpandedTaxYears((prev) => {
+      const next = new Set(prev);
+      if (next.has(year)) next.delete(year); else next.add(year);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    getPersonalData(user.id).then((personalData) => {
+      if (!cancelled) setFirstName(personalData?.firstName || null);
+    });
+    return () => { cancelled = true; };
+  }, [user]);
 
   if (authLoading) {
     return <LoadingScreen />;
@@ -157,7 +177,7 @@ export function HomeClient() {
         {/* Greeting */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-foreground">Guten Morgen 👋</h1>
+            <h1 className="text-2xl font-semibold text-foreground">Guten Morgen{firstName ? `, ${firstName}` : ''} 👋</h1>
             <p className="mt-1 text-sm text-muted-foreground capitalize">{today}</p>
           </div>
           {taskCount > 0 && (
@@ -343,6 +363,51 @@ export function HomeClient() {
             )}
           </SectionCard>
         </div>
+
+        {/* Steuerunterlagen nach Jahr */}
+        <SectionCard title="Steuerunterlagen nach Jahr" allHref="/tax-overview">
+          {data.isLoading ? (
+            <EmptyRow label="Lädt…" />
+          ) : data.taxDocumentsByYear.length === 0 ? (
+            <EmptyRow label="Noch keine Steuerunterlagen." />
+          ) : (
+            <ul className="flex flex-col divide-y divide-border">
+              {data.taxDocumentsByYear.map((yearSummary) => (
+                <li key={yearSummary.year}>
+                  <button
+                    type="button"
+                    onClick={() => toggleTaxYear(yearSummary.year)}
+                    className="w-full flex items-center gap-3 py-3 hover:bg-primary/5 -mx-1 px-1 rounded-md transition-colors cursor-pointer"
+                  >
+                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
+                      <Icons.Receipt className="w-4 h-4" />
+                    </span>
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block text-sm font-medium text-foreground">{yearSummary.year}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {yearSummary.propertyCount} Objekt{yearSummary.propertyCount === 1 ? '' : 'e'} · {yearSummary.documentCount} Beleg{yearSummary.documentCount === 1 ? '' : 'e'}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-sm font-medium text-foreground">{formatEuro(yearSummary.totalAmount)}</span>
+                    <Icons.ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", expandedTaxYears.has(yearSummary.year) && "rotate-180")} />
+                  </button>
+                  {expandedTaxYears.has(yearSummary.year) && (
+                    <ul className="pb-3 pl-11 flex flex-col gap-1.5">
+                      {yearSummary.properties.map((property) => (
+                        <li key={property.propertyId} className="flex items-center justify-between gap-3 text-xs">
+                          <span className="min-w-0 truncate text-muted-foreground">{property.label}</span>
+                          <span className="shrink-0 text-foreground">
+                            {property.documentCount} Beleg{property.documentCount === 1 ? '' : 'e'} · {formatEuro(property.totalAmount)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </SectionCard>
       </main>
     </div>
   );

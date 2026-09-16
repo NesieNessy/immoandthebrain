@@ -22,6 +22,7 @@ function toCategory(row: Record<string, unknown>): TaxExpenseCategory {
         label: row.label as string,
         amount: Number(row.amount ?? 0),
         elsterReference: row.elster_reference as string | null,
+        manuallyComplete: Boolean(row.manually_complete),
         createdAt: row.created_at as string,
         updatedAt: row.updated_at as string,
     };

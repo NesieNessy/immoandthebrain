@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { propertyResourceRequest } from '@/lib/api/propertyResources';
 import { getDocumentsByUser } from '@/lib/supabase/document.supabase';
 import { getPropertiesOverview } from '@/lib/supabase/property.supabase';
+import { getTaxExpenseDocumentsByUser } from '@/lib/supabase/tax_expense_document.supabase';
 import { computeGrossYield } from '@/app/existing-properties/[propertyId]/key-metrics/keyMetricsCalculations';
 import type { UserDocument } from '@immoandthebrain/types';
 
@@ -153,6 +154,26 @@ export interface DashboardRecentDocument {
   href: string;
 }
 
+/** One property's share of a given tax year's receipts — the breakdown
+ *  shown when a DashboardTaxYearSummary row is expanded. */
+export interface DashboardTaxYearProperty {
+  propertyId: number;
+  label: string;
+  documentCount: number;
+  totalAmount: number;
+}
+
+/** All Steuerunterlagen receipts across every property, for one calendar
+ *  year (grouped by the receipt's upload date) — backs the dashboard's
+ *  "Steuerunterlagen nach Jahr" overview. */
+export interface DashboardTaxYearSummary {
+  year: number;
+  propertyCount: number;
+  documentCount: number;
+  totalAmount: number;
+  properties: DashboardTaxYearProperty[];
+}
+
 export interface DashboardKpis {
   immobilienwerte: number;
   mieteinnahmen: number;
@@ -182,6 +203,7 @@ export interface DashboardData {
   hints: DashboardHint[];
   recentItems: DashboardRecentItem[];
   recentDocuments: DashboardRecentDocument[];
+  taxDocumentsByYear: DashboardTaxYearSummary[];
 }
 
 const EMPTY_KPIS: DashboardKpis = {
@@ -226,6 +248,7 @@ export function useDashboardData(userId: string | undefined): DashboardData {
   const [hints, setHints] = useState<DashboardHint[]>([]);
   const [recentItems, setRecentItems] = useState<DashboardRecentItem[]>([]);
   const [recentDocuments, setRecentDocuments] = useState<DashboardRecentDocument[]>([]);
+  const [taxDocumentsByYear, setTaxDocumentsByYear] = useState<DashboardTaxYearSummary[]>([]);
 
   useEffect(() => {
     if (!userId) return;
@@ -243,6 +266,7 @@ export function useDashboardData(userId: string | undefined): DashboardData {
           measuresRaw,
           adjustmentsRaw,
           documents,
+          taxExpenseDocs,
         ] = await Promise.all([
           getPropertiesOverview(userId!),
           propertyResourceRequest<Record<string, unknown>[]>('property-financials', {}, {}),
@@ -251,6 +275,7 @@ export function useDashboardData(userId: string | undefined): DashboardData {
           propertyResourceRequest<Record<string, unknown>[]>('renovation-measures', {}, {}),
           propertyResourceRequest<Record<string, unknown>[]>('tenancy-adjustment-history', {}, {}),
           getDocumentsByUser(userId!),
+          getTaxExpenseDocumentsByUser(),
         ]);
         if (cancelled) return;
 
@@ -263,6 +288,43 @@ export function useDashboardData(userId: string | undefined): DashboardData {
         const financialsByProperty = new Map(financials.map((f) => [f.propertyId, f]));
         const activeProperties = propertiesOverview.filter((p) => !p.archivedAt);
         const propertyById = new Map(activeProperties.map((p) => [p.propertyId, p]));
+
+        // ---- Steuerunterlagen nach Jahr ---------------------------------
+        // Every receipt uploaded anywhere under Steuerunterlagen, across all
+        // properties, grouped by the calendar year it was uploaded in.
+        const taxYearMap = new Map<number, Map<number, DashboardTaxYearProperty>>();
+        for (const doc of taxExpenseDocs) {
+          const property = propertyById.get(doc.propertyId);
+          if (!property) continue;
+          const year = new Date(doc.createdAt).getFullYear();
+          if (!taxYearMap.has(year)) taxYearMap.set(year, new Map());
+          const propertiesForYear = taxYearMap.get(year)!;
+          const existing = propertiesForYear.get(doc.propertyId);
+          if (existing) {
+            existing.documentCount += 1;
+            existing.totalAmount += doc.amount;
+          } else {
+            propertiesForYear.set(doc.propertyId, {
+              propertyId: doc.propertyId,
+              label: `${property.street} ${property.houseNumber}`,
+              documentCount: 1,
+              totalAmount: doc.amount,
+            });
+          }
+        }
+        const taxYearSummaries: DashboardTaxYearSummary[] = Array.from(taxYearMap.entries())
+          .map(([year, propertiesForYear]) => {
+            const propertyRows = Array.from(propertiesForYear.values()).sort((a, b) => a.label.localeCompare(b.label));
+            return {
+              year,
+              propertyCount: propertyRows.length,
+              documentCount: propertyRows.reduce((sum, p) => sum + p.documentCount, 0),
+              totalAmount: propertyRows.reduce((sum, p) => sum + p.totalAmount, 0),
+              properties: propertyRows,
+            };
+          })
+          .sort((a, b) => b.year - a.year);
+        setTaxDocumentsByYear(taxYearSummaries);
 
         // ---- Portfolio-wide totals -------------------------------------
         let immobilienwerte = 0;
@@ -518,5 +580,5 @@ export function useDashboardData(userId: string | undefined): DashboardData {
     return () => { cancelled = true; };
   }, [userId]);
 
-  return { isLoading, error, kpis, finanzstatus, properties: propertyRows, tasks, hints, recentItems, recentDocuments };
+  return { isLoading, error, kpis, finanzstatus, properties: propertyRows, tasks, hints, recentItems, recentDocuments, taxDocumentsByYear };
 }
