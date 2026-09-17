@@ -8,7 +8,15 @@ const COLUMNS = {
   lastName: 'last_name', firstName: 'first_name', street: 'street', houseNumber: 'house_number',
   city: 'city', postalCode: 'postal_code', phoneNumber: 'phone_number', emailAddress: 'email_address',
   taxIdentificationNumber: 'tax_identification_number', profilePicture: 'profile_picture',
+  signatureUrl: 'signature_url', notificationPreferences: 'notification_preferences', deactivatedAt: 'deactivated_at',
 } as const;
+
+// node-postgres doesn't auto-serialize JS objects into jsonb parameters —
+// every other column here is a plain scalar, so this is the one column that
+// needs a value transform before it reaches the query.
+function toQueryValue(key: string, value: unknown): unknown {
+  return key === 'notificationPreferences' ? JSON.stringify(value) : value;
+}
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
@@ -20,7 +28,7 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   const userId = await requireUserId(request);
   const input = await request.json();
-  const values = Object.fromEntries(Object.entries(COLUMNS).filter(([key]) => Object.hasOwn(input, key)).map(([key, column]) => [column, input[key]]));
+  const values = Object.fromEntries(Object.entries(COLUMNS).filter(([key]) => Object.hasOwn(input, key)).map(([key, column]) => [column, toQueryValue(key, input[key])]));
   const required = ['last_name', 'first_name', 'street', 'house_number', 'city', 'postal_code', 'email_address', 'tax_identification_number'];
   const missing = required.filter((column) => !String(values[column] ?? '').trim());
   if (missing.length > 0) {
@@ -44,7 +52,7 @@ export async function PATCH(request: Request) {
   assignments.push('updated_at = NOW()');
   const { rows } = await db.query(
     `UPDATE personal_data SET ${assignments.join(', ')} WHERE user_id = $1 RETURNING *`,
-    [userId, ...entries.map(([key]) => input[key])],
+    [userId, ...entries.map(([key]) => toQueryValue(key, input[key]))],
   );
   if (!rows[0]) return NextResponse.json({ error: 'Profildaten nicht gefunden.' }, { status: 404 });
   return NextResponse.json(rows[0]);

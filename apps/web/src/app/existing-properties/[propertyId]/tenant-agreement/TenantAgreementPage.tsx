@@ -1,6 +1,6 @@
 "use client";
 
-import { formatUnitLabel } from '@/components/features/PropertyDisplay';
+import { formatUnitLabel, PropertyLoadingPage } from '@/components/features/PropertyDisplay';
 import { AdjustmentStatusBox } from '../tenant-data/AdjustmentStatusBox';
 import { DataCard } from '../tenant-data/DocumentGeneratorParts';
 import { Button, CalendarField, ConfirmDeleteModal, Dropdown, Header, Icons, Modal, NumberField, PAGE_CONTAINER_CLASS, SectionLabel, StickyActionBar, Switch, Tag, TextArea, UnsavedChangesModal, type BreadcrumbItem } from '@/components/ui';
@@ -35,6 +35,12 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
     // comment) — lets "PDF generieren" run right here instead of navigating
     // to the /rental-agreement review page first.
     const rentalGen = useRentalAgreementGenerator(propertyId, String(unit.propertyUnitId));
+
+    // Blocks the whole form (not just Save) until the tenancy/persons/costs
+    // load resolves — rendering the fields interactive any earlier lets a
+    // user's input get silently clobbered when that load's setRentalForm
+    // lands afterward (see the isTenancyDataLoaded doc comment).
+    if (!data.isTenancyDataLoaded) return <PropertyLoadingPage />;
 
     const currentTenantHref = hasMultipleUnits
         ? `/existing-properties/${propertyId}/tenant-data/${unit.propertyUnitId}`

@@ -26,6 +26,9 @@ function toPersonalData(row: Record<string, unknown>): PersonalData {
     emailAddress: row.email_address as string,
     taxIdentificationNumber: row.tax_identification_number as string,
     profilePicture: row.profile_picture as string | null,
+    signatureUrl: row.signature_url as string | null,
+    notificationPreferences: (row.notification_preferences as Record<string, boolean> | undefined) ?? {},
+    deactivatedAt: row.deactivated_at as string | null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };

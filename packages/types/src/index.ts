@@ -315,6 +315,14 @@ export interface PersonalData {
   emailAddress: string;
   taxIdentificationNumber: string;
   profilePicture?: string | null;
+  signatureUrl?: string | null;
+  /** Absent key = default-on — avoids a backfill for existing users when a
+   *  new notification type is introduced. */
+  notificationPreferences?: Record<string, boolean>;
+  /** Set when the user self-deactivated their account (Einstellungen ›
+   *  Konto & Daten) — useRequireAuth redirects everywhere except
+   *  /account-reactivate while this is set. Null/undefined = active. */
+  deactivatedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -329,7 +337,9 @@ export type PersonalDataUpdate = Partial<Omit<PersonalData, 'userId' | 'createdA
 export interface Subscription {
   subscriptionId: number;
   userId: string;
-  subscriptionModel: 'Basic' | 'Professional' | 'Enterprise';
+  /** Matches the DB enum `subscription_model` exactly (see
+   *  20260224000005_subscription.sql) — not a display label. */
+  subscriptionModel: 'FREE' | 'BASIC' | 'PRO' | 'ENTERPRISE';
   startDate: string;
   endDate: string | null;
   createdAt: string;

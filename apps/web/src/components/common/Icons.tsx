@@ -10,6 +10,7 @@ import {
   BarChart3,
   Bath,
   Bed,
+  Bell,
   BookCheck,
   Bookmark,
   Briefcase,
@@ -28,6 +29,8 @@ import {
   ChevronUp,
   ClipboardList,
   Clock,
+  CreditCard,
+  Crown,
   Database,
   DollarSign,
   DoorOpen,
@@ -46,11 +49,13 @@ import {
   Image,
   Info,
   Key,
+  KeyRound,
   Landmark,
   List,
   ListChecks,
   Loader2,
   Lock,
+  LogOut,
   Mail,
   Map,
   MapPin,
@@ -72,6 +77,7 @@ import {
   Share2,
   Shield,
   ShoppingCart,
+  Smartphone,
   Star,
   Target,
   Trash2,
@@ -218,6 +224,14 @@ export const Icons = {
   Database,
   Loader2,
   ArrowDown,
+
+  // Einstellungen
+  Bell,
+  CreditCard,
+  Crown,
+  KeyRound,
+  LogOut,
+  Smartphone,
 };
 
 export type IconName = keyof typeof Icons;

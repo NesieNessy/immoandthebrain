@@ -9,6 +9,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 const ONBOARDING_PATH = '/user-settings';
+const REACTIVATE_PATH = '/account-reactivate';
 
 /**
  * Redirects to /login if no authenticated user is found.
@@ -41,7 +42,7 @@ export function useRequireAuth() {
     // /user-settings to complete onboarding first, unless they're
     // already there (that page has its own auth check, not this hook).
     async function requirePersonalData(authUser: User) {
-      if (pathname?.startsWith(ONBOARDING_PATH)) {
+      if (pathname?.startsWith(ONBOARDING_PATH) || pathname?.startsWith(REACTIVATE_PATH)) {
         setUser(authUser);
         setIsLoading(false);
         return;
@@ -49,6 +50,13 @@ export function useRequireAuth() {
       const personalData = await getPersonalData(authUser.id);
       if (!personalData) {
         router.replace(`${ONBOARDING_PATH}?onboarding=1`);
+        return;
+      }
+      // Self-deactivated via Einstellungen > Konto & Daten — blocks the
+      // whole app until the user reactivates. Not a Supabase Auth ban (a
+      // banned user could never log back in to undo it themselves).
+      if (personalData.deactivatedAt) {
+        router.replace(REACTIVATE_PATH);
         return;
       }
       setUser(authUser);

@@ -4,11 +4,13 @@ import { Button, Checkbox, Icons, TextField } from '@/components/ui';
 import { recordLoginTime } from '@/lib/auth/sessionTimeout';
 import { supabase } from '@/lib/supabase/client.supabase';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useState } from 'react';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const accountDeleted = searchParams.get('accountDeleted') === '1';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -41,6 +43,12 @@ export default function LoginPage() {
           Melden Sie sich an, um fortzufahren
         </p>
       </div>
+
+      {accountDeleted && (
+        <div className="p-3 bg-info/10 border border-info/30 rounded-lg text-info text-sm">
+          Ihr Konto wurde gelöscht.
+        </div>
+      )}
 
       <form onSubmit={handleLogin} className="space-y-4">
         {error && (
@@ -113,5 +121,13 @@ export default function LoginPage() {
         Datenschutz · AGB · Impressum · Hilfe
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
   );
 }
