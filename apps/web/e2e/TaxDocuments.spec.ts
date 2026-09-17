@@ -129,7 +129,14 @@ test('shows the default categories on first visit, and naming a newly added cate
     // "Objekt" (1) vs "Objekten" (2+) — the whole "en" suffix is optional,
     // not just the trailing "n" (that previously required a literal "e"
     // before it, so it never matched the singular "Objekt" case).
-    await expect(page.getByText(new RegExp(`^Kategorie "${customCategoryLabel}" zu \\d+ weiteren Objekt(en)? hinzugefügt\\.$`))).toBeVisible();
+    //
+    // The toast only fires after persistLabel's own update finishes and
+    // then, unawaited, syncCategoryToOtherProperties runs its own chain
+    // (list other properties -> read each one's categories -> create the
+    // missing one) — several sequential round trips against the real
+    // hosted Supabase project, not a local DB, so this needs real headroom
+    // in CI rather than the default 5s.
+    await expect(page.getByText(new RegExp(`^Kategorie "${customCategoryLabel}" zu \\d+ weiteren Objekt(en)? hinzugefügt\\.$`))).toBeVisible({ timeout: 15000 });
 
     const client = new Client({ connectionString: requireDatabaseUrl() });
     await client.connect();
@@ -174,21 +181,23 @@ test("uploading a receipt, marking a category complete, and deleting a category 
     await expect(fahrtkostenRow.locator('td').nth(2)).toHaveText('42 €');
 
     // ── Als vollständig markieren, then back to unvollständig ─────────────
+    // The "reopen the same row's ⋮ menu right after using it" step has
+    // proven unreliable in CI even with an explicit wait for the popover to
+    // close first (Radix's open/close state machine, not a rendering bug —
+    // the label reads correctly once reopened, the reopen itself is what's
+    // flaky). Reloading between the two menu interactions sidesteps that
+    // entirely: every popover open here is a fresh one, and it doubles as a
+    // real assertion that the manual-complete flag actually persisted.
     const mahlzeitenRow = rows.nth(MAHLZEITEN_ROW);
     await expect(mahlzeitenRow.getByText('Beleg fehlt')).toBeVisible();
     await mahlzeitenRow.getByRole('button', { name: 'Weitere Aktionen' }).click();
     await page.getByRole('button', { name: 'Als vollständig markieren' }).click();
-    // Radix's popover closes itself right after a menu-item click, but not
-    // synchronously with it — re-clicking the same trigger before that close
-    // has actually finished reads as "still open" and swallows the click
-    // instead of reopening it. Waiting for the just-used item to be gone
-    // gives the popover a real close signal to synchronize on.
-    await expect(page.getByRole('button', { name: 'Als vollständig markieren' })).toBeHidden();
     await expect(mahlzeitenRow.getByText('Vollständig (manuell)')).toBeVisible();
 
+    await page.reload();
+    await expect(mahlzeitenRow.getByText('Vollständig (manuell)')).toBeVisible();
     await mahlzeitenRow.getByRole('button', { name: 'Weitere Aktionen' }).click();
     await page.getByRole('button', { name: 'Als unvollständig markieren' }).click();
-    await expect(page.getByRole('button', { name: 'Als unvollständig markieren' })).toBeHidden();
     await expect(mahlzeitenRow.getByText('Beleg fehlt')).toBeVisible();
 
     const client = new Client({ connectionString: requireDatabaseUrl() });
