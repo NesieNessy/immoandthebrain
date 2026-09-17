@@ -22,6 +22,7 @@ import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { deCurrencyFormatter } from '@/lib/utils';
 import type { RenovationMeasureDefect, RenovationMeasureQuote } from '@immoandthebrain/types';
 import { estimateRange, MEASURE_CATEGORY_ESTIMATES } from '../measureCategories';
+import { canConfirmCustomerCompletion } from '../measureStatus';
 import { useMeasureDetailData } from './useMeasureDetailData';
 
 function euro(value: number | null | undefined): string {
@@ -204,7 +205,12 @@ export default function MeasureDetail({ propertyId, measureId }: { propertyId: s
                             <CalendarField
                                 label="Abschluss ist"
                                 value={toDate(measure.actualCompletionDate)}
-                                onChange={(date) => data.commitField({ actualCompletionDate: toDateInput(date) })}
+                                onChange={(date) => {
+                                    const next = toDateInput(date);
+                                    // Clearing the completion date can't leave a stale
+                                    // customer confirmation behind it — matches Contractors.tsx.
+                                    data.commitField(next ? { actualCompletionDate: next } : { actualCompletionDate: next, customerConfirmedCompleted: false });
+                                }}
                             />
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -405,7 +411,7 @@ export default function MeasureDetail({ propertyId, measureId }: { propertyId: s
                                         <Checkbox
                                             label="Kunde bestätigt"
                                             checked={measure.customerConfirmedCompleted}
-                                            disabled={!measure.craftsmanConfirmedCompleted}
+                                            disabled={!canConfirmCustomerCompletion(measure)}
                                             onChange={() => data.toggleCustomerConfirmed()}
                                         />
                                     </div>

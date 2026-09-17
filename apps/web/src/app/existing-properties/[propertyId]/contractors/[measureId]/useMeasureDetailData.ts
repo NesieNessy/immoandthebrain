@@ -33,6 +33,7 @@ import type {
     RenovationMeasureQuote,
 } from '@immoandthebrain/types';
 import { useEffect, useState } from 'react';
+import { canConfirmCustomerCompletion, isLocked as isMeasureLocked } from '../measureStatus';
 
 /**
  * There is no craftsperson-facing portal — every field here is owner-
@@ -75,7 +76,7 @@ export function useMeasureDetailData(propertyId: string, measureId: string) {
         return () => { cancelled = true; };
     }, [propertyId, measureId]);
 
-    const isLocked = measure?.quoteAccepted ?? false;
+    const isLocked = measure ? isMeasureLocked(measure) : false;
 
     // ── Measure fields ──────────────────────────────────────────────────
     const updateLocalField = (patch: Partial<RenovationMeasure>) => {
@@ -110,7 +111,7 @@ export function useMeasureDetailData(propertyId: string, measureId: string) {
     };
 
     const toggleCustomerConfirmed = () => {
-        if (!measure || !measure.craftsmanConfirmedCompleted) return;
+        if (!measure || !canConfirmCustomerCompletion(measure)) return;
         commitField({ customerConfirmedCompleted: !measure.customerConfirmedCompleted });
     };
 

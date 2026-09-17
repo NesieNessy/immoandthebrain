@@ -15,6 +15,15 @@ type ResourceConfig = {
    *  some resources (e.g. tax-expense-categories) intentionally INSERT a
    *  blank value first as a placeholder row, filled in by a later PATCH. */
   nonBlankColumnsOnUpdate?: readonly string[];
+  /** Once `lockColumn` is true on a row, PATCH rejects changes to any of
+   *  `columns` and DELETE is blocked outright — unless the same PATCH
+   *  request is also flipping `lockColumn` back to false (unlocking). */
+  lockedColumns?: { lockColumn: string; columns: readonly string[] };
+  /** On a PATCH that sets `column` to true, also sets it false on every
+   *  other row sharing the same `scopeColumn` value — e.g. "only one quote
+   *  accepted per measure at a time", enforced server-side instead of
+   *  relying on the client to issue the matching unset PATCHes itself. */
+  exclusiveBooleanOnUpdate?: { column: string; scopeColumn: string };
 };
 
 const RESOURCES: Record<string, ResourceConfig> = {
@@ -126,18 +135,33 @@ const RESOURCES: Record<string, ResourceConfig> = {
       'craftsman_confirmed_completed', 'customer_confirmed_completed', 'craftsman_notes',
     ],
     orderBy: 'sort_order, renovation_measure_id',
+    nonBlankColumnsOnUpdate: ['title'],
+    // Matches the FE's own isLocked-disabled field set exactly (Contractors.tsx
+    // and MeasureDetail.tsx) — actual_completion_date, quote_accepted itself,
+    // and the craftsman/customer-confirmed flags are deliberately excluded,
+    // they all stay editable (or are the unlock switch) once locked.
+    lockedColumns: {
+      lockColumn: 'quote_accepted',
+      columns: [
+        'title', 'estimated_cost', 'quoted_cost', 'preferred_start_date', 'quoted_start_date',
+        'published', 'published_at', 'description', 'craftsman_notes',
+      ],
+    },
   },
   'renovation-measure-quotes': {
     table: 'renovation_measure_quote',
     primaryKey: 'renovation_measure_quote_id',
     columns: ['renovation_measure_id', 'property_id', 'sort_order', 'company_name', 'cost', 'document_path', 'document_file_name', 'accepted'],
     orderBy: 'sort_order, renovation_measure_quote_id',
+    nonBlankColumnsOnUpdate: ['company_name'],
+    exclusiveBooleanOnUpdate: { column: 'accepted', scopeColumn: 'renovation_measure_id' },
   },
   'renovation-measure-defects': {
     table: 'renovation_measure_defect',
     primaryKey: 'renovation_measure_defect_id',
     columns: ['renovation_measure_id', 'property_id', 'sort_order', 'description'],
     orderBy: 'sort_order, renovation_measure_defect_id',
+    nonBlankColumnsOnUpdate: ['description'],
   },
   'renovation-measure-photos': {
     table: 'renovation_measure_photo',
@@ -317,6 +341,20 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (blankColumn) {
     return NextResponse.json({ error: `Feld "${blankColumn}" darf nicht leer sein.` }, { status: 400 });
   }
+  if (config.lockedColumns) {
+    const { lockColumn, columns: lockedCols } = config.lockedColumns;
+    const touchesLockedColumn = lockedCols.some((column) => columns.includes(column));
+    const isUnlockingInThisRequest = Object.hasOwn(valuesByColumn, lockColumn) && valuesByColumn[lockColumn] === false;
+    if (touchesLockedColumn && !isUnlockingInThisRequest) {
+      const { rows: currentRows } = await db.query(
+        `SELECT r.${lockColumn} AS locked FROM ${config.table} r WHERE r.${config.primaryKey} = $1 AND EXISTS (SELECT 1 FROM property p WHERE p.property_id = r.property_id AND p.user_id = $2)`,
+        [id, userId],
+      );
+      if (currentRows[0]?.locked) {
+        return NextResponse.json({ error: 'Datensatz ist gesperrt und kann nicht mehr geändert werden.' }, { status: 409 });
+      }
+    }
+  }
   const assignments = columns.map((column, index) => `${column} = $${index + 3}`);
   assignments.push('updated_at = NOW()');
   const { rows } = await db.query(
@@ -324,6 +362,17 @@ export async function PATCH(request: Request, context: RouteContext) {
     [id, userId, ...columns.map((column) => valuesByColumn[column])],
   );
   if (!rows[0]) return NextResponse.json({ error: 'Datensatz nicht gefunden.' }, { status: 404 });
+
+  if (config.exclusiveBooleanOnUpdate) {
+    const { column: exclusiveColumn, scopeColumn } = config.exclusiveBooleanOnUpdate;
+    if (valuesByColumn[exclusiveColumn] === true) {
+      await db.query(
+        `UPDATE ${config.table} SET ${exclusiveColumn} = false, updated_at = NOW() WHERE ${scopeColumn} = $1 AND ${config.primaryKey} != $2 AND ${exclusiveColumn} = true`,
+        [rows[0][scopeColumn], id],
+      );
+    }
+  }
+
   return NextResponse.json(rows[0]);
 }
 
@@ -337,6 +386,15 @@ export async function DELETE(request: Request, context: RouteContext) {
   if (!id && !propertyId) return NextResponse.json({ error: 'ID fehlt.' }, { status: 400 });
   const targetColumn = id ? config.primaryKey : 'property_id';
   const targetValue = Number(id ?? propertyId);
+  if (id && config.lockedColumns) {
+    const { rows: currentRows } = await db.query(
+      `SELECT r.${config.lockedColumns.lockColumn} AS locked FROM ${config.table} r WHERE r.${config.primaryKey} = $1 AND EXISTS (SELECT 1 FROM property p WHERE p.property_id = r.property_id AND p.user_id = $2)`,
+      [targetValue, userId],
+    );
+    if (currentRows[0]?.locked) {
+      return NextResponse.json({ error: 'Datensatz ist gesperrt und kann nicht gelöscht werden.' }, { status: 409 });
+    }
+  }
   const result = await db.query(
     `DELETE FROM ${config.table} r WHERE r.${targetColumn} = $1 AND EXISTS (SELECT 1 FROM property p WHERE p.property_id = r.property_id AND p.user_id = $2)`,
     [targetValue, userId],

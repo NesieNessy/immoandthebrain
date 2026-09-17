@@ -12,6 +12,7 @@ import {
 import type { Property, PropertyUnit, RenovationMeasure } from '@immoandthebrain/types';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { canConfirmCustomerCompletion } from './measureStatus';
 
 export interface NewMeasureForm {
     title: string;
@@ -127,7 +128,7 @@ export function useRenovationMeasuresData(propertyId: string) {
     };
 
     const toggleCustomerConfirmed = (measure: RenovationMeasure) => {
-        if (!measure.craftsmanConfirmedCompleted) return;
+        if (!canConfirmCustomerCompletion(measure)) return;
         const next = !measure.customerConfirmedCompleted;
         updateLocalField(measure.renovationMeasureId, { customerConfirmedCompleted: next });
         void persistField(measure.renovationMeasureId, { customerConfirmedCompleted: next });
