@@ -154,11 +154,23 @@ test('shows the default categories on first visit, and naming a newly added cate
 test("uploading a receipt, marking a category complete, and deleting a category all work through the row's context menu, with cross-property delete", async ({ page }) => {
     // Seed property B's own defaults too, so the delete-sync check below has
     // a real row there to verify being removed. Not asserting an exact row
-    // count here (or on property A below) — the previous test may already
-    // have synced an extra custom category onto both properties; the
-    // default rows this test cares about stay at their fixed indices either way.
+    // count or position here — the previous test's custom category now
+    // really does sync onto B (that sync used to silently no-op, which is
+    // exactly the bug fixed alongside this), and depending on which of the
+    // two sync paths (this test's own direct sync vs. B's "brand new
+    // property, adopt every other property's categories" bootstrap) wins
+    // the race, it can land at any position in B's row list — checking
+    // Sonderumlagen is present anywhere, not at a fixed index, is what's
+    // actually stable here.
     await page.goto(`/existing-properties/${propertyIdB}/tax-documents`);
-    await expect(page.locator('tbody tr').nth(SONDERUMLAGEN_ROW).getByRole('textbox')).toHaveValue('Sonderumlagen');
+    // evaluateAll(...) is a one-shot read, not an auto-retrying assertion —
+    // wrapped in toPass() so it tolerates the table still loading/bootstrapping
+    // its rows right after navigation.
+    await expect(async () => {
+        const propertyBLabels = await page.locator('tbody tr').getByRole('textbox')
+            .evaluateAll((inputs) => inputs.map((el) => (el as HTMLInputElement).value));
+        expect(propertyBLabels).toContain('Sonderumlagen');
+    }).toPass();
 
     await page.goto(`/existing-properties/${propertyIdA}/tax-documents`);
     const rows = page.locator('tbody tr');
@@ -233,6 +245,13 @@ test("uploading a receipt, marking a category complete, and deleting a category 
     await expect(deleteDialog.getByText('wird auch bei allen anderen Bestandsobjekten gelöscht')).toBeVisible();
     await deleteDialog.getByRole('button', { name: 'Löschen' }).click();
     await expect(rows).toHaveCount(rowCountBeforeDelete - 1);
+    // deleteCategoryOnOtherProperties runs fire-and-forget (not awaited by
+    // confirmDeleteCategory) — the row disappearing above only confirms
+    // property A's own delete landed, not the cross-property one. Waiting
+    // for its own confirmation toast (fired only once the sync's delete on
+    // every other property has actually completed) is what makes the DB
+    // check below safe to run immediately after, instead of racing it.
+    await expect(page.getByText(/^Kategorie in \d+ weiteren Objekt(en)? ebenfalls gelöscht\.$/)).toBeVisible({ timeout: 15000 });
 
     const client2 = new Client({ connectionString: requireDatabaseUrl() });
     await client2.connect();
