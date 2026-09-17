@@ -20,7 +20,7 @@ import { ensureDefaultTaxExpenseCategories } from '@/lib/taxExpense/defaultCateg
 import { availableTaxYears, summarizeTaxYear } from '@/lib/taxExpense/taxYearSummary';
 import type { Property, PropertyUnit, TaxExpenseCategory, TaxExpenseDocument } from '@immoandthebrain/types';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export interface CategoryRow {
     category: TaxExpenseCategory;
@@ -51,6 +51,15 @@ export function useTaxDocumentsData(propertyId: string) {
     const [showArchivedYears, setShowArchivedYears] = useState(false);
     const [pendingDeleteYear, setPendingDeleteYear] = useState<number | null>(null);
     const [isDeletingYear, setIsDeletingYear] = useState(false);
+    // The last label persistLabel actually confirmed to the server for each
+    // category — deliberately NOT read from `rows`, because updateLocalLabel
+    // (fired on every keystroke) already overwrites rows[i].category.label
+    // with whatever the user is currently typing. persistLabel needs to know
+    // what the label was *before* this edit to tell "naming a blank
+    // category" apart from "renaming an already-named one" (and from each
+    // other's other-property sync target) — reading from `rows` at blur time
+    // would just compare the new value against itself.
+    const persistedLabelsRef = useRef<Map<number, string>>(new Map());
 
     useEffect(() => {
         const id = parseInt(propertyId, 10);
@@ -102,6 +111,7 @@ export function useTaxDocumentsData(propertyId: string) {
             const documentsByCategory = await Promise.all(categories.map((c) => getTaxExpenseDocumentsByCategory(c.taxExpenseCategoryId)));
             if (cancelled) return;
             setRows(categories.map((category, index) => ({ category, documents: documentsByCategory[index], isUploading: false })));
+            persistedLabelsRef.current = new Map(categories.map((c) => [c.taxExpenseCategoryId, c.label]));
             setSelectedYear((current) => current ?? availableTaxYears(documentsByCategory.flat())[0]);
             setIsLoading(false);
         })();
@@ -283,12 +293,13 @@ export function useTaxDocumentsData(propertyId: string) {
         // draft (showing the "Neue Kategorie" placeholder) until the user
         // actually types something, rather than persisting an empty label.
         if (!label.trim()) return;
-        const previousLabel = rows.find((row) => row.category.taxExpenseCategoryId === categoryId)?.category.label ?? '';
+        const previousLabel = persistedLabelsRef.current.get(categoryId) ?? '';
         const updated = await updateTaxExpenseCategory(categoryId, { label });
         if (!updated) {
             showToast('Änderung konnte nicht gespeichert werden.', 'error');
             return;
         }
+        persistedLabelsRef.current.set(categoryId, updated.label);
         setRows((prev) => prev.map((row) => row.category.taxExpenseCategoryId === categoryId ? { ...row, category: updated } : row));
         if (!previousLabel.trim()) {
             // A category named for the first time (empty label being
@@ -328,6 +339,7 @@ export function useTaxDocumentsData(propertyId: string) {
             showToast('Kategorie konnte nicht angelegt werden.', 'error');
             return;
         }
+        persistedLabelsRef.current.set(created.taxExpenseCategoryId, created.label);
         setRows((prev) => [...prev, { category: created, documents: [], isUploading: false }]);
     };
 
@@ -341,6 +353,7 @@ export function useTaxDocumentsData(propertyId: string) {
                 return;
             }
             setRows((prev) => prev.filter((row) => row.category.taxExpenseCategoryId !== pendingDelete.taxExpenseCategoryId));
+            persistedLabelsRef.current.delete(pendingDelete.taxExpenseCategoryId);
             setPendingDelete(null);
             if (pendingDelete.label.trim()) void deleteCategoryOnOtherProperties(pendingDelete.label);
         } finally {

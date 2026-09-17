@@ -6,6 +6,7 @@ import { PersonalDataSaveError, updatePersonalData, upsertPersonalData } from '@
 import { uploadUserAsset } from '@/lib/supabase/user_assets.supabase';
 import type { PersonalData } from '@immoandthebrain/types';
 import { useEffect, useRef, useState } from 'react';
+import { isProfileFormValid } from './profileValidation';
 
 interface FormData {
     firstName: string; lastName: string; emailAddress: string; phoneNumber: string;
@@ -44,6 +45,7 @@ export function ProfileSection({ userId, personalData, onSaved }: {
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const isValid = isProfileFormValid(formData);
 
     useEffect(() => {
         setFormData(toFormData(personalData));
@@ -62,6 +64,7 @@ export function ProfileSection({ userId, personalData, onSaved }: {
     };
 
     const handleSave = async () => {
+        if (!isValid) return;
         setIsSaving(true);
         setError(null);
         try {
@@ -207,7 +210,7 @@ export function ProfileSection({ userId, personalData, onSaved }: {
                         icon={isSaving ? <Icons.Loader2 className="w-4 h-4 animate-spin" /> : <Icons.Check className="w-4 h-4" />}
                         variant="primary"
                         onClick={() => void handleSave()}
-                        disabled={!isEditing || isSaving}
+                        disabled={!isEditing || !isValid || isSaving}
                     />
                 </div>
             </Tile>

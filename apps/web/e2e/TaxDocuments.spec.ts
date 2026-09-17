@@ -204,7 +204,7 @@ test("uploading a receipt, marking a category complete, and deleting a category 
     await client.connect();
     try {
         const { rows: uploadRows } = await client.query(
-            `SELECT amount FROM tax_expense_document d JOIN tax_expense_category c ON c.tax_expense_category_id = d.tax_expense_category_id
+            `SELECT d.amount FROM tax_expense_document d JOIN tax_expense_category c ON c.tax_expense_category_id = d.tax_expense_category_id
              WHERE c.property_id = $1 AND c.label = 'Fahrtkosten'`,
             [propertyIdA],
         );

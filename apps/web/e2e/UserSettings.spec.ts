@@ -81,7 +81,13 @@ test('Benachrichtigungen toggle persists across reload', async ({ page }) => {
     const emailSwitch = page.getByRole('switch').nth(EMAIL_NOTIFICATION_SWITCH_INDEX);
     const wasChecked = await emailSwitch.isChecked();
 
-    await emailSwitch.click();
+    // Switch's actual input is visually hidden (sr-only) — the visible
+    // toggle track is its <label>, sitting at the same screen position, so
+    // Playwright's actionability check sees the label "intercepting"
+    // pointer events on the input and refuses a plain click. force: true is
+    // correct here: a real user's click lands on that same label anyway,
+    // which is what actually toggles the (native <label for>-linked) input.
+    await emailSwitch.click({ force: true });
     await page.getByRole('button', { name: 'Speichern' }).click();
     await expect(page.getByText('Benachrichtigungen gespeichert.')).toBeVisible();
 
@@ -89,7 +95,7 @@ test('Benachrichtigungen toggle persists across reload', async ({ page }) => {
     await expect(page.getByRole('switch').nth(EMAIL_NOTIFICATION_SWITCH_INDEX)).toBeChecked({ checked: !wasChecked });
 
     // Restore original state so repeated runs don't drift.
-    await page.getByRole('switch').nth(EMAIL_NOTIFICATION_SWITCH_INDEX).click();
+    await page.getByRole('switch').nth(EMAIL_NOTIFICATION_SWITCH_INDEX).click({ force: true });
     await page.getByRole('button', { name: 'Speichern' }).click();
     await expect(page.getByText('Benachrichtigungen gespeichert.')).toBeVisible();
 });
@@ -120,7 +126,11 @@ test('Konto löschen requires typing the exact account email before it is enable
     const dialog = page.getByRole('dialog', { name: 'Konto dauerhaft löschen?' });
     await expect(dialog).toBeVisible();
 
-    const confirmButton = dialog.getByRole('button', { name: 'Endgültig löschen' });
+    // ConfirmDeleteModal's confirm button always uses the shared
+    // BUTTON_DETAILS.Delete.label ("Löschen") — there's no per-instance
+    // custom label prop, so this isn't "Endgültig löschen" despite the
+    // section's own copy talking about permanent deletion.
+    const confirmButton = dialog.getByRole('button', { name: 'Löschen' });
     await expect(confirmButton).toBeDisabled();
 
     await dialog.getByRole('textbox').fill('not-the-right-email@example.com');
