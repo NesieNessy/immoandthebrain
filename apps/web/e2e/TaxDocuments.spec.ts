@@ -126,7 +126,10 @@ test('shows the default categories on first visit, and naming a newly added cate
 
     await nameInput.fill(customCategoryLabel);
     await nameInput.blur();
-    await expect(page.getByText(new RegExp(`^Kategorie "${customCategoryLabel}" zu \\d+ weiteren Objekten? hinzugefügt\\.$`))).toBeVisible();
+    // "Objekt" (1) vs "Objekten" (2+) — the whole "en" suffix is optional,
+    // not just the trailing "n" (that previously required a literal "e"
+    // before it, so it never matched the singular "Objekt" case).
+    await expect(page.getByText(new RegExp(`^Kategorie "${customCategoryLabel}" zu \\d+ weiteren Objekt(en)? hinzugefügt\\.$`))).toBeVisible();
 
     const client = new Client({ connectionString: requireDatabaseUrl() });
     await client.connect();
@@ -175,10 +178,17 @@ test("uploading a receipt, marking a category complete, and deleting a category 
     await expect(mahlzeitenRow.getByText('Beleg fehlt')).toBeVisible();
     await mahlzeitenRow.getByRole('button', { name: 'Weitere Aktionen' }).click();
     await page.getByRole('button', { name: 'Als vollständig markieren' }).click();
+    // Radix's popover closes itself right after a menu-item click, but not
+    // synchronously with it — re-clicking the same trigger before that close
+    // has actually finished reads as "still open" and swallows the click
+    // instead of reopening it. Waiting for the just-used item to be gone
+    // gives the popover a real close signal to synchronize on.
+    await expect(page.getByRole('button', { name: 'Als vollständig markieren' })).toBeHidden();
     await expect(mahlzeitenRow.getByText('Vollständig (manuell)')).toBeVisible();
 
     await mahlzeitenRow.getByRole('button', { name: 'Weitere Aktionen' }).click();
     await page.getByRole('button', { name: 'Als unvollständig markieren' }).click();
+    await expect(page.getByRole('button', { name: 'Als unvollständig markieren' })).toBeHidden();
     await expect(mahlzeitenRow.getByText('Beleg fehlt')).toBeVisible();
 
     const client = new Client({ connectionString: requireDatabaseUrl() });
