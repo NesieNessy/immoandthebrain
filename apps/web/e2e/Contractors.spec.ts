@@ -107,7 +107,12 @@ test('quote acceptance locks the measure and syncs quotedCost; switching quotes 
 
     await page.locator('tbody tr').filter({ hasText: title }).click();
     await expect(page).toHaveURL(/\/contractors\/\d+$/);
-    await expect(page.getByRole('heading', { name: title })).toBeVisible();
+    // The measure title is the last breadcrumb item — a plain styled <span>
+    // in Header.tsx, not a semantic heading role. Header also renders the
+    // breadcrumb twice (an aria-hidden/invisible spacer plus the real fixed
+    // bar), so scope to the breadcrumb nav rather than a bare text search.
+    const breadcrumb = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await expect(breadcrumb.getByText(title)).toBeVisible();
 
     // ── Add two quotes ──────────────────────────────────────────────────
     await page.getByRole('button', { name: 'Angebot hinzufügen' }).click();
@@ -189,7 +194,7 @@ test('customer confirmation requires a completion date too, and clearing the dat
     await expect(addDialog).not.toBeVisible();
 
     await page.locator('tbody tr').filter({ hasText: title }).click();
-    await expect(page.getByRole('heading', { name: title })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByText(title)).toBeVisible();
 
     // ── Mängel (defects): add and remove ────────────────────────────────
     await page.getByPlaceholder('Mangel beschreiben…').fill('Riss in der Wand');
