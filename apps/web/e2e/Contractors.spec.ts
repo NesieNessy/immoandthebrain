@@ -149,7 +149,14 @@ test('quote acceptance locks the measure and syncs quotedCost; switching quotes 
     await listRow.getByRole('button', { name: `${title} als nicht beauftragt markieren` }).click();
     await expect(listRow.getByRole('button', { name: `${title} als beauftragt markieren` })).toBeVisible();
 
-    await listRow.click();
+    // Click the title text specifically, not the bare row — several other
+    // cells in this row (the cost/date fields, the toggle just clicked
+    // above) are wrapped in stopPropagation() to keep their own inline
+    // editing from triggering navigation, and a plain row-wide .click()
+    // lands at the row's bounding-box center, which can fall on one of
+    // those cells instead of bubbling up to onRowClick. The title <span>
+    // has no such wrapper.
+    await listRow.getByText(title, { exact: true }).click();
     await expect(page.getByLabel('Kosten kalkuliert')).toBeEnabled();
 
     // ── Now accept B instead: the FE's own unaccept-others logic (client-
@@ -208,18 +215,23 @@ test('customer confirmation requires a completion date too, and clearing the dat
     await page.getByRole('checkbox', { name: 'Handwerker bestätigt' }).click({ force: true });
     await expect(page.getByRole('checkbox', { name: 'Kunde bestätigt' })).toBeDisabled();
 
-    await page.getByLabel('Abschluss ist').fill('01.06.2026');
+    // CalendarField's own "Kalender öffnen" button always carries an
+    // aria-label of "{label}: Kalender öffnen" — getByLabel substring-matches
+    // by default, so it also matches that button. Scoping to role=textbox
+    // excludes it.
+    const completionDateInput = page.getByRole('textbox', { name: 'Abschluss ist' });
+    await completionDateInput.fill('01.06.2026');
     await expect(page.getByRole('checkbox', { name: 'Kunde bestätigt' })).toBeEnabled();
     await page.getByRole('checkbox', { name: 'Kunde bestätigt' }).click({ force: true });
     await expect(page.getByRole('checkbox', { name: 'Kunde bestätigt' })).toBeChecked();
 
     // Clearing the completion date from the DETAIL page resets it (the bug: this used to only happen on the list page).
-    await page.getByLabel('Abschluss ist').fill('');
+    await completionDateInput.fill('');
     await expect(page.getByRole('checkbox', { name: 'Kunde bestätigt' })).not.toBeChecked();
     await expect(page.getByRole('checkbox', { name: 'Kunde bestätigt' })).toBeDisabled();
 
     // Re-confirm, then verify the LIST page's cascade too.
-    await page.getByLabel('Abschluss ist').fill('01.06.2026');
+    await completionDateInput.fill('01.06.2026');
     await page.getByRole('checkbox', { name: 'Kunde bestätigt' }).click({ force: true });
     await expect(page.getByRole('checkbox', { name: 'Kunde bestätigt' })).toBeChecked();
 
