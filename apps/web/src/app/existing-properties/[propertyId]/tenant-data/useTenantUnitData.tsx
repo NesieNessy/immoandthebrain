@@ -241,9 +241,17 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
     const [historyEntries, setHistoryEntries] = useState<TenancyAdjustmentHistoryEntry[]>([]);
     const [isGeneratingLetter, setIsGeneratingLetter] = useState<TenancyAdjustmentType | null>(null);
     const [isResolvingAdjustment, setIsResolvingAdjustment] = useState<TenancyAdjustmentType | null>(null);
+    // The tenancy/persons/costs/history fetch below is a multi-await chain —
+    // without this, the form fields render interactive immediately, and a
+    // user (or a fast e2e test) can type into e.g. "Netto-Mieteinnahmen"
+    // before it resolves; when it then resolves, setRentalForm(form)
+    // unconditionally overwrites whatever was just typed. Save is gated on
+    // this being true so that race has no window to land in.
+    const [isTenancyDataLoaded, setIsTenancyDataLoaded] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
+        setIsTenancyDataLoaded(false);
         const fetchTenancy = archivedTenancyId ? getTenancyById(archivedTenancyId) : getCurrentTenancyByUnit(unit.propertyUnitId);
         fetchTenancy.then(async (found) => {
             if (cancelled) return;
@@ -307,6 +315,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                 setRentalForm(EMPTY_RENTAL_FORM);
                 setOriginalRentalFormSnapshot(serializeRentalForm(EMPTY_RENTAL_FORM));
             }
+            setIsTenancyDataLoaded(true);
         });
         return () => { cancelled = true; };
     }, [unit.propertyUnitId, archivedTenancyId]);
@@ -1283,6 +1292,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
         docPendingRename, renameValue, setRenameValue, isRenaming,
         // computed
         isArchived: Boolean(archivedTenancyId),
+        isTenancyDataLoaded,
         status, isEditing, landlordMissing, costBreakdownActive, computedTotalCosts,
         primaryPersonIndex, primaryPersonFieldErrors, isPrimaryPersonValid,
         effectiveRentReminderDate, effectiveRenovationReminderDate,

@@ -22,6 +22,7 @@ function toCategory(row: Record<string, unknown>): TaxExpenseCategory {
         label: row.label as string,
         amount: Number(row.amount ?? 0),
         elsterReference: row.elster_reference as string | null,
+        manuallyComplete: Boolean(row.manually_complete),
         createdAt: row.created_at as string,
         updatedAt: row.updated_at as string,
     };
@@ -85,4 +86,15 @@ export async function deleteTaxExpenseDocument(taxExpenseDocumentId: number): Pr
     if (!response.ok) return null;
     const data = await response.json();
     return { category: toCategory(data.category) };
+}
+
+/** Deletes every receipt uploaded in one calendar year for this property,
+ *  across all its categories, and re-syncs each affected category's running
+ *  total — "Jahr löschen". Property-scoped only: receipts aren't shared
+ *  across properties the way category names are. */
+export async function deleteTaxExpenseDocumentsForYear(propertyId: number, year: number): Promise<{ deletedCount: number; categories: TaxExpenseCategory[] } | null> {
+    const response = await authFetch(`/api/tax-expense-documents/year?propertyId=${propertyId}&year=${year}`, { method: 'DELETE' });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return { deletedCount: data.deleted ?? 0, categories: (data.categories ?? []).map(toCategory) };
 }

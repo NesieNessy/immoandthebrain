@@ -10,6 +10,11 @@ type ResourceConfig = {
   columns: readonly string[];
   orderBy?: string;
   upsertProperty?: boolean;
+  /** Columns that must not be blank/whitespace-only on PATCH — checked only
+   *  when the column is actually part of the update. Deliberately PATCH-only:
+   *  some resources (e.g. tax-expense-categories) intentionally INSERT a
+   *  blank value first as a placeholder row, filled in by a later PATCH. */
+  nonBlankColumnsOnUpdate?: readonly string[];
 };
 
 const RESOURCES: Record<string, ResourceConfig> = {
@@ -143,8 +148,9 @@ const RESOURCES: Record<string, ResourceConfig> = {
   'tax-expense-categories': {
     table: 'tax_expense_category',
     primaryKey: 'tax_expense_category_id',
-    columns: ['property_id', 'sort_order', 'label', 'amount', 'elster_reference'],
+    columns: ['property_id', 'sort_order', 'label', 'amount', 'elster_reference', 'manually_complete'],
     orderBy: 'sort_order, tax_expense_category_id',
+    nonBlankColumnsOnUpdate: ['label'],
   },
   'tax-expense-documents': {
     table: 'tax_expense_document',
@@ -304,6 +310,12 @@ export async function PATCH(request: Request, context: RouteContext) {
   const columns = Object.keys(valuesByColumn);
   if (!Number.isInteger(id) || columns.length === 0) {
     return NextResponse.json({ error: 'Ungültige Änderung.' }, { status: 400 });
+  }
+  const blankColumn = config.nonBlankColumnsOnUpdate?.find(
+    (column) => Object.hasOwn(valuesByColumn, column) && !String(valuesByColumn[column] ?? '').trim(),
+  );
+  if (blankColumn) {
+    return NextResponse.json({ error: `Feld "${blankColumn}" darf nicht leer sein.` }, { status: 400 });
   }
   const assignments = columns.map((column, index) => `${column} = $${index + 3}`);
   assignments.push('updated_at = NOW()');

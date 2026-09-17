@@ -1,6 +1,6 @@
 "use client";
 
-import { formatUnitLabel } from '@/components/features/PropertyDisplay';
+import { formatUnitLabel, PropertyLoadingPage } from '@/components/features/PropertyDisplay';
 import { DataCard, DocumentBox, DocumentReplaceModal, DocumentUploadButton } from './DocumentGeneratorParts';
 import { Button, CalendarField, ComingSoonButton, ConfirmDeleteModal, Dropdown, FilePickerButton, Header, Icons, Modal, NumberField, PAGE_CONTAINER_CLASS, SectionLabel, StickyActionBar, Table, Tag, TextField, UnsavedChangesModal, type BreadcrumbItem } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
@@ -38,6 +38,10 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
     const certGen = useMieterbescheinigungGenerator(propertyId, String(unit.propertyUnitId), () => void data.refreshDocuments(), archivedTenancyId);
     const [reactivateModalOpen, setReactivateModalOpen] = useState(false);
     const [isReactivating, setIsReactivating] = useState(false);
+
+    // Blocks the whole form (not just Save) until the tenancy/persons/costs
+    // load resolves — see the isTenancyDataLoaded doc comment in useTenantUnitData.
+    if (!data.isTenancyDataLoaded) return <PropertyLoadingPage />;
 
     // Clears this tenancy's move-out so it becomes the unit's current
     // tenancy again — same action as Mieterhistorie's "Reaktivieren", just

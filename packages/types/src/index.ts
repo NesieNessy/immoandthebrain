@@ -315,6 +315,14 @@ export interface PersonalData {
   emailAddress: string;
   taxIdentificationNumber: string;
   profilePicture?: string | null;
+  signatureUrl?: string | null;
+  /** Absent key = default-on — avoids a backfill for existing users when a
+   *  new notification type is introduced. */
+  notificationPreferences?: Record<string, boolean>;
+  /** Set when the user self-deactivated their account (Einstellungen ›
+   *  Konto & Daten) — useRequireAuth redirects everywhere except
+   *  /account-reactivate while this is set. Null/undefined = active. */
+  deactivatedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -329,7 +337,9 @@ export type PersonalDataUpdate = Partial<Omit<PersonalData, 'userId' | 'createdA
 export interface Subscription {
   subscriptionId: number;
   userId: string;
-  subscriptionModel: 'Basic' | 'Professional' | 'Enterprise';
+  /** Matches the DB enum `subscription_model` exactly (see
+   *  20260224000005_subscription.sql) — not a display label. */
+  subscriptionModel: 'FREE' | 'BASIC' | 'PRO' | 'ENTERPRISE';
   startDate: string;
   endDate: string | null;
   createdAt: string;
@@ -856,11 +866,16 @@ export interface TaxExpenseCategory {
   label: string;
   amount: number;
   elsterReference: string | null;
+  /** Manual override: marks this category as done regardless of whether it
+   *  has any receipts — for a category that genuinely has nothing to upload
+   *  (e.g. no Sonderumlagen this year), so it doesn't keep showing as
+   *  "Beleg fehlt" everywhere completeness is reported. */
+  manuallyComplete: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
-export type TaxExpenseCategoryInsert = Omit<TaxExpenseCategory, 'taxExpenseCategoryId' | 'createdAt' | 'updatedAt'>;
+export type TaxExpenseCategoryInsert = Omit<TaxExpenseCategory, 'taxExpenseCategoryId' | 'createdAt' | 'updatedAt' | 'manuallyComplete'> & { manuallyComplete?: boolean };
 export type TaxExpenseCategoryUpdate = Partial<Omit<TaxExpenseCategory, 'taxExpenseCategoryId' | 'propertyId' | 'createdAt' | 'updatedAt'>>;
 
 /** One uploaded receipt attached to a tax expense category. Its amount is

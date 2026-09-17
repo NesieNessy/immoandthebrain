@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, TextField } from '@/components/ui';
+import { Button, Icons, TextField } from '@/components/ui';
 import { supabase } from '@/lib/supabase/client.supabase';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -31,8 +31,8 @@ export default function ForgotPasswordPage() {
   if (submitted) {
     return (
       <div className="space-y-6 text-center">
-        <h1 className="text-3xl font-bold text-gray-900">E-Mail gesendet</h1>
-        <p className="text-sm text-gray-600">
+        <h1 className="text-3xl font-bold text-foreground">E-Mail gesendet</h1>
+        <p className="text-sm text-muted-foreground">
           Wir haben einen Link zum Zurücksetzen des Passworts an <strong>{email}</strong> gesendet.
           Bitte überprüfen Sie Ihren Posteingang.
         </p>
@@ -46,8 +46,8 @@ export default function ForgotPasswordPage() {
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900">Passwort zurücksetzen</h1>
-        <p className="mt-2 text-sm text-gray-600">
+        <h1 className="text-3xl font-bold text-foreground">Passwort zurücksetzen</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
           Geben Sie Ihre E-Mail-Adresse ein und wir senden Ihnen einen Reset-Link
         </p>
       </div>
@@ -60,11 +60,13 @@ export default function ForgotPasswordPage() {
         )}
 
         <TextField
-          label="E-Mail"
+          label="E-Mail-Adresse"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="ihre@email.de"
+          placeholder="name@beispiel.de"
+          icon={<Icons.Mail />}
+          autoComplete="email"
           required
         />
 
@@ -73,9 +75,9 @@ export default function ForgotPasswordPage() {
         </Button>
       </form>
 
-      <p className="text-center text-sm text-gray-600">
+      <p className="text-center text-sm text-muted-foreground">
         Passwort wieder erinnerlich?{' '}
-        <Link href="/login" className="text-primary hover:text-primary/80">
+        <Link href="/login" className="text-primary hover:text-primary/80 font-medium">
           Anmelden
         </Link>
       </p>
