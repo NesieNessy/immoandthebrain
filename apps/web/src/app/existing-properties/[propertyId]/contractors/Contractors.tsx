@@ -24,6 +24,7 @@ import { deCurrencyFormatter } from '@/lib/utils';
 import type { RenovationMeasure } from '@immoandthebrain/types';
 import { format, parseISO } from 'date-fns';
 import { MEASURE_CATEGORIES } from './measureCategories';
+import { canConfirmCustomerCompletion, isLocked, summarizeMeasures } from './measureStatus';
 import { EMPTY_NEW_MEASURE, useRenovationMeasuresData, type NewMeasureForm } from './useRenovationMeasuresData';
 
 const CATEGORY_OPTIONS = [{ value: '', label: 'Bitte wählen...' }, ...MEASURE_CATEGORIES];
@@ -38,10 +39,6 @@ function toDate(value: string | null): Date | undefined {
 
 function toDateInput(date: Date | undefined): string | null {
     return date ? format(date, 'yyyy-MM-dd') : null;
-}
-
-function isLocked(measure: RenovationMeasure): boolean {
-    return measure.quoteAccepted;
 }
 
 interface MeasureRow extends Record<string, unknown> {
@@ -65,10 +62,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
 
     const { property, measures, hasMultipleUnits, contextUnit } = data;
 
-    const totalEstimated = measures.reduce((sum, m) => sum + (m.estimatedCost ?? 0), 0);
-    const quotedMeasures = measures.filter((m) => m.quotedCost != null);
-    const totalQuoted = quotedMeasures.reduce((sum, m) => sum + (m.quotedCost ?? 0), 0);
-    const deviation = quotedMeasures.reduce((sum, m) => sum + ((m.quotedCost ?? 0) - (m.estimatedCost ?? 0)), 0);
+    const { totalEstimated, quotedCount, totalQuoted, deviation } = summarizeMeasures(measures);
 
     const openAddModal = () => {
         setNewMeasure(EMPTY_NEW_MEASURE);
@@ -277,7 +271,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
             align: 'center',
             renderCell: (_v, row) => {
                 const m = row.measure;
-                const canConfirm = m.craftsmanConfirmedCompleted;
+                const canConfirm = canConfirmCustomerCompletion(m);
                 return (
                     <button
                         type="button"
@@ -285,7 +279,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                         disabled={!canConfirm}
                         aria-pressed={m.customerConfirmedCompleted}
                         aria-label={m.customerConfirmedCompleted ? `${m.title} als nicht abgeschlossen markieren` : `${m.title} als abgeschlossen bestätigen`}
-                        title={!canConfirm ? 'Bitte zuerst „Handwerker bestätigt" in der Detailansicht setzen' : undefined}
+                        title={!canConfirm ? (m.craftsmanConfirmedCompleted ? 'Bitte zuerst das Abschlussdatum setzen' : 'Bitte zuerst „Handwerker bestätigt" in der Detailansicht setzen') : undefined}
                         className="mx-auto flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                         {m.customerConfirmedCompleted
@@ -327,12 +321,12 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                             </div>
                             <div className="min-w-0 rounded-lg border border-border bg-card p-4">
                                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Kosten lt. Angebot</p>
-                                <p className="mt-2 text-2xl font-semibold text-primary">{quotedMeasures.length > 0 ? euro(totalQuoted) : '–'}</p>
+                                <p className="mt-2 text-2xl font-semibold text-primary">{quotedCount > 0 ? euro(totalQuoted) : '–'}</p>
                             </div>
                             <div className="min-w-0 rounded-lg border border-border bg-card p-4">
                                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Abweichung</p>
-                                <p className={`mt-2 text-2xl font-semibold ${quotedMeasures.length === 0 ? 'text-foreground' : deviation > 0 ? 'text-warning' : deviation < 0 ? 'text-success' : 'text-foreground'}`}>
-                                    {quotedMeasures.length === 0 ? '–' : `${deviation > 0 ? '+' : ''}${euro(deviation)}`}
+                                <p className={`mt-2 text-2xl font-semibold ${quotedCount === 0 ? 'text-foreground' : deviation > 0 ? 'text-warning' : deviation < 0 ? 'text-success' : 'text-foreground'}`}>
+                                    {quotedCount === 0 ? '–' : `${deviation > 0 ? '+' : ''}${euro(deviation)}`}
                                 </p>
                             </div>
                         </div>
