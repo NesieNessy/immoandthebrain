@@ -1,3 +1,4 @@
+import { normalizeListingReference } from '@/lib/listingUrl';
 import { requireUserId } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
 import { NextResponse } from 'next/server';
@@ -108,7 +109,10 @@ export async function POST(request: Request) {
   const yearOfConstruction = Number(input.yearOfConstruction);
   const kpfMultiplier = Number(input.kpfMultiplier);
   const postalCode = String(input.postalCode ?? '');
-  const dataEntrySource = input.dataEntrySource === 'PORTAL_IMPORT' || input.portalId
+  // Same listing-reference rule as the Detailbewertung's Inserats-URL, which
+  // this value is carried into (lib/listingUrl.ts).
+  const portalId = normalizeListingReference(input.portalId) || null;
+  const dataEntrySource = input.dataEntrySource === 'PORTAL_IMPORT' || portalId
     ? 'PORTAL_IMPORT'
     : 'MANUELL';
 
@@ -145,7 +149,7 @@ export async function POST(request: Request) {
     `,
     [
       userId,
-      input.portalId ?? null,
+      portalId,
       dataEntrySource,
       purchasePrice,
       coldRent,
@@ -211,7 +215,7 @@ export async function PATCH(request: Request) {
       RETURNING *
     `,
     [
-      id, userId, values.portalId ?? null, purchasePrice, coldRent,
+      id, userId, normalizeListingReference(values.portalId) || null, purchasePrice, coldRent,
       String(values.street).trim(), postalCode,
       String(values.city).trim(), yearOfConstruction, values.condition, kpfMultiplier,
     ],

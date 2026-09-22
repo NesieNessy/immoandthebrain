@@ -1,3 +1,4 @@
+import { normalizeListingReference } from '@/lib/listingUrl';
 import { db } from '@/lib/server/db';
 import { requireUserId, workflowIdFor } from '@/lib/server/auth';
 import { NextResponse } from 'next/server';
@@ -18,20 +19,6 @@ const ENERGY_CLASSES = new Set(['A+', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']);
 function toNumber(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-// quick_check.portal_id is free text — sometimes a real URL/domain the user
-// typed, sometimes just a label like "Kleinanzeigen" (see getPlaceholderPortalUrl
-// in lib/quickCheck/display.ts). Only the former is usable to prefill this
-// wizard's sourceUrl field, which is validated as an actual URL on save.
-const DOMAIN_LIKE = /^(www\.)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i;
-
-function quickCheckSourceUrl(portalId: string | null | undefined): string {
-  const value = (portalId ?? '').trim();
-  if (!value) return '';
-  if (/^https?:\/\//i.test(value)) return value;
-  if (DOMAIN_LIKE.test(value)) return `https://${value}`;
-  return '';
 }
 
 async function loadQuickCheck(userId: string, quickCheckId: string | null) {
@@ -79,7 +66,10 @@ export async function GET(request: Request) {
     propertyCategory: saved?.property_category ?? 'EIGENTUMSWOHNUNG',
     dataEntrySource: saved?.data_entry_source ?? quickCheck?.data_entry_source ?? '',
     tenancyType: saved?.tenancy_type ?? '',
-    sourceUrl: saved?.source_url ?? quickCheckSourceUrl(quickCheck?.portal_id),
+    // Carried over from the Ersteinschätzung as-is — a link or a plain note like
+    // "Kleinanzeigen" alike, under the same rule both steps use (lib/listingUrl.ts).
+    // This used to drop anything that was not link-shaped.
+    sourceUrl: saved?.source_url ?? normalizeListingReference(quickCheck?.portal_id),
     streetHouseNumber: saved?.street_house_number ?? quickCheck?.street ?? '',
     postalCode: saved?.postal_code ?? quickCheck?.postal_code ?? '',
     city: saved?.city ?? quickCheck?.city ?? '',
@@ -109,7 +99,7 @@ export async function POST(request: Request) {
   const parkingSpaces = toNumber(input.parkingSpaces);
   const postalCode = String(input.postalCode ?? '').trim();
   const streetHouseNumber = String(input.streetHouseNumber ?? '').trim();
-  const sourceUrl = String(input.sourceUrl ?? '').trim();
+  const sourceUrl = normalizeListingReference(String(input.sourceUrl ?? ''));
   const energyEfficiency = String(input.energyEfficiency ?? '').trim();
   const currentYear = new Date().getFullYear();
 
@@ -117,13 +107,9 @@ export async function POST(request: Request) {
   if (!PROPERTY_CATEGORIES.has(propertyCategory)) fieldErrors.propertyCategory = 'Bitte wählen Sie eine Objektkategorie.';
   if (!DATA_ENTRY_SOURCES.has(dataEntrySource)) fieldErrors.dataEntrySource = 'Bitte wählen Sie eine Erfassungsquelle.';
   if (!TENANCY_TYPES.has(tenancyType)) fieldErrors.tenancyType = 'Bitte wählen Sie eine Miet-/Nutzungsart.';
-  if (dataEntrySource === 'PORTAL_IMPORT' && sourceUrl) {
-    try {
-      new URL(sourceUrl);
-    } catch {
-      fieldErrors.sourceUrl = 'Bitte eine gültige URL eingeben.';
-    }
-  }
+  // No URL-format check: the field is a free-text listing reference, the same
+  // as the Ersteinschätzung's Portal-URL (see lib/listingUrl.ts). Requiring a
+  // full URL here rejected "www.immowelt.de/…" and "immowelt.de/…" (SCRUM-102).
   if (streetHouseNumber.length > 100) fieldErrors.streetHouseNumber = 'Maximal 100 Zeichen.';
   if (postalCode && !/^\d{4,5}$/.test(postalCode)) fieldErrors.postalCode = 'Bitte 4 bis 5 Ziffern eingeben.';
   if (!city || city.length > 100) fieldErrors.city = 'Ort ist ein Pflichtfeld.';
