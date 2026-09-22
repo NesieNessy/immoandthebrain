@@ -250,7 +250,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
 
                     {/* Info banner */}
                     <div className="px-4 py-3 rounded-lg bg-primary/5 border border-primary/20 text-sm text-foreground">
-                        Erfasse alle Kostenpositionen des Abrechnungsjahres sowie den jeweiligen Wohnungsanteil pro Position — der Gesamtbetrag des Objekts entspricht nicht automatisch dem Anteil der Wohnung und muss separat erfasst werden. Über „Wert vorschlagen" kannst du dir pro Position einen Vorschlag auf Basis von Wohnflächenanteil und Mietzeitraum anzeigen lassen und bei Bedarf anpassen.
+                        Erfasse alle Kostenpositionen des Abrechnungsjahres sowie den jeweiligen Wohnungsanteil pro Position — der Gesamtbetrag des Objekts entspricht nicht automatisch dem Anteil der Wohnung und muss separat erfasst werden. Über „Wert vorschlagen&quot; kannst du dir pro Position einen Vorschlag auf Basis von Wohnflächenanteil und Mietzeitraum anzeigen lassen und bei Bedarf anpassen.
                     </div>
 
                     {/* Cost item table */}
