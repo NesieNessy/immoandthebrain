@@ -144,15 +144,37 @@ async function navigateToYear(page: import('@playwright/test').Page, targetYear:
                 await expect(page.getByText(`Abrechnungsjahr ${year + 1}`).first()).toBeVisible({ timeout: 5000 });
                 advanced = true;
             } catch {
-                // Click may not have registered, the reload stalled/failed, or it
-                // landed as a second click that triggered the discard dialog —
-                // clear that dialog before the next attempt either way.
+                // isEditing (the app's own unsaved-changes flag) is `true`
+                // whenever the *current* period has no saved settlement at
+                // all — true for every fresh/unvisited year, not just years
+                // with an actual pending edit — so clicking "Nächstes Jahr"
+                // out of one of those years deterministically opens the
+                // discard-confirmation dialog instead of navigating
+                // straight through, exactly like it would for a real edit.
+                // Confirming here doesn't await the app's own reload (it's
+                // fire-and-forget from the confirm handler's side), so this
+                // re-polls for the year text rather than reading it once
+                // immediately, giving that reload room to actually finish.
                 await dismissDiscardDialogIfPresent(page);
+                try {
+                    await expect(page.getByText(`Abrechnungsjahr ${year + 1}`).first()).toBeVisible({ timeout: 5000 });
+                    advanced = true;
+                } catch {
+                    // Still not there after dismissing — the next attempt's
+                    // click is a genuine retry, not a click into a page that
+                    // already moved on.
+                }
             }
         }
         if (!advanced) throw new Error(`navigateToYear: could not advance past ${year} towards ${targetYear} after repeated clicks`);
         year = await readDisplayedYear(page);
     }
+    // Even on a clean success path, a dialog can be left open: reading the
+    // year text only needs it to be visible, which it still is behind/around
+    // the dialog overlay — so this function can report "reached targetYear"
+    // while a confirm dialog sits on top of the page, ready to block
+    // whatever the caller clicks next. Always clear it before returning.
+    await dismissDiscardDialogIfPresent(page);
 }
 
 let propertyId: number;
