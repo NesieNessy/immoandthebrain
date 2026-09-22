@@ -377,16 +377,22 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                 </label>
                                             </td>
                                             <td className="px-3 py-2 border-l border-border w-36">
-                                                <NumberField
-                                                    unit="€"
-                                                    placeholder="–"
-                                                    value={item.actualAmount}
-                                                    onChange={(e) => data.updateCostItemField(index, { actualAmount: e.target.value })}
-                                                    min={0}
-                                                    className={cn(actualAmountMissing && 'border-destructive focus:ring-destructive/50')}
-                                                    aria-invalid={actualAmountMissing}
-                                                    title={actualAmountMissing ? 'Gesamtobjekt-Betrag fehlt' : undefined}
-                                                />
+                                                <div className="relative">
+                                                    <NumberField
+                                                        placeholder="–"
+                                                        value={item.actualAmount}
+                                                        onChange={(e) => data.updateCostItemField(index, { actualAmount: e.target.value })}
+                                                        min={0}
+                                                        hideStepper
+                                                        className={cn('pr-11', actualAmountMissing && 'border-destructive focus:ring-destructive/50')}
+                                                        aria-invalid={actualAmountMissing}
+                                                        title={actualAmountMissing ? 'Gesamtobjekt-Betrag fehlt' : undefined}
+                                                    />
+                                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                                                        <span className="w-4 text-center text-muted-foreground text-xs">€</span>
+                                                        <span className="inline-block w-[22px] h-[22px]" />
+                                                    </div>
+                                                </div>
                                             </td>
                                             <td className="px-3 py-2 w-36">
                                                 <div className="relative">
@@ -401,38 +407,46 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     />
                                                     <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
                                                         {actualShareIssue ? (
-                                                            <span title={actualShareIssue}>
+                                                            <span className="w-4 flex justify-center" title={actualShareIssue}>
                                                                 <Icons.AlertTriangle className="w-3.5 h-3.5 text-destructive" aria-label={actualShareIssue} />
                                                             </span>
                                                         ) : (
-                                                            <span className="text-muted-foreground text-xs">€</span>
+                                                            <span className="w-4 text-center text-muted-foreground text-xs">€</span>
                                                         )}
-                                                        {data.canSuggestShares && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => data.suggestRowShare(index, 'actual')}
-                                                                disabled={item.actualAmount === ''}
-                                                                aria-label="Wert vorschlagen"
-                                                                title="Wert vorschlagen: NK-Vorauszahlung ÷ WEG × Mietzeitraum (nur dieses Feld)"
-                                                                className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                                                            >
-                                                                <Icons.Calculator className="w-3.5 h-3.5" />
-                                                            </button>
-                                                        )}
+                                                        <span className="inline-flex items-center justify-center w-[22px] h-[22px]">
+                                                            {data.canSuggestShares && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => data.suggestRowShare(index, 'actual')}
+                                                                    disabled={item.actualAmount === ''}
+                                                                    aria-label="Wert vorschlagen"
+                                                                    title="Wert vorschlagen: NK-Vorauszahlung ÷ WEG × Mietzeitraum (nur dieses Feld)"
+                                                                    className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                                >
+                                                                    <Icons.Calculator className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            )}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </td>
                                             <td className="px-3 py-2 border-l border-border w-36">
-                                                <NumberField
-                                                    unit="€"
-                                                    placeholder="–"
-                                                    value={item.budgetAmount}
-                                                    onChange={(e) => data.updateCostItemField(index, { budgetAmount: e.target.value })}
-                                                    min={0}
-                                                    className={cn(budgetAmountMissing && 'border-destructive focus:ring-destructive/50')}
-                                                    aria-invalid={budgetAmountMissing}
-                                                    title={budgetAmountMissing ? 'Gesamtobjekt-Betrag fehlt' : undefined}
-                                                />
+                                                <div className="relative">
+                                                    <NumberField
+                                                        placeholder="–"
+                                                        value={item.budgetAmount}
+                                                        onChange={(e) => data.updateCostItemField(index, { budgetAmount: e.target.value })}
+                                                        min={0}
+                                                        hideStepper
+                                                        className={cn('pr-11', budgetAmountMissing && 'border-destructive focus:ring-destructive/50')}
+                                                        aria-invalid={budgetAmountMissing}
+                                                        title={budgetAmountMissing ? 'Gesamtobjekt-Betrag fehlt' : undefined}
+                                                    />
+                                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                                                        <span className="w-4 text-center text-muted-foreground text-xs">€</span>
+                                                        <span className="inline-block w-[22px] h-[22px]" />
+                                                    </div>
+                                                </div>
                                             </td>
                                             <td className="px-3 py-2 w-36">
                                                 <div className="relative">
@@ -447,24 +461,26 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     />
                                                     <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
                                                         {budgetShareIssue ? (
-                                                            <span title={budgetShareIssue}>
+                                                            <span className="w-4 flex justify-center" title={budgetShareIssue}>
                                                                 <Icons.AlertTriangle className="w-3.5 h-3.5 text-destructive" aria-label={budgetShareIssue} />
                                                             </span>
                                                         ) : (
-                                                            <span className="text-muted-foreground text-xs">€</span>
+                                                            <span className="w-4 text-center text-muted-foreground text-xs">€</span>
                                                         )}
-                                                        {data.canSuggestShares && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => data.suggestRowShare(index, 'budget')}
-                                                                disabled={item.budgetAmount === ''}
-                                                                aria-label="Wert vorschlagen"
-                                                                title="Wert vorschlagen: NK-Vorauszahlung ÷ WEG × Mietzeitraum (nur dieses Feld)"
-                                                                className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                                                            >
-                                                                <Icons.Calculator className="w-3.5 h-3.5" />
-                                                            </button>
-                                                        )}
+                                                        <span className="inline-flex items-center justify-center w-[22px] h-[22px]">
+                                                            {data.canSuggestShares && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => data.suggestRowShare(index, 'budget')}
+                                                                    disabled={item.budgetAmount === ''}
+                                                                    aria-label="Wert vorschlagen"
+                                                                    title="Wert vorschlagen: NK-Vorauszahlung ÷ WEG × Mietzeitraum (nur dieses Feld)"
+                                                                    className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                                >
+                                                                    <Icons.Calculator className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            )}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </td>
