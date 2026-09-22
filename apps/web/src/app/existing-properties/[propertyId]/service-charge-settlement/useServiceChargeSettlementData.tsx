@@ -217,6 +217,10 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     // it the same way PropertyData.tsx guards route navigation. (Defined
     // after `isEditing` below, which it closes over.)
     const [pendingPeriod, setPendingPeriod] = useState<{ start: Date; end: Date } | null>(null);
+    // Leaving the page entirely (breadcrumbs, "Zurück", the use-case menu)
+    // must be guarded the same way — separate from pendingPeriod above,
+    // which only covers switching years/periods within this same page.
+    const [pendingHref, setPendingHref] = useState<string | null>(null);
 
     useEffect(() => {
         if (!user) return;
@@ -225,9 +229,24 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         return () => { cancelled = true; };
     }, [user]);
 
-    const useCaseMenuItems = createUseCaseMenuItems(propertyId, 'ServiceChargeSettlement', (route) => router.push(route));
-
     const isEditing = !settlement || serializeCostItems(costItems, periodStart, periodEnd) !== originalSnapshot;
+
+    // Any navigation away from an unsaved edit is routed through here so it
+    // can be confirmed first (breadcrumb links, the back button, the use-case menu).
+    const goTo = (href: string) => {
+        if (isEditing) {
+            setPendingHref(href);
+        } else {
+            router.push(href);
+        }
+    };
+    const confirmDiscard = () => {
+        if (pendingHref) router.push(pendingHref);
+        setPendingHref(null);
+    };
+    const cancelDiscard = () => setPendingHref(null);
+
+    const useCaseMenuItems = createUseCaseMenuItems(propertyId, 'ServiceChargeSettlement', (route) => goTo(route));
 
     // ── Abrechnungszeitraum: whole calendar year vs. a shorter custom range ──
     const setPeriodMode = (mode: 'year' | 'custom') => {
@@ -946,6 +965,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         settlement, periodStart, setPeriodStart, periodEnd, setPeriodEnd,
         periodMode, setPeriodMode, setSettlementYear,
         pendingPeriod, confirmPeriodSwitch, cancelPeriodSwitch,
+        pendingHref, goTo, confirmDiscard, cancelDiscard,
         savedSettlements, switchToPeriod,
         costItems, tenancy, landlord, useCaseMenuItems, backHref,
         previewHtml, isLoadingPreview,

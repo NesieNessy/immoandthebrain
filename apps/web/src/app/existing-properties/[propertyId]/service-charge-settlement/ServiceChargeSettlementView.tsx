@@ -26,7 +26,6 @@ import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCas
 import { isFullCalendarYear } from '@/lib/serviceCharge/settlementMath';
 import { formatDeDate } from '@/lib/utils';
 import type { Property, PropertyUnit, ServiceChargeSettlement } from '@immoandthebrain/types';
-import { useRouter } from 'next/navigation';
 import { useMemo, useRef } from 'react';
 import { Sparkles } from 'lucide-react';
 
@@ -47,7 +46,6 @@ interface ServiceChargeSettlementViewProps {
 
 export function ServiceChargeSettlementView({ propertyId, property, unit, hasMultipleUnits }: ServiceChargeSettlementViewProps) {
     const data = useServiceChargeSettlementData(propertyId, property, unit, hasMultipleUnits);
-    const router = useRouter();
     const uploadInputRef = useRef<HTMLInputElement>(null);
 
     const address = `${property.street} ${property.houseNumber}, ${property.postalCode} ${property.city}`;
@@ -55,14 +53,14 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
 
     const breadcrumbItems: BreadcrumbItem[] = hasMultipleUnits
         ? [
-            { label: 'Bestandsobjekte', href: '/existing-properties' },
-            { label: address, href: `/existing-properties/${propertyId}` },
-            { label: unitLabel, href: `/existing-properties/${propertyId}/${unit.propertyUnitId}` },
+            { label: 'Bestandsobjekte', href: '/existing-properties', onClick: (e) => { if (data.isEditing) { e.preventDefault(); data.goTo('/existing-properties'); } } },
+            { label: address, href: `/existing-properties/${propertyId}`, onClick: (e) => { if (data.isEditing) { e.preventDefault(); data.goTo(`/existing-properties/${propertyId}`); } } },
+            { label: unitLabel, href: `/existing-properties/${propertyId}/${unit.propertyUnitId}`, onClick: (e) => { if (data.isEditing) { e.preventDefault(); data.goTo(`/existing-properties/${propertyId}/${unit.propertyUnitId}`); } } },
             { label: ExistingPropertiesUseCases.ServiceChargeSettlement },
         ]
         : [
-            { label: 'Bestandsobjekte', href: '/existing-properties' },
-            { label: address, href: `/existing-properties/${propertyId}` },
+            { label: 'Bestandsobjekte', href: '/existing-properties', onClick: (e) => { if (data.isEditing) { e.preventDefault(); data.goTo('/existing-properties'); } } },
+            { label: address, href: `/existing-properties/${propertyId}`, onClick: (e) => { if (data.isEditing) { e.preventDefault(); data.goTo(`/existing-properties/${propertyId}`); } } },
             { label: ExistingPropertiesUseCases.ServiceChargeSettlement },
         ];
 
@@ -155,17 +153,18 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                         <MetricCard
                             label={`Anteil ${unitLabel}`}
                             value={euro(data.unitActualShare)}
-                            detail={`Vorauszahlung: ${euro(data.annualPrepayment)}`}
+                            detail={data.tenancy ? `Vorauszahlung: ${euro(data.annualPrepayment)}` : 'Kein Mieter zu diesem Zeitraum'}
                         />
                         <MetricCard
                             label="Über-/Unterdeckung"
-                            value={data.settlementCoverage === 'balanced' ? euro(0) : `${data.overUnderCoverage < 0 ? '-' : '+'}${euro(Math.abs(data.overUnderCoverage))}`}
+                            value={!data.tenancy ? '–' : data.settlementCoverage === 'balanced' ? euro(0) : `${data.overUnderCoverage < 0 ? '-' : '+'}${euro(Math.abs(data.overUnderCoverage))}`}
                             detail={
-                                data.settlementCoverage === 'shortfall' ? 'Nachzahlung durch Mieter'
-                                    : data.settlementCoverage === 'surplus' ? 'Guthaben des Mieters'
-                                        : 'Ausgeglichen'
+                                !data.tenancy ? 'Nachzahlung/Guthaben ohne Mieter nicht anwendbar'
+                                    : data.settlementCoverage === 'shortfall' ? 'Nachzahlung durch Mieter'
+                                        : data.settlementCoverage === 'surplus' ? 'Guthaben des Mieters'
+                                            : 'Ausgeglichen'
                             }
-                            tone={data.settlementCoverage === 'shortfall' ? 'warning' : data.settlementCoverage === 'surplus' ? 'positive' : 'neutral'}
+                            tone={!data.tenancy ? 'neutral' : data.settlementCoverage === 'shortfall' ? 'warning' : data.settlementCoverage === 'surplus' ? 'positive' : 'neutral'}
                         />
                     </div>
 
@@ -307,26 +306,29 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     min={0}
                                                 />
                                             </td>
-                                            <td className="px-3 py-2 w-44">
-                                                <div className="flex items-center gap-1">
+                                            <td className="px-3 py-2 w-36">
+                                                <div className="relative">
                                                     <NumberField
-                                                        unit="€"
                                                         placeholder="–"
                                                         value={item.actualShareOverride}
                                                         onChange={(e) => data.updateCostItemField(index, { actualShareOverride: e.target.value })}
                                                         min={0}
-                                                        className="min-w-0"
+                                                        hideStepper
+                                                        className="pr-11"
                                                     />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => data.suggestActualShare(index)}
-                                                        disabled={item.actualAmount === ''}
-                                                        aria-label="Wert vorschlagen"
-                                                        title="Wert vorschlagen: Wohnflächenanteil × Mietzeitraum"
-                                                        className="shrink-0 p-2 rounded-md text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                                                    >
-                                                        <Icons.Calculator className="w-4 h-4" />
-                                                    </button>
+                                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                                                        <span className="text-muted-foreground text-xs">€</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => data.suggestActualShare(index)}
+                                                            disabled={item.actualAmount === ''}
+                                                            aria-label="Wert vorschlagen"
+                                                            title="Wert vorschlagen: Wohnflächenanteil × Mietzeitraum"
+                                                            className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                        >
+                                                            <Icons.Calculator className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </td>
                                             <td className="px-3 py-2 border-l border-border w-36">
@@ -338,26 +340,29 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     min={0}
                                                 />
                                             </td>
-                                            <td className="px-3 py-2 w-44">
-                                                <div className="flex items-center gap-1">
+                                            <td className="px-3 py-2 w-36">
+                                                <div className="relative">
                                                     <NumberField
-                                                        unit="€"
                                                         placeholder="–"
                                                         value={item.budgetShareOverride}
                                                         onChange={(e) => data.updateCostItemField(index, { budgetShareOverride: e.target.value })}
                                                         min={0}
-                                                        className="min-w-0"
+                                                        hideStepper
+                                                        className="pr-11"
                                                     />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => data.suggestBudgetShare(index)}
-                                                        disabled={item.budgetAmount === ''}
-                                                        aria-label="Wert vorschlagen"
-                                                        title="Wert vorschlagen: Wohnflächenanteil × Mietzeitraum"
-                                                        className="shrink-0 p-2 rounded-md text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                                                    >
-                                                        <Icons.Calculator className="w-4 h-4" />
-                                                    </button>
+                                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                                                        <span className="text-muted-foreground text-xs">€</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => data.suggestBudgetShare(index)}
+                                                            disabled={item.budgetAmount === ''}
+                                                            aria-label="Wert vorschlagen"
+                                                            title="Wert vorschlagen: Wohnflächenanteil × Mietzeitraum"
+                                                            className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                        >
+                                                            <Icons.Calculator className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </td>
                                             <td className="px-2 py-2">
@@ -398,31 +403,33 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                         <td className="px-3 py-2 text-right whitespace-nowrap">{euro(data.annualPrepayment)}</td>
                                         <td></td>
                                     </tr>
-                                    <tr className={data.settlementCoverage === 'shortfall' ? 'text-destructive' : data.settlementCoverage === 'surplus' ? 'text-success' : 'text-muted-foreground'}>
+                                    <tr className={!data.tenancy ? 'text-muted-foreground' : data.settlementCoverage === 'shortfall' ? 'text-destructive' : data.settlementCoverage === 'surplus' ? 'text-success' : 'text-muted-foreground'}>
                                         <td className="px-3 py-2 font-medium">
-                                            {data.settlementCoverage === 'shortfall' ? 'Nachzahlung durch Mieter'
-                                                : data.settlementCoverage === 'surplus' ? 'Guthaben durch Mieter'
-                                                    : 'Ausgeglichen'}
+                                            {!data.tenancy ? 'Kein Mieter'
+                                                : data.settlementCoverage === 'shortfall' ? 'Nachzahlung durch Mieter'
+                                                    : data.settlementCoverage === 'surplus' ? 'Guthaben durch Mieter'
+                                                        : 'Ausgeglichen'}
                                         </td>
                                         <td className="px-3 py-2 border-l border-border">–</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">
-                                            {data.settlementCoverage === 'balanced' ? euro(0) : `${data.overUnderCoverage < 0 ? '-' : '+'}${euro(Math.abs(data.overUnderCoverage))}`}
+                                            {!data.tenancy ? '–' : data.settlementCoverage === 'balanced' ? euro(0) : `${data.overUnderCoverage < 0 ? '-' : '+'}${euro(Math.abs(data.overUnderCoverage))}`}
                                         </td>
                                         <td className="px-3 py-2 border-l border-border">–</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">–</td>
                                         <td></td>
                                     </tr>
-                                    <tr className={data.budgetCoverage === 'shortfall' ? 'text-destructive' : data.budgetCoverage === 'surplus' ? 'text-success' : 'text-muted-foreground'}>
+                                    <tr className={!data.tenancy ? 'text-muted-foreground' : data.budgetCoverage === 'shortfall' ? 'text-destructive' : data.budgetCoverage === 'surplus' ? 'text-success' : 'text-muted-foreground'}>
                                         <td className="px-3 py-2 font-medium">
-                                            {data.budgetCoverage === 'shortfall' ? 'Voraussichtliche Nachzahlung'
-                                                : data.budgetCoverage === 'surplus' ? 'Voraussichtliches Guthaben'
-                                                    : 'Voraussichtlich ausgeglichen'}
+                                            {!data.tenancy ? 'Kein Mieter'
+                                                : data.budgetCoverage === 'shortfall' ? 'Voraussichtliche Nachzahlung'
+                                                    : data.budgetCoverage === 'surplus' ? 'Voraussichtliches Guthaben'
+                                                        : 'Voraussichtlich ausgeglichen'}
                                         </td>
                                         <td className="px-3 py-2 border-l border-border">–</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">–</td>
                                         <td className="px-3 py-2 border-l border-border">–</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">
-                                            {data.budgetCoverage === 'balanced' ? euro(0) : `${data.budgetOverUnderCoverage < 0 ? '-' : '+'}${euro(Math.abs(data.budgetOverUnderCoverage))}`}
+                                            {!data.tenancy ? '–' : data.budgetCoverage === 'balanced' ? euro(0) : `${data.budgetOverUnderCoverage < 0 ? '-' : '+'}${euro(Math.abs(data.budgetOverUnderCoverage))}`}
                                         </td>
                                         <td></td>
                                     </tr>
@@ -443,36 +450,45 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                         </div>
                     </div>
 
-                    {/* Service charge prepayment adjustment */}
+                    {/* Service charge prepayment adjustment — only meaningful for a
+                        currently rented unit; there is no lease to adjust otherwise. */}
                     <div>
                         <SectionLabel>Anpassung Nebenkostenvorauszahlung</SectionLabel>
-                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <MetricCard
-                                label="NK-Vorauszahlung aktuell"
-                                value={`${euro(data.currentMonthlyPrepayment)}`}
-                                detail="/Monat"
-                            />
-                            <MetricCard
-                                label="NK-Vorauszahlung neu"
-                                value={data.newMonthlyPrepayment != null ? euro(data.newMonthlyPrepayment) : '–'}
-                                detail={data.budgetCoverage === 'shortfall' ? 'Erhöhung wegen Unterdeckung' : data.budgetCoverage === 'surplus' ? 'Reduzierung wegen Überdeckung' : `aus Wirtschaftsplan ${data.settlementYear + 1}`}
-                                tone={data.budgetCoverage === 'shortfall' ? 'warning' : 'positive'}
-                            />
-                            <MetricCard
-                                label="Neue Gesamtmiete"
-                                value={euro(data.newTotalRent)}
-                                detail={`inkl. ${euro(data.tenancy?.coldRent)} Nettomiete`}
-                            />
-                        </div>
-                        <div className="mt-3 flex justify-end">
-                            <Button
-                                label="Neue NK-Vorauszahlung übernehmen"
-                                icon={<Icons.RefreshCw className="w-4 h-4" />}
-                                variant="outline"
-                                disabled={!data.canApplyPrepayment || data.isApplyingPrepayment}
-                                onClick={() => void data.handleApplyPrepayment()}
-                            />
-                        </div>
+                        {data.tenancy ? (
+                            <>
+                                <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <MetricCard
+                                        label="NK-Vorauszahlung aktuell"
+                                        value={`${euro(data.currentMonthlyPrepayment)}`}
+                                        detail="/Monat"
+                                    />
+                                    <MetricCard
+                                        label="NK-Vorauszahlung neu"
+                                        value={data.newMonthlyPrepayment != null ? euro(data.newMonthlyPrepayment) : '–'}
+                                        detail={data.budgetCoverage === 'shortfall' ? 'Erhöhung wegen Unterdeckung' : data.budgetCoverage === 'surplus' ? 'Reduzierung wegen Überdeckung' : `aus Wirtschaftsplan ${data.settlementYear + 1}`}
+                                        tone={data.budgetCoverage === 'shortfall' ? 'warning' : data.budgetCoverage === 'surplus' ? 'positive' : 'neutral'}
+                                    />
+                                    <MetricCard
+                                        label="Neue Gesamtmiete"
+                                        value={euro(data.newTotalRent)}
+                                        detail={`inkl. ${euro(data.tenancy?.coldRent)} Nettomiete`}
+                                    />
+                                </div>
+                                <div className="mt-3 flex justify-end">
+                                    <Button
+                                        label="Neue NK-Vorauszahlung übernehmen"
+                                        icon={<Icons.RefreshCw className="w-4 h-4" />}
+                                        variant="outline"
+                                        disabled={!data.canApplyPrepayment || data.isApplyingPrepayment}
+                                        onClick={() => void data.handleApplyPrepayment()}
+                                    />
+                                </div>
+                            </>
+                        ) : (
+                            <div className="mt-3 px-4 py-3 rounded-lg bg-muted/30 border border-border text-sm text-muted-foreground">
+                                {unitLabel} hat aktuell keinen Mieter — eine Anpassung der Nebenkostenvorauszahlung ist erst nach Vermietung möglich.
+                            </div>
+                        )}
                     </div>
 
                     {/* Generatable documents */}
@@ -495,7 +511,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                 icon={<Icons.Eye className="w-4 h-4" />}
                                                 variant="outline"
                                                 disabled={!data.canGeneratePdf}
-                                                onClick={() => router.push(`/existing-properties/${propertyId}/service-charge-settlement/${unit.propertyUnitId}/statement`)}
+                                                onClick={() => data.goTo(`/existing-properties/${propertyId}/service-charge-settlement/${unit.propertyUnitId}/statement`)}
                                             />
                                         </span>
                                         <span title={!data.canGeneratePdf ? 'Bitte zuerst Mieterdaten und Abrechnungszeitraum hinterlegen' : undefined}>
@@ -541,7 +557,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                 icon={<Icons.Eye className="w-4 h-4" />}
                                                 variant="outline"
                                                 disabled={!data.canGenerateAdjustmentDocx}
-                                                onClick={() => router.push(`/existing-properties/${propertyId}/service-charge-settlement/${unit.propertyUnitId}/adjustment`)}
+                                                onClick={() => data.goTo(`/existing-properties/${propertyId}/service-charge-settlement/${unit.propertyUnitId}/adjustment`)}
                                             />
                                         </span>
                                         <span title={!data.canGenerateAdjustmentDocx ? 'Bitte zuerst Mieterdaten und Abrechnungszeitraum hinterlegen' : undefined}>
@@ -603,7 +619,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
 
             <StickyActionBar
                 show={true}
-                onGhost={() => router.push(data.backHref)}
+                onGhost={() => data.goTo(data.backHref)}
                 onPrimary={() => void data.handleSave()}
                 ghostLabel={BUTTON_DETAILS.Back.label}
                 ghostIcon={<BUTTON_DETAILS.Back.icon />}
@@ -617,6 +633,12 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                 open={data.pendingPeriod !== null}
                 onCancel={data.cancelPeriodSwitch}
                 onDiscard={data.confirmPeriodSwitch}
+                context="an der Nebenkostenabrechnung"
+            />
+            <UnsavedChangesModal
+                open={data.pendingHref !== null}
+                onCancel={data.cancelDiscard}
+                onDiscard={data.confirmDiscard}
                 context="an der Nebenkostenabrechnung"
             />
         </div>
