@@ -89,6 +89,8 @@ export function useRenovationMeasuresData(propertyId: string) {
             description: null,
             estimatedCost: form.estimatedCost !== '' ? Number(form.estimatedCost) : null,
             quotedCost: null,
+            budgetMin: null,
+            budgetMax: null,
             preferredStartDate: form.preferredStartDate ? form.preferredStartDate.toISOString().slice(0, 10) : null,
             quotedStartDate: null,
             actualCompletionDate: null,

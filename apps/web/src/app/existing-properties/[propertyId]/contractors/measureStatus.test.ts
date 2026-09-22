@@ -12,6 +12,8 @@ function measure(overrides: Partial<RenovationMeasure> = {}): RenovationMeasure 
         description: null,
         estimatedCost: null,
         quotedCost: null,
+        budgetMin: null,
+        budgetMax: null,
         preferredStartDate: null,
         quotedStartDate: null,
         actualCompletionDate: null,

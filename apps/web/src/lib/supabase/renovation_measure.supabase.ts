@@ -11,6 +11,8 @@ function toMeasure(row: Record<string, unknown>): RenovationMeasure {
         description: row.description as string | null,
         estimatedCost: row.estimated_cost == null ? null : Number(row.estimated_cost),
         quotedCost: row.quoted_cost == null ? null : Number(row.quoted_cost),
+        budgetMin: row.budget_min == null ? null : Number(row.budget_min),
+        budgetMax: row.budget_max == null ? null : Number(row.budget_max),
         preferredStartDate: row.preferred_start_date as string | null,
         quotedStartDate: row.quoted_start_date as string | null,
         actualCompletionDate: row.actual_completion_date as string | null,
@@ -52,6 +54,8 @@ export async function createRenovationMeasure(payload: RenovationMeasureInsert):
         description: payload.description,
         estimated_cost: payload.estimatedCost,
         quoted_cost: payload.quotedCost,
+        budget_min: payload.budgetMin,
+        budget_max: payload.budgetMax,
         preferred_start_date: payload.preferredStartDate,
         quoted_start_date: payload.quotedStartDate,
         actual_completion_date: payload.actualCompletionDate,
@@ -76,6 +80,8 @@ export async function updateRenovationMeasure(
     if (updates.description !== undefined) dbUpdates.description = updates.description;
     if (updates.estimatedCost !== undefined) dbUpdates.estimated_cost = updates.estimatedCost;
     if (updates.quotedCost !== undefined) dbUpdates.quoted_cost = updates.quotedCost;
+    if (updates.budgetMin !== undefined) dbUpdates.budget_min = updates.budgetMin;
+    if (updates.budgetMax !== undefined) dbUpdates.budget_max = updates.budgetMax;
     if (updates.preferredStartDate !== undefined) dbUpdates.preferred_start_date = updates.preferredStartDate;
     if (updates.quotedStartDate !== undefined) dbUpdates.quoted_start_date = updates.quotedStartDate;
     if (updates.actualCompletionDate !== undefined) dbUpdates.actual_completion_date = updates.actualCompletionDate;
