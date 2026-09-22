@@ -88,9 +88,20 @@ export function useTaxOverviewData() {
 
     useEffect(() => { void load(); }, [load]);
 
-    // Every year that has at least one receipt, plus the current calendar
-    // year (so the picker is never empty for a first-time user), descending.
-    const availableYears = useMemo(() => availableTaxYears(documents), [documents]);
+    // Every year that has at least one receipt, plus whichever year is
+    // currently selected (`year`'s own fallback below can land on a year
+    // with no documents at all, e.g. the current year for a first-time
+    // user — the dropdown must always have a matching <option> for its
+    // `value`, or the browser renders it blank instead of showing that
+    // year), descending. availableTaxYears itself no longer force-includes
+    // the current year (see its own doc comment) — that fallback is applied
+    // per-consumer here and in useTaxDocumentsData instead.
+    const availableYears = useMemo(() => {
+        const years = new Set(availableTaxYears(documents));
+        if (year != null) years.add(year);
+        if (years.size === 0) years.add(new Date().getFullYear());
+        return Array.from(years).sort((a, b) => b - a);
+    }, [documents, year]);
 
     const propertyRows: TaxOverviewPropertyRow[] = useMemo(() => {
         if (year == null) return [];

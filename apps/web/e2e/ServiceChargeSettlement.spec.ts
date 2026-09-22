@@ -275,8 +275,13 @@ test('"Alle Werte vorschlagen" fills only empty Anteil Wohnung fields, computed 
     // to save into its own, unrelated settlement.
     const targetYear = new Date().getFullYear() + 3;
     await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId}`);
-    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
-    await expect(page.getByText(`Abrechnungsjahr ${targetYear}`).first()).toBeVisible();
+    // Each click triggers an async reload of that year's settlement — wait
+    // for it to actually land before clicking again, or a fast run of
+    // clicks can outrace the reloads and leave the page on the wrong year.
+    for (let year = new Date().getFullYear() + 1; year <= targetYear; year++) {
+        await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
+        await expect(page.getByText(`Abrechnungsjahr ${year}`).first()).toBeVisible();
+    }
 
     const rows = page.locator('tbody tr');
     const row1Numbers = rows.nth(0).locator('input[type="number"]');
@@ -307,8 +312,10 @@ test('"Alle Werte vorschlagen" fills only empty Anteil Wohnung fields, computed 
 test('a saved settlement can be deleted, and its cost items are removed with it', async ({ page }) => {
     const targetYear = new Date().getFullYear() + 4;
     await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId}`);
-    for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
-    await expect(page.getByText(`Abrechnungsjahr ${targetYear}`).first()).toBeVisible();
+    for (let year = new Date().getFullYear() + 1; year <= targetYear; year++) {
+        await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
+        await expect(page.getByText(`Abrechnungsjahr ${year}`).first()).toBeVisible();
+    }
 
     await expect(page.getByRole('button', { name: 'Abrechnung löschen' })).toHaveCount(0);
 
@@ -391,8 +398,10 @@ test('an end date before the start date names the actual reason instead of a gen
 test('leaving the page with unsaved changes (Zurück, breadcrumb) asks for confirmation', async ({ page }) => {
     const targetYear = new Date().getFullYear() + 6;
     await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId}`);
-    for (let i = 0; i < 6; i++) await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
-    await expect(page.getByText(`Abrechnungsjahr ${targetYear}`).first()).toBeVisible();
+    for (let year = new Date().getFullYear() + 1; year <= targetYear; year++) {
+        await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
+        await expect(page.getByText(`Abrechnungsjahr ${year}`).first()).toBeVisible();
+    }
 
     await page.locator('tbody tr').first().locator('input[type="number"]').first().fill('123');
 

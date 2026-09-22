@@ -45,6 +45,14 @@ export function useTaxDocumentsData(propertyId: string) {
     // actually adds a category or receipt in it, it becomes a "real" year
     // (derived from that data) and no longer depends on this.
     const [manuallyAddedYears, setManuallyAddedYears] = useState<number[]>([]);
+    // The current calendar year always gets a card by default (a landlord
+    // always needs somewhere to start this year's filing) — this tracks
+    // whether the user explicitly deleted it, since without an explicit
+    // flag it would either always win (current year could never actually be
+    // deleted) or only show up when the list is otherwise completely empty
+    // (which made it vanish the instant any *other* year was added, even
+    // though the user never asked to remove it).
+    const [currentYearDismissed, setCurrentYearDismissed] = useState(false);
     // Archiving just hides a year from the cards row (session-only, nothing
     // persisted or deleted) — "Archivierte Jahre anzeigen" brings it back.
     const [archivedYears, setArchivedYears] = useState<Set<number>>(new Set());
@@ -112,7 +120,7 @@ export function useTaxDocumentsData(propertyId: string) {
             if (cancelled) return;
             setRows(categories.map((category, index) => ({ category, documents: documentsByCategory[index], isUploading: false })));
             persistedLabelsRef.current = new Map(categories.map((c) => [c.taxExpenseCategoryId, c.label]));
-            setSelectedYear((current) => current ?? availableTaxYears(documentsByCategory.flat())[0]);
+            setSelectedYear((current) => current ?? availableTaxYears(documentsByCategory.flat())[0] ?? new Date().getFullYear());
             setIsLoading(false);
         })();
         return () => { cancelled = true; };
@@ -123,8 +131,18 @@ export function useTaxDocumentsData(propertyId: string) {
     const allDocuments = useMemo(() => rows.flatMap((row) => row.documents), [rows]);
     const availableYears = useMemo(() => {
         const years = new Set([...availableTaxYears(allDocuments), ...manuallyAddedYears]);
+        // The current year shows by default (whether or not it has any real
+        // receipts yet) unless the user explicitly deleted its card — real
+        // documents in it always win regardless, since those already put it
+        // in `years` above via availableTaxYears. Deliberately no "never
+        // truly empty" fallback here: forcing the current year back in
+        // whenever it was the only year left would make it undeletable in
+        // exactly the case a landlord is most likely to want to delete it
+        // (nothing else uploaded yet) — an empty "Dieses Objekt · nach Jahr"
+        // row is fine; "Jahr hinzufügen" is still right there.
+        if (!currentYearDismissed) years.add(new Date().getFullYear());
         return Array.from(years).sort((a, b) => b - a);
-    }, [allDocuments, manuallyAddedYears]);
+    }, [allDocuments, manuallyAddedYears, currentYearDismissed]);
     // One breakdown per available year — backs the "Dieses Objekt · nach
     // Jahr" cards, letting the user pick which year the table below shows.
     const yearSummaries = useMemo(
@@ -139,14 +157,15 @@ export function useTaxDocumentsData(propertyId: string) {
         rows.find((row) => row.category.taxExpenseCategoryId === categoryId)?.isUploading ?? false;
 
     // "Dieses Objekt · nach Jahr" already shows every year with a real
-    // receipt, plus the current calendar year automatically — this adds one
-    // more on top (the next year after whatever's already shown), for
-    // planning ahead before the calendar actually rolls over or before any
-    // receipt exists yet.
-    const addNextYear = () => {
-        const nextYear = Math.max(...availableYears) + 1;
-        setManuallyAddedYears((prev) => prev.includes(nextYear) ? prev : [...prev, nextYear]);
-        setSelectedYear(nextYear);
+    // receipt — this adds a card for any year the user picks on top of that
+    // (planning ahead before the calendar rolls over, or filling in a past
+    // year that never got a receipt uploaded). A no-op if that year already
+    // has a card (real or previously added).
+    const addYear = (year: number) => {
+        if (year === new Date().getFullYear()) setCurrentYearDismissed(false);
+        if (availableYears.includes(year)) { setSelectedYear(year); return; }
+        setManuallyAddedYears((prev) => [...prev, year]);
+        setSelectedYear(year);
     };
 
     const visibleYearSummaries = useMemo(
@@ -202,6 +221,7 @@ export function useTaxDocumentsData(propertyId: string) {
                 next.delete(year);
                 return next;
             });
+            if (year === new Date().getFullYear()) setCurrentYearDismissed(true);
             setPendingDeleteYear(null);
             if (selectedYear === year) jumpAwayFromYear(year);
             showToast(
@@ -406,7 +426,7 @@ export function useTaxDocumentsData(propertyId: string) {
         selectedYear,
         setSelectedYear,
         availableYears,
-        addNextYear,
+        addYear,
         yearSummaries: visibleYearSummaries,
         archivedYears,
         archivedYearCount: yearSummaries.length - visibleYearSummaries.length,

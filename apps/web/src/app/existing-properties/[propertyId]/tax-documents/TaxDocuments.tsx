@@ -129,11 +129,26 @@ export default function TaxDocuments({ propertyId }: { propertyId: string }) {
     const [uploadFile, setUploadFile] = useState<File | null>(null);
     const [uploadAmount, setUploadAmount] = useState('');
     const [isSubmittingUpload, setIsSubmittingUpload] = useState(false);
+    const [addYearOpen, setAddYearOpen] = useState(false);
+    const [yearInput, setYearInput] = useState('');
 
     if (data.isLoading || data.currentYearBreakdown == null) return <PropertyLoadingPage />;
     if (!data.property) return <PropertyNotFoundPage />;
 
     const backHref = `/existing-properties/${propertyId}`;
+
+    const openAddYear = () => {
+        setYearInput(String(Math.max(...data.availableYears, new Date().getFullYear()) + 1));
+        setAddYearOpen(true);
+    };
+    const yearInputValue = Number(yearInput);
+    const yearInputValid = yearInput !== '' && Number.isInteger(yearInputValue) && yearInputValue >= 1900 && yearInputValue <= 2200;
+    const yearAlreadyExists = yearInputValid && data.availableYears.includes(yearInputValue);
+    const confirmAddYear = () => {
+        if (!yearInputValid || yearAlreadyExists) return;
+        data.addYear(yearInputValue);
+        setAddYearOpen(false);
+    };
 
     const closeUploadModal = () => {
         setUploadCategoryId(null);
@@ -191,7 +206,7 @@ export default function TaxDocuments({ propertyId }: { propertyId: string }) {
                                 icon={<Icons.Plus className="w-4 h-4" />}
                                 variant="outline"
                                 size="sm"
-                                onClick={() => data.addNextYear()}
+                                onClick={openAddYear}
                             />
                         </div>
                         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -348,6 +363,40 @@ export default function TaxDocuments({ propertyId }: { propertyId: string }) {
                     accept=".pdf,.jpg,.jpeg,.png"
                     id="tax-expense-document-upload"
                 />
+            </Modal>
+
+            <Modal
+                open={addYearOpen}
+                onClose={() => setAddYearOpen(false)}
+                title="Jahr hinzufügen"
+                icon={<Icons.Plus className="w-5 h-5" />}
+                footer={
+                    <>
+                        <Button label="Abbrechen" icon={<Icons.X className="w-4 h-4" />} variant="outline" onClick={() => setAddYearOpen(false)} />
+                        <Button
+                            label="Hinzufügen"
+                            icon={<Icons.Plus className="w-4 h-4" />}
+                            variant="primary"
+                            disabled={!yearInputValid || yearAlreadyExists}
+                            onClick={confirmAddYear}
+                        />
+                    </>
+                }
+            >
+                <p className="text-sm text-muted-foreground">
+                    Für welches Jahr möchtest du eine Karte hinzufügen?
+                </p>
+                <NumberField
+                    label="Jahr"
+                    value={yearInput}
+                    onChange={(e) => setYearInput(e.target.value)}
+                    min={1900}
+                    max={2200}
+                    hideStepper
+                />
+                {yearAlreadyExists && (
+                    <p className="text-sm text-destructive">Für dieses Jahr existiert bereits eine Karte.</p>
+                )}
             </Modal>
 
             <ConfirmDeleteModal
