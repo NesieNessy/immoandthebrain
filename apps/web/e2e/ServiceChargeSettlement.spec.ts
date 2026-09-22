@@ -24,13 +24,22 @@ import { expect, test } from '@playwright/test';
  * changed period (erroring instead of duplicating if one already exists for
  * that exact period) rather than repurposing the loaded row.
  *
+ * Also fixed: Anteil Wohnung (the per-item apartment share) used to default
+ * to actualAmount * unit-living-area-share, and an "Automatisch berechnen"
+ * link reset a manual override back to that computed value — Gesamt Objekt
+ * (the whole building's cost) never automatically corresponds to a specific
+ * apartment's share of it, so both the auto-fill and the reset-to-computed
+ * function were removed; Anteil Wohnung is now always a plain manual entry,
+ * and it stays editable even when the row is marked "nicht umlagefähig"
+ * (previously disabled in that case).
+ *
  * This spec exercises the real save path: filling in the first (deterministic
- * "Grundsteuer", from DEFAULT_COST_ITEMS) cost-item row, saving, and verifying
- * both the persisted DB rows and the on-screen computed unit share/coverage
- * figures from settlementMath.ts — then exercises year-to-year navigation to
- * confirm it creates a separate settlement rather than overwriting the one
- * just saved, and that switching years with an unsaved edit pending asks for
- * confirmation first.
+ * "Grundsteuer", from DEFAULT_COST_ITEMS) cost-item row (including its Anteil
+ * Wohnung, manually), saving, and verifying both the persisted DB rows and
+ * the on-screen unit share/coverage figures from settlementMath.ts — then
+ * exercises year-to-year navigation to confirm it creates a separate
+ * settlement rather than overwriting the one just saved, and that switching
+ * years with an unsaved edit pending asks for confirmation first.
  *
  * Not part of the shared fixture (fixtures/seed.ts) — creates its own
  * property/unit/tenancy so it can't disturb the other smoke specs.
@@ -123,15 +132,18 @@ test('filling in a cost item and saving persists the settlement and computes the
     await expect(firstRow.getByRole('textbox').first()).toHaveValue('Grundsteuer');
 
     const numberInputs = firstRow.locator('input[type="number"]');
-    // index 0 = actualAmount, 1 = actualShareOverride (disabled until an
-    // amount is entered), 2 = budgetAmount, 3 = budgetShareOverride.
+    // index 0 = actualAmount (Gesamt Objekt), 1 = actualShareOverride (Anteil
+    // Wohnung — always a manual, independent entry: the total property cost
+    // must never be auto-copied or proportionally derived into this field,
+    // and it stays editable even though this row is allocable), 2 =
+    // budgetAmount, 3 = budgetShareOverride.
     await numberInputs.nth(0).fill('1000');
+    await numberInputs.nth(1).fill('600');
     await numberInputs.nth(2).fill('1100');
+    await numberInputs.nth(3).fill('660');
 
-    // 60 m² of 100 m² total living area -> the unit's Anteil is 60% of the
-    // whole-building actual amount entered above (settlementMath.ts's
-    // area-proportional split, no per-item override set here). euro()
-    // formats with 0 decimals (deCurrencyFormatter), so 1000 * 0.6 -> "600 €".
+    // The manually entered Anteil Wohnung feeds straight into the Summe row
+    // as-is (euro() formats with 0 decimals, so "600 €").
     await expect(page.getByText('600 €').first()).toBeVisible();
 
     await page.getByRole('button', { name: 'Abrechnung speichern' }).click();
@@ -148,14 +160,19 @@ test('filling in a cost item and saving persists the settlement and computes the
         const settlementId = settlementRows[0].service_charge_settlement_id as number;
 
         const { rows: costItemRows } = await client.query(
-            `SELECT label, allocable, actual_amount, budget_amount FROM service_charge_cost_item
-             WHERE service_charge_settlement_id = $1 AND label = 'Grundsteuer'`,
+            `SELECT label, allocable, actual_amount, budget_amount, actual_share_override, budget_share_override
+             FROM service_charge_cost_item WHERE service_charge_settlement_id = $1 AND label = 'Grundsteuer'`,
             [settlementId],
         );
         expect(costItemRows).toHaveLength(1);
         expect(costItemRows[0].allocable).toBe(true);
         expect(Number(costItemRows[0].actual_amount)).toBe(1000);
         expect(Number(costItemRows[0].budget_amount)).toBe(1100);
+        // The manually entered Anteil Wohnung persists as typed — it must
+        // never be silently replaced by a computed value derived from the
+        // total amount above.
+        expect(Number(costItemRows[0].actual_share_override)).toBe(600);
+        expect(Number(costItemRows[0].budget_share_override)).toBe(660);
     } finally {
         await client.end();
     }
@@ -169,8 +186,6 @@ test('filling in a cost item and saving persists the settlement and computes the
     // ── Now browse to a different year: must not overwrite the settlement above ──
     const currentYear = new Date().getFullYear();
     const nextYear = currentYear + 1;
-    // "Abrechnungsjahr {year}" also appears in the "Gesamtkosten Objekt"
-    // MetricCard's detail text — .first() picks the year-picker's own display.
     await expect(page.getByText(`Abrechnungsjahr ${currentYear}`).first()).toBeVisible();
 
     // No unsaved edits yet -> switching years reloads immediately, no confirm dialog.

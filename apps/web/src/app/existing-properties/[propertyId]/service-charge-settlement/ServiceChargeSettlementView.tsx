@@ -6,6 +6,7 @@ import {
     Button,
     CalendarField,
     ConfirmDeleteModal,
+    DetailFieldLegend,
     Header,
     Icons,
     LoadingScreen,
@@ -147,9 +148,9 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                     {/* Stat cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <MetricCard
-                            label="Gesamtkosten Objekt"
-                            value={euro(data.totalActualCostsAll)}
-                            detail={`Abrechnungsjahr ${data.settlementYear}`}
+                            label="Kosten Objekt (umlagefähig)"
+                            value={euro(data.totalActualAllocable)}
+                            detail={`zzgl. ${euro(data.actualSplit.nonAllocable)} nicht umlagefähig`}
                         />
                         <MetricCard
                             label={`Anteil ${unitLabel}`}
@@ -158,9 +159,13 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                         />
                         <MetricCard
                             label="Über-/Unterdeckung"
-                            value={`${data.overUnderCoverage < 0 ? '-' : '+'}${euro(Math.abs(data.overUnderCoverage))}`}
-                            detail={data.settlementCoverage === 'shortfall' ? 'Nachzahlung durch Mieter' : 'Guthaben des Mieters'}
-                            tone={data.settlementCoverage === 'shortfall' ? 'warning' : 'positive'}
+                            value={data.settlementCoverage === 'balanced' ? euro(0) : `${data.overUnderCoverage < 0 ? '-' : '+'}${euro(Math.abs(data.overUnderCoverage))}`}
+                            detail={
+                                data.settlementCoverage === 'shortfall' ? 'Nachzahlung durch Mieter'
+                                    : data.settlementCoverage === 'surplus' ? 'Guthaben des Mieters'
+                                        : 'Ausgeglichen'
+                            }
+                            tone={data.settlementCoverage === 'shortfall' ? 'warning' : data.settlementCoverage === 'surplus' ? 'positive' : 'neutral'}
                         />
                     </div>
 
@@ -245,7 +250,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
 
                     {/* Info banner */}
                     <div className="px-4 py-3 rounded-lg bg-primary/5 border border-primary/20 text-sm text-foreground">
-                        Erfasse alle Kostenpositionen des Abrechnungsjahres. Die Wohnungsanteile und der Wirtschaftsplan werden automatisch berechnet, können bei Bedarf pro Position aber manuell angepasst werden. Fehlende Werte im Wirtschaftsplan kannst du manuell ergänzen.
+                        Erfasse alle Kostenpositionen des Abrechnungsjahres sowie den jeweiligen Wohnungsanteil pro Position — der Gesamtbetrag des Objekts entspricht nicht automatisch dem Anteil der Wohnung und muss separat erfasst werden. Über „Wert vorschlagen" kannst du dir pro Position einen Vorschlag auf Basis von Wohnflächenanteil und Mietzeitraum anzeigen lassen und bei Bedarf anpassen.
                     </div>
 
                     {/* Cost item table */}
@@ -302,24 +307,27 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     min={0}
                                                 />
                                             </td>
-                                            <td className="px-3 py-2 w-36">
-                                                <NumberField
-                                                    unit="€"
-                                                    placeholder="–"
-                                                    value={item.actualShareOverride !== '' ? item.actualShareOverride : (data.actualShareForItem(item) != null ? String(data.actualShareForItem(item)) : '')}
-                                                    onChange={(e) => data.updateCostItemField(index, { actualShareOverride: e.target.value })}
-                                                    disabled={!item.allocable || item.actualAmount === ''}
-                                                    min={0}
-                                                />
-                                                {item.actualShareOverride !== '' && (
+                                            <td className="px-3 py-2 w-44">
+                                                <div className="flex items-center gap-1">
+                                                    <NumberField
+                                                        unit="€"
+                                                        placeholder="–"
+                                                        value={item.actualShareOverride}
+                                                        onChange={(e) => data.updateCostItemField(index, { actualShareOverride: e.target.value })}
+                                                        min={0}
+                                                        className="min-w-0"
+                                                    />
                                                     <button
                                                         type="button"
-                                                        onClick={() => data.updateCostItemField(index, { actualShareOverride: '' })}
-                                                        className="mt-1 text-xs text-primary hover:underline cursor-pointer"
+                                                        onClick={() => data.suggestActualShare(index)}
+                                                        disabled={item.actualAmount === ''}
+                                                        aria-label="Wert vorschlagen"
+                                                        title="Wert vorschlagen: Wohnflächenanteil × Mietzeitraum"
+                                                        className="shrink-0 p-2 rounded-md text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                                     >
-                                                        Automatisch berechnen
+                                                        <Icons.Calculator className="w-4 h-4" />
                                                     </button>
-                                                )}
+                                                </div>
                                             </td>
                                             <td className="px-3 py-2 border-l border-border w-36">
                                                 <NumberField
@@ -330,24 +338,27 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     min={0}
                                                 />
                                             </td>
-                                            <td className="px-3 py-2 w-36">
-                                                <NumberField
-                                                    unit="€"
-                                                    placeholder="–"
-                                                    value={item.budgetShareOverride !== '' ? item.budgetShareOverride : (data.budgetShareForItem(item) != null ? String(data.budgetShareForItem(item)) : '')}
-                                                    onChange={(e) => data.updateCostItemField(index, { budgetShareOverride: e.target.value })}
-                                                    disabled={!item.allocable || item.budgetAmount === ''}
-                                                    min={0}
-                                                />
-                                                {item.budgetShareOverride !== '' && (
+                                            <td className="px-3 py-2 w-44">
+                                                <div className="flex items-center gap-1">
+                                                    <NumberField
+                                                        unit="€"
+                                                        placeholder="–"
+                                                        value={item.budgetShareOverride}
+                                                        onChange={(e) => data.updateCostItemField(index, { budgetShareOverride: e.target.value })}
+                                                        min={0}
+                                                        className="min-w-0"
+                                                    />
                                                     <button
                                                         type="button"
-                                                        onClick={() => data.updateCostItemField(index, { budgetShareOverride: '' })}
-                                                        className="mt-1 text-xs text-primary hover:underline cursor-pointer"
+                                                        onClick={() => data.suggestBudgetShare(index)}
+                                                        disabled={item.budgetAmount === ''}
+                                                        aria-label="Wert vorschlagen"
+                                                        title="Wert vorschlagen: Wohnflächenanteil × Mietzeitraum"
+                                                        className="shrink-0 p-2 rounded-md text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                                     >
-                                                        Automatisch berechnen
+                                                        <Icons.Calculator className="w-4 h-4" />
                                                     </button>
-                                                )}
+                                                </div>
                                             </td>
                                             <td className="px-2 py-2">
                                                 <button
@@ -364,11 +375,19 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                 </tbody>
                                 <tfoot>
                                     <tr className="border-t-2 border-border font-semibold">
-                                        <td className="px-3 py-2">Summe</td>
-                                        <td className="px-3 py-2 text-right border-l border-border whitespace-nowrap">{euro(data.totalActualCostsAll)}</td>
+                                        <td className="px-3 py-2">Summe umlagefähig</td>
+                                        <td className="px-3 py-2 text-right border-l border-border whitespace-nowrap">{euro(data.totalActualAllocable)}</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">{euro(data.unitActualShare)}</td>
-                                        <td className="px-3 py-2 text-right border-l border-border whitespace-nowrap">{euro(data.totalBudgetCostsAll)}</td>
+                                        <td className="px-3 py-2 text-right border-l border-border whitespace-nowrap">{euro(data.totalBudgetAllocable)}</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">{euro(data.unitBudgetShare)}</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr className="text-muted-foreground">
+                                        <td className="px-3 py-2">Summe nicht umlagefähig</td>
+                                        <td className="px-3 py-2 text-right border-l border-border whitespace-nowrap">{euro(data.actualSplit.nonAllocable)}</td>
+                                        <td className="px-3 py-2 text-right whitespace-nowrap">–</td>
+                                        <td className="px-3 py-2 text-right border-l border-border whitespace-nowrap">{euro(data.budgetSplit.nonAllocable)}</td>
+                                        <td className="px-3 py-2 text-right whitespace-nowrap">–</td>
                                         <td></td>
                                     </tr>
                                     <tr className="text-primary">
@@ -379,27 +398,31 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                         <td className="px-3 py-2 text-right whitespace-nowrap">{euro(data.annualPrepayment)}</td>
                                         <td></td>
                                     </tr>
-                                    <tr className={data.settlementCoverage === 'shortfall' ? 'text-destructive' : 'text-success'}>
+                                    <tr className={data.settlementCoverage === 'shortfall' ? 'text-destructive' : data.settlementCoverage === 'surplus' ? 'text-success' : 'text-muted-foreground'}>
                                         <td className="px-3 py-2 font-medium">
-                                            {data.settlementCoverage === 'shortfall' ? 'Nachzahlung durch Mieter' : 'Guthaben durch Mieter'}
+                                            {data.settlementCoverage === 'shortfall' ? 'Nachzahlung durch Mieter'
+                                                : data.settlementCoverage === 'surplus' ? 'Guthaben durch Mieter'
+                                                    : 'Ausgeglichen'}
                                         </td>
                                         <td className="px-3 py-2 border-l border-border">–</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">
-                                            {data.overUnderCoverage < 0 ? '-' : '+'}{euro(Math.abs(data.overUnderCoverage))}
+                                            {data.settlementCoverage === 'balanced' ? euro(0) : `${data.overUnderCoverage < 0 ? '-' : '+'}${euro(Math.abs(data.overUnderCoverage))}`}
                                         </td>
                                         <td className="px-3 py-2 border-l border-border">–</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">–</td>
                                         <td></td>
                                     </tr>
-                                    <tr className={data.budgetCoverage === 'shortfall' ? 'text-destructive' : 'text-success'}>
+                                    <tr className={data.budgetCoverage === 'shortfall' ? 'text-destructive' : data.budgetCoverage === 'surplus' ? 'text-success' : 'text-muted-foreground'}>
                                         <td className="px-3 py-2 font-medium">
-                                            {data.budgetCoverage === 'shortfall' ? 'Voraussichtliche Nachzahlung' : 'Voraussichtliches Guthaben'}
+                                            {data.budgetCoverage === 'shortfall' ? 'Voraussichtliche Nachzahlung'
+                                                : data.budgetCoverage === 'surplus' ? 'Voraussichtliches Guthaben'
+                                                    : 'Voraussichtlich ausgeglichen'}
                                         </td>
                                         <td className="px-3 py-2 border-l border-border">–</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">–</td>
                                         <td className="px-3 py-2 border-l border-border">–</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">
-                                            {data.budgetOverUnderCoverage < 0 ? '-' : '+'}{euro(Math.abs(data.budgetOverUnderCoverage))}
+                                            {data.budgetCoverage === 'balanced' ? euro(0) : `${data.budgetOverUnderCoverage < 0 ? '-' : '+'}${euro(Math.abs(data.budgetOverUnderCoverage))}`}
                                         </td>
                                         <td></td>
                                     </tr>
@@ -587,6 +610,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                 primaryLabel="Abrechnung speichern"
                 primaryIcon={<BUTTON_DETAILS.Save.icon />}
                 primaryDisabled={!data.isEditing || data.isSaving}
+                leftContent={<DetailFieldLegend />}
             />
 
             <UnsavedChangesModal

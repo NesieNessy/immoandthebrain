@@ -32,8 +32,10 @@ import {
     compareSettlementCoverage,
     defaultSettlementPeriod,
     isFullCalendarYear,
+    occupancyFraction,
     prorateAnnualPrepayment,
     splitByAllocable,
+    suggestApartmentShare,
 } from '@/lib/serviceCharge/settlementMath';
 import { mergeExtractedCostItems, type ExtractedSettlementData } from '@/lib/serviceCharge/settlementExtraction';
 import type {
@@ -63,8 +65,10 @@ export interface CostItemForm {
     allocable: boolean;
     actualAmount: string;
     budgetAmount: string;
-    /** Manual override of the computed Anteil Wohnung for this row — empty
-     *  string means "use the automatic actualAmount * unit share calculation". */
+    /** Anteil Wohnung for this row — always a manual, independent entry.
+     *  Never derived from actualAmount (Gesamt Objekt is the whole
+     *  building's cost, not automatically this apartment's share of it).
+     *  Empty string means "not entered yet". */
     actualShareOverride: string;
     /** Same as `actualShareOverride`, for the Wirtschaftsplan column. */
     budgetShareOverride: string;
@@ -269,24 +273,22 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         () => splitByAllocable(costItems.map((item) => ({ amount: Number(item.budgetAmount) || 0, allocable: item.allocable }))),
         [costItems],
     );
-    const totalActualCostsAll = actualSplit.total;
-    const totalBudgetCostsAll = budgetSplit.total;
     const totalActualAllocable = actualSplit.allocable;
     const totalBudgetAllocable = budgetSplit.allocable;
 
-    // Per-row Anteil Wohnung: the automatic amount * unitShare calculation,
-    // unless the row carries a manual override (different cost items often
-    // use a different Verteilerschlüssel than living-area proportion).
+    // Per-row Anteil Wohnung: always a manual entry. This must NOT be derived
+    // from actualAmount/budgetAmount (Gesamt Objekt) — the total cost of the
+    // whole property never automatically equals, or proportionally implies,
+    // a specific apartment's share of it, so there is no automatic fallback
+    // here to compute or fall back to.
     const actualShareForItem = useCallback((item: CostItemForm): number | null => {
-        if (!item.allocable || item.actualAmount === '') return null;
-        if (item.actualShareOverride !== '') return Number(item.actualShareOverride) || 0;
-        return Math.round((Number(item.actualAmount) || 0) * unitShare * 100) / 100;
-    }, [unitShare]);
+        if (!item.allocable || item.actualShareOverride === '') return null;
+        return Number(item.actualShareOverride) || 0;
+    }, []);
     const budgetShareForItem = useCallback((item: CostItemForm): number | null => {
-        if (!item.allocable || item.budgetAmount === '') return null;
-        if (item.budgetShareOverride !== '') return Number(item.budgetShareOverride) || 0;
-        return Math.round((Number(item.budgetAmount) || 0) * unitShare * 100) / 100;
-    }, [unitShare]);
+        if (!item.allocable || item.budgetShareOverride === '') return null;
+        return Number(item.budgetShareOverride) || 0;
+    }, []);
 
     // (1) Apartment share: sum of allocable actual cost items for this unit.
     const unitActualShare = useMemo(
@@ -301,14 +303,20 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     const currentMonthlyPrepayment = tenancy?.miscRent ?? 0;
     // (2) Annual total from the tenant's NK-Vorauszahlung, prorated for any
-    // miscRent change that took effect during the settlement period.
+    // miscRent change that took effect during the settlement period, and
+    // clipped to the days the tenant actually occupied the unit — a
+    // settlement period that starts before the tenancy did (or extends past
+    // a move-out) must not charge/credit prepayment for months nobody was
+    // renting the unit.
     const annualPrepayment = useMemo(() => {
         if (!periodStart || !periodEnd) return currentMonthlyPrepayment * 12;
         const history = miscRentHistory
             .filter((entry): entry is TenancyAdjustmentHistoryEntry & { effectiveDate: string; amount: number } => entry.effectiveDate != null && entry.amount != null)
             .map((entry) => ({ effectiveDate: entry.effectiveDate, amount: entry.amount }));
-        return prorateAnnualPrepayment(currentMonthlyPrepayment, history, periodStart, periodEnd);
-    }, [currentMonthlyPrepayment, miscRentHistory, periodStart, periodEnd]);
+        const tenancyStart = tenancy?.tenancyStartDate ? new Date(tenancy.tenancyStartDate) : null;
+        const tenancyEnd = tenancy?.tenancyEndDate ? new Date(tenancy.tenancyEndDate) : null;
+        return prorateAnnualPrepayment(currentMonthlyPrepayment, history, periodStart, periodEnd, tenancyStart, tenancyEnd);
+    }, [currentMonthlyPrepayment, miscRentHistory, periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate]);
 
     // (1) vs (2): shortfall = "Nachzahlung durch Mieter", surplus = "Guthaben des Mieters".
     const settlementCoverage = compareSettlementCoverage(unitActualShare, annualPrepayment);
@@ -350,6 +358,43 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         });
     };
 
+    // Opt-in "Wert vorschlagen" — fills Anteil Wohnung with property cost ×
+    // living-area share × occupancy fraction, once, only when the landlord
+    // explicitly clicks it. This must never run on its own (e.g. when
+    // actualAmount/budgetAmount changes, or on load) — Anteil Wohnung is a
+    // manual, independent field, and the whole point of this action is that
+    // it only ever proposes a starting point the landlord can still edit or
+    // ignore, never a value that reappears or overwrites silently.
+    const suggestActualShare = useCallback((index: number) => {
+        setCostItems((prev) => {
+            const item = prev[index];
+            if (!item || item.actualAmount === '' || !periodStart || !periodEnd) return prev;
+            const tenancyStart = tenancy?.tenancyStartDate ? new Date(tenancy.tenancyStartDate) : null;
+            const tenancyEnd = tenancy?.tenancyEndDate ? new Date(tenancy.tenancyEndDate) : null;
+            const fraction = occupancyFraction(periodStart, periodEnd, tenancyStart, tenancyEnd);
+            const value = suggestApartmentShare(Number(item.actualAmount) || 0, unitShare, fraction);
+            return prev.map((it, i) => (i === index ? { ...it, actualShareOverride: String(value) } : it));
+        });
+    }, [periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate, unitShare]);
+
+    const suggestBudgetShare = useCallback((index: number) => {
+        setCostItems((prev) => {
+            const item = prev[index];
+            if (!item || item.budgetAmount === '') return prev;
+            const tenancyStart = tenancy?.tenancyStartDate ? new Date(tenancy.tenancyStartDate) : null;
+            const tenancyEnd = tenancy?.tenancyEndDate ? new Date(tenancy.tenancyEndDate) : null;
+            // Wirtschaftsplan has no explicit period fields of its own — it's
+            // always framed as "next year" (see the settlementYear + 1
+            // headers), so the occupancy fraction is computed against that
+            // full projected calendar year.
+            const nextYearStart = new Date(settlementYear + 1, 0, 1);
+            const nextYearEnd = new Date(settlementYear + 1, 11, 31);
+            const fraction = occupancyFraction(nextYearStart, nextYearEnd, tenancyStart, tenancyEnd);
+            const value = suggestApartmentShare(Number(item.budgetAmount) || 0, unitShare, fraction);
+            return prev.map((it, i) => (i === index ? { ...it, budgetShareOverride: String(value) } : it));
+        });
+    }, [tenancy?.tenancyStartDate, tenancy?.tenancyEndDate, unitShare, settlementYear]);
+
     // ── Save ─────────────────────────────────────────────────────────────────
     const handleSave = async () => {
         setIsSaving(true);
@@ -358,6 +403,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             const currentYear = new Date().getFullYear();
             const periodStartStr = periodStart ? format(periodStart, 'yyyy-MM-dd') : format(new Date(currentYear, 0, 1), 'yyyy-MM-dd');
             const periodEndStr = periodEnd ? format(periodEnd, 'yyyy-MM-dd') : format(new Date(currentYear, 11, 31), 'yyyy-MM-dd');
+            if (periodEndStr <= periodStartStr) throw new Error('INVALID_PERIOD');
 
             let activeSettlement = settlement;
             // Once true, `activeSettlement` is a settlement row that didn't
@@ -380,7 +426,20 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 if (!activeSettlement) throw new Error('Konnte Abrechnung nicht anlegen.');
                 setSettlement(activeSettlement);
                 isNewSettlementForThisSave = true;
-            } else if (activeSettlement.periodStart !== periodStartStr || activeSettlement.periodEnd !== periodEndStr) {
+            } else if (
+                // activeSettlement.periodStart/periodEnd come back from the API
+                // as full ISO datetime strings (pg parses a DATE column into a
+                // JS Date, which JSON.stringify renders as e.g.
+                // "2026-01-01T00:00:00.000Z"), never as a bare "yyyy-MM-dd" —
+                // comparing them against periodStartStr/periodEndStr directly
+                // always mismatched, so saving an *unchanged* existing
+                // settlement always took this "period changed" branch and hit
+                // itself as a PERIOD_CONFLICT, blocking every edit. Both sides
+                // must go through the same Date -> 'yyyy-MM-dd' formatting
+                // before comparing.
+                format(new Date(activeSettlement.periodStart), 'yyyy-MM-dd') !== periodStartStr
+                || format(new Date(activeSettlement.periodEnd), 'yyyy-MM-dd') !== periodEndStr
+            ) {
                 // The period was changed away from the settlement that's
                 // loaded. That settlement is a distinct billing period with
                 // its own saved history and must not be overwritten by
@@ -438,10 +497,13 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             if (isNewSettlementForThisSave) void refreshSavedSettlements();
             showToast('Nebenkostenabrechnung gespeichert.', 'success');
         } catch (err) {
+            const code = err instanceof Error ? err.message : null;
             setError(
-                err instanceof Error && err.message === 'PERIOD_CONFLICT'
+                code === 'PERIOD_CONFLICT'
                     ? 'Für diesen Zeitraum existiert bereits eine gespeicherte Abrechnung. Bitte über „Gespeicherte Abrechnungen" dorthin wechseln, um sie zu bearbeiten.'
-                    : 'Die Nebenkostenabrechnung konnte nicht gespeichert werden.',
+                    : code === 'INVALID_PERIOD'
+                        ? 'Die Nebenkostenabrechnung konnte nicht gespeichert werden: Das Enddatum liegt vor dem Startdatum.'
+                        : 'Die Nebenkostenabrechnung konnte nicht gespeichert werden.',
             );
         } finally {
             setIsSaving(false);
@@ -895,7 +957,6 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         pendingDeleteDoc, deletingDocId, requestDeleteDoc, cancelDeleteDoc, confirmDeleteDoc,
         // computed
         isEditing, unitShare, totalArea,
-        totalActualCostsAll, totalBudgetCostsAll,
         totalActualAllocable, totalBudgetAllocable,
         actualSplit, budgetSplit,
         unitActualShare, unitBudgetShare,
@@ -905,6 +966,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         canGeneratePdf, canGenerateAdjustmentDocx, canApplyPrepayment,
         // handlers
         updateCostItemField, addCostItem, removeCostItem,
+        suggestActualShare, suggestBudgetShare,
         handleSave, handleUploadSourceDocument, handleViewSourceDocument, handleRemoveSourceDocument,
         handleGeneratePdf, handlePreview, closePreview,
         handleGenerateAdjustmentDocx, handlePreviewAdjustment, closeAdjustmentPreview,
