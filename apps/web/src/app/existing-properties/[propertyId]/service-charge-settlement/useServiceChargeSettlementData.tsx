@@ -11,6 +11,7 @@ import {
 } from '@/lib/supabase/service_charge_cost_item.supabase';
 import {
     createSettlement,
+    deleteSettlement,
     getSettlementByPeriod,
     getSettlementSourceDocumentUrl,
     getSettlementsByProperty,
@@ -18,7 +19,7 @@ import {
     updateSettlement,
     uploadSettlementSourceDocument,
 } from '@/lib/supabase/service_charge_settlement.supabase';
-import { updateTenancy } from '@/lib/supabase/tenancy.supabase';
+import { getTenanciesByUnit, updateTenancy } from '@/lib/supabase/tenancy.supabase';
 import { addAdjustmentHistoryEntry, getAdjustmentHistoryByTenancy } from '@/lib/supabase/tenancy_adjustment_history.supabase';
 import { deleteTenancyDocument, getTenancyDocumentsByTenancy, getTenancyDocumentUrl, uploadTenancyDocument } from '@/lib/supabase/tenancy_document.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
@@ -32,6 +33,7 @@ import {
     compareSettlementCoverage,
     defaultSettlementPeriod,
     isFullCalendarYear,
+    isPeriodTooLong,
     occupancyFraction,
     prorateAnnualPrepayment,
     splitByAllocable,
@@ -119,6 +121,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const [documents, setDocuments] = useState<TenancyDocument[]>([]);
     const [pendingDeleteDoc, setPendingDeleteDoc] = useState<TenancyDocument | null>(null);
     const [deletingDocId, setDeletingDocId] = useState<number | null>(null);
+    const [pendingDeleteSettlement, setPendingDeleteSettlement] = useState(false);
+    const [isDeletingSettlement, setIsDeletingSettlement] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingSource, setIsUploadingSource] = useState(false);
@@ -229,6 +233,16 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         return () => { cancelled = true; };
     }, [user]);
 
+    // Every tenancy this unit has ever had — backs the "Mietzeitraum
+    // übernehmen" menu below, so a landlord can pick a *past* tenant's
+    // period (not just the current one) when composing a settlement.
+    const [unitTenancies, setUnitTenancies] = useState<Tenancy[]>([]);
+    useEffect(() => {
+        let cancelled = false;
+        getTenanciesByUnit(unit.propertyUnitId).then((rows) => { if (!cancelled) setUnitTenancies(rows); });
+        return () => { cancelled = true; };
+    }, [unit.propertyUnitId]);
+
     const isEditing = !settlement || serializeCostItems(costItems, periodStart, periodEnd) !== originalSnapshot;
 
     // Any navigation away from an unsaved edit is routed through here so it
@@ -256,6 +270,11 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             setPeriodStart(new Date(year, 0, 1));
             setPeriodEnd(new Date(year, 11, 31));
         }
+    };
+
+    const applyTenancyPeriodSuggestion = (suggestion: { startDateStr: string; endDateStr: string }) => {
+        setPeriodStart(new Date(suggestion.startDateStr));
+        setPeriodEnd(new Date(suggestion.endDateStr));
     };
     // Navigating to a different year means "load that year's settlement" —
     // guarded the same way PropertyData.tsx guards route navigation away
@@ -356,6 +375,40 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     const settlementYear = periodEnd ? periodEnd.getFullYear() : new Date().getFullYear();
 
+    // Individueller Zeitraum's most common real use case is a final/partial
+    // settlement bounded to exactly how long a given tenant lived there
+    // DURING the year currently being viewed — surfaced as one-click
+    // starting points (one per tenant this unit has ever had, not just the
+    // current one — a landlord composing a settlement for a past tenant
+    // needs their period, not whoever rents the unit today) instead of
+    // leaving Von/Bis blank to type in by hand. Never applied automatically;
+    // only ever offered. Each is clipped to [settlementYear Jan 1,
+    // settlementYear Dec 31] rather than that tenancy's raw start/end: a
+    // long-standing tenant who moved in years ago must not turn into a
+    // multi-year "settlement" spanning their entire tenancy —
+    // Nebenkostenabrechnung is always a single calendar year (or the
+    // partial year of an actual move-in/move-out within it).
+    const tenancyPeriodSuggestions = unitTenancies
+        .map((t) => {
+            if (!t.tenancyStartDate) return null;
+            const yearStart = new Date(settlementYear, 0, 1);
+            const yearEnd = new Date(settlementYear, 11, 31);
+            const tenancyStart = new Date(t.tenancyStartDate);
+            const tenancyEnd = t.tenancyEndDate ? new Date(t.tenancyEndDate) : null;
+            const suggestedStart = tenancyStart > yearStart ? tenancyStart : yearStart;
+            const suggestedEnd = tenancyEnd && tenancyEnd < yearEnd ? tenancyEnd : yearEnd;
+            if (suggestedEnd < suggestedStart) return null; // doesn't overlap this year at all
+            return {
+                tenancyId: t.tenancyId,
+                label: `${t.tenantFirstName ?? ''} ${t.tenantLastName ?? ''}`.trim() || 'Mieter',
+                startDateStr: format(suggestedStart, 'yyyy-MM-dd'),
+                endDateStr: format(suggestedEnd, 'yyyy-MM-dd'),
+            };
+        })
+        .filter((s): s is { tenancyId: number; label: string; startDateStr: string; endDateStr: string } => s != null)
+        // Most relevant (current/most recently started) tenant first.
+        .sort((a, b) => b.startDateStr.localeCompare(a.startDateStr));
+
     // Shown as the avatar+name on the document box rows — same tenant the
     // generated Nebenkostenabrechnung/Anpassungsschreiben actually goes to.
     const tenantLabel = tenancy ? `${tenancy.tenantFirstName ?? ''} ${tenancy.tenantLastName ?? ''}`.trim() || 'Mieter' : undefined;
@@ -414,15 +467,41 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         });
     }, [tenancy?.tenancyStartDate, tenancy?.tenancyEndDate, unitShare, settlementYear]);
 
+    // Bulk version of the two suggestions above — fills in every row's
+    // Anteil Wohnung at once, but (unlike the per-row buttons) only where
+    // it's still empty: an already-entered value, manual or previously
+    // suggested, is left untouched rather than recalculated over it.
+    const suggestAllShares = useCallback(() => {
+        if (!periodStart || !periodEnd) return;
+        const tenancyStart = tenancy?.tenancyStartDate ? new Date(tenancy.tenancyStartDate) : null;
+        const tenancyEnd = tenancy?.tenancyEndDate ? new Date(tenancy.tenancyEndDate) : null;
+        const actualFraction = occupancyFraction(periodStart, periodEnd, tenancyStart, tenancyEnd);
+        const nextYearStart = new Date(settlementYear + 1, 0, 1);
+        const nextYearEnd = new Date(settlementYear + 1, 11, 31);
+        const budgetFraction = occupancyFraction(nextYearStart, nextYearEnd, tenancyStart, tenancyEnd);
+        setCostItems((prev) => prev.map((item) => ({
+            ...item,
+            actualShareOverride: item.actualShareOverride === '' && item.actualAmount !== ''
+                ? String(suggestApartmentShare(Number(item.actualAmount) || 0, unitShare, actualFraction))
+                : item.actualShareOverride,
+            budgetShareOverride: item.budgetShareOverride === '' && item.budgetAmount !== ''
+                ? String(suggestApartmentShare(Number(item.budgetAmount) || 0, unitShare, budgetFraction))
+                : item.budgetShareOverride,
+        })));
+    }, [periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate, unitShare, settlementYear]);
+
     // ── Save ─────────────────────────────────────────────────────────────────
     const handleSave = async () => {
         setIsSaving(true);
         setError(null);
         try {
             const currentYear = new Date().getFullYear();
-            const periodStartStr = periodStart ? format(periodStart, 'yyyy-MM-dd') : format(new Date(currentYear, 0, 1), 'yyyy-MM-dd');
-            const periodEndStr = periodEnd ? format(periodEnd, 'yyyy-MM-dd') : format(new Date(currentYear, 11, 31), 'yyyy-MM-dd');
+            const resolvedPeriodStart = periodStart ?? new Date(currentYear, 0, 1);
+            const resolvedPeriodEnd = periodEnd ?? new Date(currentYear, 11, 31);
+            const periodStartStr = format(resolvedPeriodStart, 'yyyy-MM-dd');
+            const periodEndStr = format(resolvedPeriodEnd, 'yyyy-MM-dd');
             if (periodEndStr <= periodStartStr) throw new Error('INVALID_PERIOD');
+            if (isPeriodTooLong(resolvedPeriodStart, resolvedPeriodEnd)) throw new Error('PERIOD_TOO_LONG');
 
             let activeSettlement = settlement;
             // Once true, `activeSettlement` is a settlement row that didn't
@@ -522,10 +601,36 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                     ? 'Für diesen Zeitraum existiert bereits eine gespeicherte Abrechnung. Bitte über „Gespeicherte Abrechnungen" dorthin wechseln, um sie zu bearbeiten.'
                     : code === 'INVALID_PERIOD'
                         ? 'Die Nebenkostenabrechnung konnte nicht gespeichert werden: Das Enddatum liegt vor dem Startdatum.'
-                        : 'Die Nebenkostenabrechnung konnte nicht gespeichert werden.',
+                        : code === 'PERIOD_TOO_LONG'
+                            ? 'Die Nebenkostenabrechnung konnte nicht gespeichert werden: Der Abrechnungszeitraum darf maximal 12 Monate umfassen (§ 556 Abs. 3 BGB).'
+                            : 'Die Nebenkostenabrechnung konnte nicht gespeichert werden.',
             );
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    // ── Delete a saved settlement ────────────────────────────────────────────
+    // Deletes the settlement currently loaded (browse to any saved period via
+    // "Gespeicherte Abrechnungen" first, then delete that one) — its cost
+    // items cascade-delete with it at the DB level (ON DELETE CASCADE).
+    const requestDeleteSettlement = () => setPendingDeleteSettlement(true);
+    const cancelDeleteSettlement = () => setPendingDeleteSettlement(false);
+    const confirmDeleteSettlement = async () => {
+        if (!settlement) return;
+        setIsDeletingSettlement(true);
+        setError(null);
+        try {
+            const ok = await deleteSettlement(settlement.serviceChargeSettlementId);
+            if (!ok) throw new Error('deleteSettlement failed');
+            setPendingDeleteSettlement(false);
+            showToast('Nebenkostenabrechnung gelöscht.', 'success');
+            await refreshSavedSettlements();
+            await load();
+        } catch {
+            setError('Die Nebenkostenabrechnung konnte nicht gelöscht werden.');
+        } finally {
+            setIsDeletingSettlement(false);
         }
     };
 
@@ -964,6 +1069,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         isGeneratingPdf, isGeneratingAdjustmentDocx, isApplyingPrepayment,
         settlement, periodStart, setPeriodStart, periodEnd, setPeriodEnd,
         periodMode, setPeriodMode, setSettlementYear,
+        tenancyPeriodSuggestions, applyTenancyPeriodSuggestion,
         pendingPeriod, confirmPeriodSwitch, cancelPeriodSwitch,
         pendingHref, goTo, confirmDiscard, cancelDiscard,
         savedSettlements, switchToPeriod,
@@ -975,6 +1081,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         requestStatementUpload, requestAdjustmentUpload,
         handleViewDocument, handleDownloadDocument,
         pendingDeleteDoc, deletingDocId, requestDeleteDoc, cancelDeleteDoc, confirmDeleteDoc,
+        pendingDeleteSettlement, isDeletingSettlement, requestDeleteSettlement, cancelDeleteSettlement, confirmDeleteSettlement,
         // computed
         isEditing, unitShare, totalArea,
         totalActualAllocable, totalBudgetAllocable,
@@ -986,7 +1093,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         canGeneratePdf, canGenerateAdjustmentDocx, canApplyPrepayment,
         // handlers
         updateCostItemField, addCostItem, removeCostItem,
-        suggestActualShare, suggestBudgetShare,
+        suggestActualShare, suggestBudgetShare, suggestAllShares,
         handleSave, handleUploadSourceDocument, handleViewSourceDocument, handleRemoveSourceDocument,
         handleGeneratePdf, handlePreview, closePreview,
         handleGenerateAdjustmentDocx, handlePreviewAdjustment, closeAdjustmentPreview,

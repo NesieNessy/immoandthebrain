@@ -10,6 +10,18 @@ export function isFullCalendarYear(start: Date, end: Date): boolean {
 }
 
 /**
+ * A Nebenkostenabrechnung's Abrechnungszeitraum must never exceed 12 months
+ * (§ 556 Abs. 3 BGB) — a period longer than that isn't a valid settlement
+ * period at all, regardless of what the underlying proration math would
+ * otherwise happily compute for an arbitrarily long span (e.g. mistakenly
+ * covering a tenant's entire multi-year tenancy instead of one year of it).
+ */
+export function isPeriodTooLong(start: Date, end: Date): boolean {
+    const maxEnd = new Date(start.getFullYear() + 1, start.getMonth(), start.getDate() - 1);
+    return end > maxEnd;
+}
+
+/**
  * Default Abrechnungszeitraum for a brand-new settlement: Jan 1 – Dec 31 of
  * `currentYear`, unless the tenant has a move-out date, in which case the
  * period instead runs Jan 1 – the move-out date of *that* date's year (a

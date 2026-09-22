@@ -41,8 +41,32 @@ import { expect, test } from '@playwright/test';
  * settlement rather than overwriting the one just saved, and that switching
  * years with an unsaved edit pending asks for confirmation first.
  *
+ * Further fixes covered by the tests below (each a separate `test()` so a
+ * failure in one doesn't hide the others, using distinct years/periods per
+ * test to avoid colliding with settlements other tests in this file save):
+ *
+ * - "Wert vorschlagen" (per-row and "Alle Werte vorschlagen" bulk action)
+ *   computes Anteil Wohnung as amount × living-area share × occupancy
+ *   fraction — clipped to the tenancy's actual start/end, not the whole
+ *   settlement period — and only ever fills an *empty* field, never
+ *   overwriting one that already has a value (manual or previously
+ *   suggested).
+ * - A saved settlement can now be deleted ("Abrechnung löschen"), which
+ *   cascade-deletes its cost items and leaves the page on a fresh draft.
+ * - Saving with an end date before the start date used to fail with the
+ *   generic "konnte nicht gespeichert werden" message; it now names the
+ *   actual reason.
+ * - Leaving the page entirely (the "Zurück" button, a breadcrumb link) with
+ *   an unsaved edit used to navigate away silently; both are now guarded
+ *   the same way year-switching already was.
+ * - A unit with no current tenancy ("Unvermietet") used to still show
+ *   tenant-implying labels like "Nachzahlung durch Mieter" computed against
+ *   a nonexistent tenant; it now shows neutral placeholders instead, and
+ *   the whole "Anpassung Nebenkostenvorauszahlung" section is replaced with
+ *   an explanatory note.
+ *
  * Not part of the shared fixture (fixtures/seed.ts) — creates its own
- * property/unit/tenancy so it can't disturb the other smoke specs.
+ * property/units/tenancy so it can't disturb the other smoke specs.
  */
 const BYPASS_USER_ID = '00000000-0000-4000-8000-000000000001';
 const STREET = 'E2E Nebenkostenabrechnung-Straße';
@@ -57,6 +81,7 @@ function requireDatabaseUrl(): string {
 
 let propertyId: number;
 let unitId: number;
+let unitId2: number;
 
 test.beforeAll(async () => {
     const client = new Client({ connectionString: requireDatabaseUrl() });
@@ -82,11 +107,14 @@ test.beforeAll(async () => {
         );
         unitId = unitResult.rows[0].property_unit_id as number;
 
-        await client.query(
+        // Deliberately left with no tenancy at all — the "Unvermietet" case.
+        const unit2Result = await client.query(
             `INSERT INTO property_unit (property_id, unit_label, sort_order, usage_type, living_area_m2)
-             VALUES ($1, 'Whg. 2', 1, 'WOHNUNG', 40)`,
+             VALUES ($1, 'Whg. 2', 1, 'WOHNUNG', 40)
+             RETURNING property_unit_id`,
             [propertyId],
         );
+        unitId2 = unit2Result.rows[0].property_unit_id as number;
 
         const tenancyResult = await client.query(
             `INSERT INTO tenancy (property_id, property_unit_id, is_rented, tenancy_start_date, cold_rent, misc_rent, tenant_first_name, tenant_last_name, deposit)
@@ -239,4 +267,158 @@ test('filling in a cost item and saving persists the settlement and computes the
     } finally {
         await secondClient.end();
     }
+});
+
+test('"Alle Werte vorschlagen" fills only empty Anteil Wohnung fields, computed from living-area share and occupancy', async ({ page }) => {
+    // A year the tenancy (started 2024-01-01, still ongoing) fully covers,
+    // and far enough from currentYear/currentYear+1 (used by the test above)
+    // to save into its own, unrelated settlement.
+    const targetYear = new Date().getFullYear() + 3;
+    await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId}`);
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
+    await expect(page.getByText(`Abrechnungsjahr ${targetYear}`).first()).toBeVisible();
+
+    const rows = page.locator('tbody tr');
+    const row1Numbers = rows.nth(0).locator('input[type="number"]');
+    const row2Numbers = rows.nth(1).locator('input[type="number"]');
+
+    // Row 1 (Grundsteuer): only the amounts are filled in — Anteil Wohnung
+    // starts empty and should be picked up by the bulk suggestion.
+    await row1Numbers.nth(0).fill('1000');
+    await row1Numbers.nth(2).fill('1100');
+    // Row 2 (Wasserversorgung): an amount AND a manually entered Anteil
+    // Wohnung — the bulk action must leave this one untouched.
+    await row2Numbers.nth(0).fill('500');
+    await row2Numbers.nth(1).fill('42');
+
+    await page.getByRole('button', { name: 'Alle Werte vorschlagen' }).click();
+
+    // Full-year occupancy (tenancy started years before this period and has
+    // no end date) at a 60/100 m² share -> 1000 * 0.6 = 600, 1100 * 0.6 = 660.
+    await expect(row1Numbers.nth(1)).toHaveValue('600');
+    await expect(row1Numbers.nth(3)).toHaveValue('660');
+    // The manually entered value on row 2 must survive unchanged.
+    await expect(row2Numbers.nth(1)).toHaveValue('42');
+
+    await page.getByRole('button', { name: 'Abrechnung speichern' }).click();
+    await expect(page.getByText('Nebenkostenabrechnung gespeichert.')).toBeVisible();
+});
+
+test('a saved settlement can be deleted, and its cost items are removed with it', async ({ page }) => {
+    const targetYear = new Date().getFullYear() + 4;
+    await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId}`);
+    for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
+    await expect(page.getByText(`Abrechnungsjahr ${targetYear}`).first()).toBeVisible();
+
+    await expect(page.getByRole('button', { name: 'Abrechnung löschen' })).toHaveCount(0);
+
+    await page.locator('tbody tr').first().locator('input[type="number"]').first().fill('300');
+    await page.getByRole('button', { name: 'Abrechnung speichern' }).click();
+    await expect(page.getByText('Nebenkostenabrechnung gespeichert.')).toBeVisible();
+
+    const client = new Client({ connectionString: requireDatabaseUrl() });
+    await client.connect();
+    let settlementId: number;
+    try {
+        const { rows } = await client.query(
+            `SELECT service_charge_settlement_id FROM service_charge_settlement
+             WHERE property_id = $1 AND period_start = $2`,
+            [propertyId, `${targetYear}-01-01`],
+        );
+        expect(rows).toHaveLength(1);
+        settlementId = rows[0].service_charge_settlement_id as number;
+    } finally {
+        await client.end();
+    }
+
+    // Deleting must now be possible from the page for a saved settlement.
+    await expect(page.getByRole('button', { name: 'Abrechnung löschen' })).toBeVisible();
+    await page.getByRole('button', { name: 'Abrechnung löschen' }).click();
+    const confirmDialog = page.getByRole('dialog', { name: 'Abrechnung löschen?' });
+    await expect(confirmDialog).toBeVisible();
+    await confirmDialog.getByRole('button', { name: 'Löschen' }).click();
+    await expect(page.getByText('Nebenkostenabrechnung gelöscht.')).toBeVisible();
+
+    // The page falls back to a fresh draft — no settlement loaded anymore.
+    await expect(page.getByRole('button', { name: 'Abrechnung löschen' })).toHaveCount(0);
+
+    const secondClient = new Client({ connectionString: requireDatabaseUrl() });
+    await secondClient.connect();
+    try {
+        const { rows: settlementRows } = await secondClient.query(
+            'SELECT service_charge_settlement_id FROM service_charge_settlement WHERE service_charge_settlement_id = $1',
+            [settlementId],
+        );
+        expect(settlementRows).toHaveLength(0);
+        // ON DELETE CASCADE must have taken the cost items with it.
+        const { rows: costItemRows } = await secondClient.query(
+            'SELECT service_charge_cost_item_id FROM service_charge_cost_item WHERE service_charge_settlement_id = $1',
+            [settlementId],
+        );
+        expect(costItemRows).toHaveLength(0);
+    } finally {
+        await secondClient.end();
+    }
+});
+
+test('an end date before the start date names the actual reason instead of a generic save error', async ({ page }) => {
+    await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId}`);
+    // force: true — the visible label sometimes still reports as
+    // out-of-viewport right after navigation while the rest of the page
+    // (units/tenancy fetch) is still settling; the switch itself is
+    // otherwise a completely ordinary, always-clickable control.
+    await page.getByRole('switch', { name: 'Individueller Zeitraum' }).click({ force: true });
+
+    await page.getByRole('textbox', { name: 'Von' }).fill('01.01.2031');
+    await page.getByRole('textbox', { name: 'Bis' }).fill('31.12.2030');
+    await page.getByRole('button', { name: 'Abrechnung speichern' }).click();
+
+    await expect(page.getByText('Das Enddatum liegt vor dem Startdatum')).toBeVisible();
+    // Nothing must have been persisted for this (invalid) period.
+    const client = new Client({ connectionString: requireDatabaseUrl() });
+    await client.connect();
+    try {
+        const { rows } = await client.query(
+            `SELECT 1 FROM service_charge_settlement WHERE property_id = $1 AND period_start = '2031-01-01'`,
+            [propertyId],
+        );
+        expect(rows).toHaveLength(0);
+    } finally {
+        await client.end();
+    }
+});
+
+test('leaving the page with unsaved changes (Zurück, breadcrumb) asks for confirmation', async ({ page }) => {
+    const targetYear = new Date().getFullYear() + 6;
+    await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId}`);
+    for (let i = 0; i < 6; i++) await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
+    await expect(page.getByText(`Abrechnungsjahr ${targetYear}`).first()).toBeVisible();
+
+    await page.locator('tbody tr').first().locator('input[type="number"]').first().fill('123');
+
+    // "Zurück" must not navigate away silently.
+    await page.getByRole('button', { name: 'Zurück' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Änderungen verwerfen?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Abbrechen' }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`service-charge-settlement/${unitId}$`));
+
+    // A breadcrumb link must be guarded the same way.
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Bestandsobjekte' }).click();
+    const dialog2 = page.getByRole('dialog', { name: 'Änderungen verwerfen?' });
+    await expect(dialog2).toBeVisible();
+    await dialog2.getByRole('button', { name: 'Verwerfen' }).click();
+    await expect(page).toHaveURL(/\/existing-properties$/);
+});
+
+test('a unit with no current tenant ("Unvermietet") shows neutral placeholders, not Nachzahlung/Guthaben wording', async ({ page }) => {
+    await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId2}`);
+    await expect(page.getByText('Nebenkostenabrechnung')).toBeVisible();
+
+    await expect(page.getByText('Kein Mieter zu diesem Zeitraum')).toBeVisible();
+    await expect(page.getByText('Nachzahlung/Guthaben ohne Mieter nicht anwendbar')).toBeVisible();
+    await expect(page.getByText(/eine Anpassung der Nebenkostenvorauszahlung ist erst nach Vermietung möglich/)).toBeVisible();
+    // Must never claim there's a tenant to bill when there isn't one.
+    await expect(page.getByText('Nachzahlung durch Mieter')).toHaveCount(0);
 });

@@ -21,6 +21,7 @@ import {
     type BreadcrumbItem,
     type MenuItem,
 } from '@/components/ui';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import { isFullCalendarYear } from '@/lib/serviceCharge/settlementMath';
@@ -98,15 +99,27 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                 checked={data.periodMode === 'custom'}
                                 onCheckedChange={(checked) => data.setPeriodMode(checked ? 'custom' : 'year')}
                             />
-                            {savedSettlementMenuItems.length > 0 && (
-                                <Button
-                                    label="Gespeicherte Abrechnungen"
-                                    icon={<Icons.History className="w-4 h-4" />}
-                                    variant="outline"
-                                    size="sm"
-                                    menuItems={savedSettlementMenuItems}
-                                />
-                            )}
+                            <div className="flex items-center gap-2">
+                                {savedSettlementMenuItems.length > 0 && (
+                                    <Button
+                                        label="Gespeicherte Abrechnungen"
+                                        icon={<Icons.History className="w-4 h-4" />}
+                                        variant="outline"
+                                        size="sm"
+                                        menuItems={savedSettlementMenuItems}
+                                    />
+                                )}
+                                {data.settlement && (
+                                    <Button
+                                        label="Abrechnung löschen"
+                                        icon={<Icons.Trash2 className="w-4 h-4" />}
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-destructive/40 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                                        onClick={data.requestDeleteSettlement}
+                                    />
+                                )}
+                            </div>
                         </div>
                         {data.periodMode === 'year' ? (
                             <div className="mt-3 flex items-center gap-2">
@@ -139,6 +152,40 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                 <div className="w-40">
                                     <CalendarField label="Bis" value={data.periodEnd} onChange={data.setPeriodEnd} />
                                 </div>
+                                {data.tenancyPeriodSuggestions.length > 0 && (
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <button
+                                                type="button"
+                                                aria-label="Mietzeitraum übernehmen"
+                                                title="Mietzeitraum eines Mieters übernehmen"
+                                                className="h-[42px] w-[42px] flex items-center justify-center rounded-md border border-primary/30 text-primary hover:bg-primary/10 transition-colors cursor-pointer shrink-0"
+                                            >
+                                                <Icons.User className="w-4 h-4" />
+                                            </button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-64 p-2" align="end">
+                                            <p className="px-2 pt-1 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                                Mietzeitraum übernehmen
+                                            </p>
+                                            <div className="flex flex-col gap-1">
+                                                {data.tenancyPeriodSuggestions.map((suggestion) => (
+                                                    <button
+                                                        key={suggestion.tenancyId}
+                                                        type="button"
+                                                        onClick={() => data.applyTenancyPeriodSuggestion(suggestion)}
+                                                        className="flex flex-col items-start gap-0.5 px-3 py-2 text-sm rounded-md text-left cursor-pointer hover:bg-muted focus:bg-muted focus:outline-none transition-colors"
+                                                    >
+                                                        <span className="font-medium text-foreground">{suggestion.label}</span>
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {formatDeDate(suggestion.startDateStr)} – {formatDeDate(suggestion.endDateStr)}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </PopoverContent>
+                                    </Popover>
+                                )}
                             </div>
                         )}
                     </div>
@@ -253,7 +300,16 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                     </div>
 
                     {/* Cost item table */}
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            label="Alle Werte vorschlagen"
+                            icon={<Icons.Calculator className="w-4 h-4" />}
+                            variant="outline"
+                            size="sm"
+                            disabled={!data.costItems.some((item) => item.actualAmount !== '' || item.budgetAmount !== '')}
+                            onClick={data.suggestAllShares}
+                            title="Füllt Anteil Wohnung für jede Position mit Gesamtbetrag, die noch leer ist — bereits erfasste Werte bleiben unverändert."
+                        />
                         <Button
                             label="Kostenposition hinzufügen"
                             icon={<Icons.Plus className="w-4 h-4" />}
@@ -614,6 +670,17 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
             >
                 <p className="text-sm text-muted-foreground">
                     Möchtest du <span className="font-medium text-foreground">{data.pendingDeleteDoc?.fileName}</span> wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+                </p>
+            </ConfirmDeleteModal>
+            <ConfirmDeleteModal
+                open={data.pendingDeleteSettlement}
+                onCancel={data.cancelDeleteSettlement}
+                onConfirm={() => void data.confirmDeleteSettlement()}
+                title="Abrechnung löschen?"
+                confirmDisabled={data.isDeletingSettlement}
+            >
+                <p className="text-sm text-muted-foreground">
+                    Möchtest du die {data.settlement && settlementPeriodLabel(data.settlement)} wirklich löschen? Alle Kostenpositionen dieser Abrechnung werden mitgelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
                 </p>
             </ConfirmDeleteModal>
 

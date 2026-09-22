@@ -5,6 +5,7 @@ import {
     computeUnitSettlementSummary,
     defaultSettlementPeriod,
     isFullCalendarYear,
+    isPeriodTooLong,
     occupancyFraction,
     prorateAnnualPrepayment,
     splitByAllocable,
@@ -279,6 +280,28 @@ describe('isFullCalendarYear', () => {
 
     it('is false when start and end fall in different years', () => {
         expect(isFullCalendarYear(new Date(2025, 0, 1), new Date(2026, 11, 31))).toBe(false);
+    });
+});
+
+describe('isPeriodTooLong', () => {
+    it('is false for a plain calendar year', () => {
+        expect(isPeriodTooLong(new Date(2026, 0, 1), new Date(2026, 11, 31))).toBe(false);
+    });
+
+    it('is false for exactly 12 months from an arbitrary start date', () => {
+        expect(isPeriodTooLong(new Date(2018, 5, 1), new Date(2019, 4, 31))).toBe(false);
+    });
+
+    it('is true for one day more than 12 months', () => {
+        expect(isPeriodTooLong(new Date(2018, 5, 1), new Date(2019, 5, 1))).toBe(true);
+    });
+
+    it('is true for a period spanning several years (a tenant\'s entire multi-year tenancy, not one settlement year of it)', () => {
+        expect(isPeriodTooLong(new Date(2018, 5, 1), new Date(2026, 8, 22))).toBe(true);
+    });
+
+    it('is false for a short partial-year period', () => {
+        expect(isPeriodTooLong(new Date(2026, 3, 1), new Date(2026, 8, 22))).toBe(false);
     });
 });
 
