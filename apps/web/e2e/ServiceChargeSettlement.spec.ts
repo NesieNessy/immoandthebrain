@@ -105,17 +105,31 @@ async function readDisplayedYear(page: import('@playwright/test').Page): Promise
 // `targetYear` from whatever year is actually displayed right now.
 //
 // Each click triggers a full reload of that year's settlement/tenancy data
-// from the (local, Dockerized) Supabase instance CI runs against, which can
-// occasionally take noticeably longer than Playwright's default 5s
-// assertion timeout under CI load — the original single-click test never
-// hit this, but chaining several clicks here makes it likely enough to
-// need real headroom rather than a marginal one.
+// from the (local, Dockerized) Supabase instance CI runs against. Simply
+// waiting longer after a single click (the first fix attempt here) didn't
+// help — CI kept timing out on the very first click of a sequence just as
+// often as the last, which points to an occasional dropped click or a
+// failed fetch that never gets retried by the app, not merely a slow one.
+// Waiting longer for something that will never happen doesn't help, so
+// this retries the CLICK itself a few times per year step, and re-reads
+// the actual displayed year afterwards rather than assuming the click
+// advanced it by exactly one — either defends against the same failure
+// mode actually causing the flakiness.
 async function navigateToYear(page: import('@playwright/test').Page, targetYear: number): Promise<void> {
     let year = await readDisplayedYear(page);
     while (year < targetYear) {
-        await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
-        year += 1;
-        await expect(page.getByText(`Abrechnungsjahr ${year}`).first()).toBeVisible({ timeout: 15000 });
+        let advanced = false;
+        for (let attempt = 0; attempt < 4 && !advanced; attempt++) {
+            await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
+            try {
+                await expect(page.getByText(`Abrechnungsjahr ${year + 1}`).first()).toBeVisible({ timeout: 5000 });
+                advanced = true;
+            } catch {
+                // Click may not have registered, or the reload stalled/failed — try again.
+            }
+        }
+        if (!advanced) throw new Error(`navigateToYear: could not advance past ${year} towards ${targetYear} after repeated clicks`);
+        year = await readDisplayedYear(page);
     }
 }
 

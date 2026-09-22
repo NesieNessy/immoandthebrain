@@ -25,7 +25,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import { isFullCalendarYear } from '@/lib/serviceCharge/settlementMath';
-import { formatDeDate } from '@/lib/utils';
+import { cn, formatDeDate } from '@/lib/utils';
 import type { Property, PropertyUnit, ServiceChargeSettlement } from '@immoandthebrain/types';
 import { useMemo, useRef } from 'react';
 import { Sparkles } from 'lucide-react';
@@ -339,7 +339,27 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
-                                    {data.costItems.map((item, index) => (
+                                    {data.costItems.map((item, index) => {
+                                        const actualShareExceedsTotal = item.actualAmount !== '' && item.actualShareOverride !== '' && Number(item.actualShareOverride) > Number(item.actualAmount);
+                                        const budgetShareExceedsTotal = item.budgetAmount !== '' && item.budgetShareOverride !== '' && Number(item.budgetShareOverride) > Number(item.budgetAmount);
+                                        // Gesamtobjekt and Anteil Wohnung are a pair, per column — filling
+                                        // one without the other is always an incomplete entry, never a
+                                        // valid state to save.
+                                        const actualPairIncomplete = (item.actualAmount !== '') !== (item.actualShareOverride !== '');
+                                        const budgetPairIncomplete = (item.budgetAmount !== '') !== (item.budgetShareOverride !== '');
+                                        const actualAmountMissing = actualPairIncomplete && item.actualAmount === '';
+                                        const budgetAmountMissing = budgetPairIncomplete && item.budgetAmount === '';
+                                        const actualShareIssue = actualShareExceedsTotal
+                                            ? 'Anteil Wohnung ist höher als Gesamtobjekt'
+                                            : actualPairIncomplete && item.actualShareOverride === ''
+                                                ? 'Anteil Wohnung fehlt'
+                                                : null;
+                                        const budgetShareIssue = budgetShareExceedsTotal
+                                            ? 'Anteil Wohnung ist höher als Gesamtobjekt'
+                                            : budgetPairIncomplete && item.budgetShareOverride === ''
+                                                ? 'Anteil Wohnung fehlt'
+                                                : null;
+                                        return (
                                         <tr key={item.id ?? `new-${index}`}>
                                             <td className="px-3 py-2 min-w-[220px]">
                                                 <TextField
@@ -363,6 +383,9 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     value={item.actualAmount}
                                                     onChange={(e) => data.updateCostItemField(index, { actualAmount: e.target.value })}
                                                     min={0}
+                                                    className={cn(actualAmountMissing && 'border-destructive focus:ring-destructive/50')}
+                                                    aria-invalid={actualAmountMissing}
+                                                    title={actualAmountMissing ? 'Gesamtobjekt-Betrag fehlt' : undefined}
                                                 />
                                             </td>
                                             <td className="px-3 py-2 w-36">
@@ -373,18 +396,25 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                         onChange={(e) => data.updateCostItemField(index, { actualShareOverride: e.target.value })}
                                                         min={0}
                                                         hideStepper
-                                                        className="pr-11"
+                                                        className={cn('pr-11', actualShareIssue && 'border-destructive focus:ring-destructive/50')}
+                                                        aria-invalid={!!actualShareIssue}
                                                     />
                                                     <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                                                        <span className="text-muted-foreground text-xs">€</span>
+                                                        {actualShareIssue ? (
+                                                            <span title={actualShareIssue}>
+                                                                <Icons.AlertTriangle className="w-3.5 h-3.5 text-destructive" aria-label={actualShareIssue} />
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-muted-foreground text-xs">€</span>
+                                                        )}
                                                         <button
                                                             type="button"
-                                                            onClick={() => data.suggestRowShares(index)}
-                                                            disabled={data.unitShare === 0 || (item.actualAmount === '' && item.budgetAmount === '')}
+                                                            onClick={() => data.suggestRowShare(index, 'actual')}
+                                                            disabled={data.unitShare === 0 || item.actualAmount === ''}
                                                             aria-label="Wert vorschlagen"
                                                             title={data.unitShare === 0
                                                                 ? 'Für diese Wohnung ist keine Wohnfläche hinterlegt — bitte zuerst unter Objektdaten die Wohnfläche eintragen.'
-                                                                : 'Wert vorschlagen: Wohnflächenanteil × Mietzeitraum (füllt Abrechnung und Wirtschaftsplan)'}
+                                                                : 'Wert vorschlagen: Wohnflächenanteil × Mietzeitraum (nur dieses Feld)'}
                                                             className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                                         >
                                                             <Icons.Calculator className="w-3.5 h-3.5" />
@@ -399,6 +429,9 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     value={item.budgetAmount}
                                                     onChange={(e) => data.updateCostItemField(index, { budgetAmount: e.target.value })}
                                                     min={0}
+                                                    className={cn(budgetAmountMissing && 'border-destructive focus:ring-destructive/50')}
+                                                    aria-invalid={budgetAmountMissing}
+                                                    title={budgetAmountMissing ? 'Gesamtobjekt-Betrag fehlt' : undefined}
                                                 />
                                             </td>
                                             <td className="px-3 py-2 w-36">
@@ -409,18 +442,25 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                         onChange={(e) => data.updateCostItemField(index, { budgetShareOverride: e.target.value })}
                                                         min={0}
                                                         hideStepper
-                                                        className="pr-11"
+                                                        className={cn('pr-11', budgetShareIssue && 'border-destructive focus:ring-destructive/50')}
+                                                        aria-invalid={!!budgetShareIssue}
                                                     />
                                                     <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                                                        <span className="text-muted-foreground text-xs">€</span>
+                                                        {budgetShareIssue ? (
+                                                            <span title={budgetShareIssue}>
+                                                                <Icons.AlertTriangle className="w-3.5 h-3.5 text-destructive" aria-label={budgetShareIssue} />
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-muted-foreground text-xs">€</span>
+                                                        )}
                                                         <button
                                                             type="button"
-                                                            onClick={() => data.suggestRowShares(index)}
-                                                            disabled={data.unitShare === 0 || (item.actualAmount === '' && item.budgetAmount === '')}
+                                                            onClick={() => data.suggestRowShare(index, 'budget')}
+                                                            disabled={data.unitShare === 0 || item.budgetAmount === ''}
                                                             aria-label="Wert vorschlagen"
                                                             title={data.unitShare === 0
                                                                 ? 'Für diese Wohnung ist keine Wohnfläche hinterlegt — bitte zuerst unter Objektdaten die Wohnfläche eintragen.'
-                                                                : 'Wert vorschlagen: Wohnflächenanteil × Mietzeitraum (füllt Abrechnung und Wirtschaftsplan)'}
+                                                                : 'Wert vorschlagen: Wohnflächenanteil × Mietzeitraum (nur dieses Feld)'}
                                                             className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                                         >
                                                             <Icons.Calculator className="w-3.5 h-3.5" />
@@ -439,7 +479,8 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                 </button>
                                             </td>
                                         </tr>
-                                    ))}
+                                        );
+                                    })}
                                 </tbody>
                                 <tfoot>
                                     <tr className="border-t-2 border-border font-semibold">
@@ -453,9 +494,9 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                     <tr className="text-muted-foreground">
                                         <td className="px-3 py-2">Summe nicht umlagefähig</td>
                                         <td className="px-3 py-2 text-right border-l border-border whitespace-nowrap">{euro(data.actualSplit.nonAllocable)}</td>
-                                        <td className="px-3 py-2 text-right whitespace-nowrap">–</td>
+                                        <td className="px-3 py-2 text-right whitespace-nowrap">{euro(data.unitActualShareNonAllocable)}</td>
                                         <td className="px-3 py-2 text-right border-l border-border whitespace-nowrap">{euro(data.budgetSplit.nonAllocable)}</td>
-                                        <td className="px-3 py-2 text-right whitespace-nowrap">–</td>
+                                        <td className="px-3 py-2 text-right whitespace-nowrap">{euro(data.unitBudgetShareNonAllocable)}</td>
                                         <td></td>
                                     </tr>
                                     <tr className="text-primary">
