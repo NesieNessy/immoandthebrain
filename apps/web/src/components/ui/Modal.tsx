@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { Icons } from "@/components/common";
 import React, { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 interface ModalProps {
   open: boolean;
@@ -52,9 +53,15 @@ export function Modal({
     };
   }, [open]);
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
 
-  return (
+  // Rendered into document.body, not in place. A `fixed inset-0` overlay is
+  // only viewport-fixed while no ancestor sets transform/will-change: the
+  // detail-check wizard's step animation (PropertyValuationLayout) does, which
+  // made every dialog inside a step anchor to that scrolling wrapper instead
+  // of the browser window — off-centre, and not covering the navigation. A
+  // portal takes the overlay out of that ancestor chain for every caller.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
       aria-modal="true"
@@ -121,6 +128,7 @@ export function Modal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
