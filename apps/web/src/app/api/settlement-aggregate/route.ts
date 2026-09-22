@@ -36,6 +36,10 @@ export async function GET(request: Request) {
         values,
       );
 
+  // house_money (WEG/Hausgeld) lives on the tenancy's linked maintenance_costs
+  // row, not on tenancy itself — joined in here so the Nebenkostenabrechnung
+  // "Wert vorschlagen" ratio (NK-Vorauszahlung ÷ WEG) has it without a
+  // separate round-trip.
   const tenancyPromise = propertyUnitId
     ? (periodStart && periodEnd
         ? db.query(
@@ -43,11 +47,11 @@ export async function GET(request: Request) {
             // whichever tenancy is current today — so proration and the
             // NK-Vorauszahlung figures shown for a past settlement use the
             // tenant who actually held the unit during that period.
-            `SELECT r.* FROM tenancy r WHERE EXISTS (SELECT 1 FROM property p WHERE p.property_id = r.property_id AND p.user_id = $1) AND r.property_unit_id = $2 AND r.tenancy_start_date <= $4 AND (r.tenancy_end_date IS NULL OR r.tenancy_end_date >= $3) ORDER BY tenancy_start_date DESC NULLS LAST LIMIT 1`,
+            `SELECT r.*, mc.house_money FROM tenancy r LEFT JOIN maintenance_costs mc ON mc.maintenance_costs_id = r.maintenance_costs_id WHERE EXISTS (SELECT 1 FROM property p WHERE p.property_id = r.property_id AND p.user_id = $1) AND r.property_unit_id = $2 AND r.tenancy_start_date <= $4 AND (r.tenancy_end_date IS NULL OR r.tenancy_end_date >= $3) ORDER BY tenancy_start_date DESC NULLS LAST LIMIT 1`,
             [userId, Number(propertyUnitId), periodStart, periodEnd],
           )
         : db.query(
-            `SELECT r.* FROM tenancy r WHERE EXISTS (SELECT 1 FROM property p WHERE p.property_id = r.property_id AND p.user_id = $1) AND r.property_unit_id = $2 ORDER BY (tenancy_end_date IS NULL) DESC, tenancy_start_date DESC NULLS LAST LIMIT 1`,
+            `SELECT r.*, mc.house_money FROM tenancy r LEFT JOIN maintenance_costs mc ON mc.maintenance_costs_id = r.maintenance_costs_id WHERE EXISTS (SELECT 1 FROM property p WHERE p.property_id = r.property_id AND p.user_id = $1) AND r.property_unit_id = $2 ORDER BY (tenancy_end_date IS NULL) DESC, tenancy_start_date DESC NULLS LAST LIMIT 1`,
             [userId, Number(propertyUnitId)],
           ))
     : Promise.resolve({ rows: [] } as { rows: unknown[] });

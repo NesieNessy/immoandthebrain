@@ -354,6 +354,21 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     );
 
     const currentMonthlyPrepayment = tenancy?.miscRent ?? 0;
+
+    // "Wert vorschlagen" must never rely on the living-area ratio of
+    // whichever units happen to be registered for this property — a
+    // landlord can never be assumed to have entered every unit of a real
+    // building, so that ratio can be silently wrong (see the Hauptstraße 12
+    // incident: one registered unit computed a 100% share that had nothing
+    // to do with reality). NK-Vorauszahlung (this tenant's monthly advance)
+    // ÷ WEG/Hausgeld (this unit's monthly payment to the WEG) is used as
+    // the allocation key instead — both live on Mietvertrag, independent of
+    // how many other units exist in the system. miscRent === 0 is a valid,
+    // filled value (a tenant who genuinely pays no NK-Vorauszahlung);
+    // houseMoney null/0 is not, since it would either mean "not filled" or
+    // divide by zero.
+    const canSuggestShares = tenancy != null && tenancy.miscRent != null && tenancy.houseMoney != null && tenancy.houseMoney !== 0;
+    const suggestShareRatio = canSuggestShares ? (tenancy!.miscRent as number) / (tenancy!.houseMoney as number) : null;
     // (2) Annual total from the tenant's NK-Vorauszahlung, prorated for any
     // miscRent change that took effect during the settlement period, and
     // clipped to the days the tenant actually occupied the unit — a
@@ -445,12 +460,15 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     };
 
     // Opt-in "Wert vorschlagen" — fills Anteil Wohnung with property cost ×
-    // living-area share × occupancy fraction, once, only when the landlord
-    // explicitly clicks it. This must never run on its own (e.g. when
-    // actualAmount/budgetAmount changes, or on load) — Anteil Wohnung is a
-    // manual, independent field, and the whole point of this action is that
-    // it only ever proposes a starting point the landlord can still edit or
-    // ignore, never a value that reappears or overwrites silently.
+    // (NK-Vorauszahlung ÷ WEG) × occupancy fraction, once, only when the
+    // landlord explicitly clicks it. This must never run on its own (e.g.
+    // when actualAmount/budgetAmount changes, or on load) — Anteil Wohnung
+    // is a manual, independent field, and the whole point of this action is
+    // that it only ever proposes a starting point the landlord can still
+    // edit or ignore, never a value that reappears or overwrites silently.
+    // Blocked entirely when canSuggestShares is false (NK-Vorauszahlung
+    // and/or WEG missing in Mietvertrag) — the button is disabled/hidden in
+    // that case, but this guard protects against a stale click too.
     // Each icon only touches its own column (Abrechnung from the current
     // settlement period, Wirtschaftsplan from next full calendar year —
     // Wirtschaftsplan has no period fields of its own) — clicking the
@@ -460,6 +478,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     // per-row click is the landlord asking for a fresh number), overwriting
     // whatever was there before in that one field.
     const suggestRowShare = useCallback((index: number, column: 'actual' | 'budget') => {
+        if (suggestShareRatio == null) return;
         setCostItems((prev) => {
             const item = prev[index];
             if (!item) return prev;
@@ -468,24 +487,24 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             const patch: Partial<CostItemForm> = {};
             if (column === 'actual' && item.actualAmount !== '' && periodStart && periodEnd) {
                 const fraction = occupancyFraction(periodStart, periodEnd, tenancyStart, tenancyEnd);
-                patch.actualShareOverride = String(suggestApartmentShare(Number(item.actualAmount) || 0, unitShare, fraction));
+                patch.actualShareOverride = String(suggestApartmentShare(Number(item.actualAmount) || 0, suggestShareRatio, fraction));
             }
             if (column === 'budget' && item.budgetAmount !== '') {
                 const nextYearStart = new Date(settlementYear + 1, 0, 1);
                 const nextYearEnd = new Date(settlementYear + 1, 11, 31);
                 const fraction = occupancyFraction(nextYearStart, nextYearEnd, tenancyStart, tenancyEnd);
-                patch.budgetShareOverride = String(suggestApartmentShare(Number(item.budgetAmount) || 0, unitShare, fraction));
+                patch.budgetShareOverride = String(suggestApartmentShare(Number(item.budgetAmount) || 0, suggestShareRatio, fraction));
             }
             return prev.map((it, i) => (i === index ? { ...it, ...patch } : it));
         });
-    }, [periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate, unitShare, settlementYear]);
+    }, [periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate, suggestShareRatio, settlementYear]);
 
     // Bulk version of the two suggestions above — fills in every row's
     // Anteil Wohnung at once, but (unlike the per-row buttons) only where
     // it's still empty: an already-entered value, manual or previously
     // suggested, is left untouched rather than recalculated over it.
     const suggestAllShares = useCallback(() => {
-        if (!periodStart || !periodEnd) return;
+        if (!periodStart || !periodEnd || suggestShareRatio == null) return;
         const tenancyStart = tenancy?.tenancyStartDate ? new Date(tenancy.tenancyStartDate) : null;
         const tenancyEnd = tenancy?.tenancyEndDate ? new Date(tenancy.tenancyEndDate) : null;
         const actualFraction = occupancyFraction(periodStart, periodEnd, tenancyStart, tenancyEnd);
@@ -495,13 +514,13 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         setCostItems((prev) => prev.map((item) => ({
             ...item,
             actualShareOverride: item.actualShareOverride === '' && item.actualAmount !== ''
-                ? String(suggestApartmentShare(Number(item.actualAmount) || 0, unitShare, actualFraction))
+                ? String(suggestApartmentShare(Number(item.actualAmount) || 0, suggestShareRatio, actualFraction))
                 : item.actualShareOverride,
             budgetShareOverride: item.budgetShareOverride === '' && item.budgetAmount !== ''
-                ? String(suggestApartmentShare(Number(item.budgetAmount) || 0, unitShare, budgetFraction))
+                ? String(suggestApartmentShare(Number(item.budgetAmount) || 0, suggestShareRatio, budgetFraction))
                 : item.budgetShareOverride,
         })));
-    }, [periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate, unitShare, settlementYear]);
+    }, [periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate, suggestShareRatio, settlementYear]);
 
     // ── Save ─────────────────────────────────────────────────────────────────
     const handleSave = async () => {
@@ -1133,7 +1152,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         pendingDeleteDoc, deletingDocId, requestDeleteDoc, cancelDeleteDoc, confirmDeleteDoc,
         pendingDeleteSettlement, isDeletingSettlement, requestDeleteSettlement, cancelDeleteSettlement, confirmDeleteSettlement,
         // computed
-        isEditing, unitShare, totalArea,
+        isEditing, unitShare, totalArea, canSuggestShares,
         totalActualAllocable, totalBudgetAllocable,
         actualSplit, budgetSplit,
         unitActualShare, unitBudgetShare,

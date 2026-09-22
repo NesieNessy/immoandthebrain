@@ -101,6 +101,24 @@ async function readDisplayedYear(page: import('@playwright/test').Page): Promise
     return parseInt(match[0], 10);
 }
 
+// A retried click here can land as a *second* click on "Nächstes Jahr"
+// after the first one actually succeeded but just rendered slowly (the
+// 5s visibility check timed out before the DOM updated) — that second
+// click then registers as "navigate away with pending changes" and pops
+// the same discard-confirmation dialog the app shows for the Zurück/
+// breadcrumb guards, which then sits on top of the button and blocks every
+// further click attempt forever. Clearing it (discarding, since this
+// helper's whole job is just to land on `targetYear`, not preserve
+// whatever incidental dirty state a slow reload left behind) before and
+// after each attempt keeps the retry loop from getting stuck on it.
+async function dismissDiscardDialogIfPresent(page: import('@playwright/test').Page): Promise<void> {
+    const dialog = page.getByRole('dialog', { name: 'Änderungen verwerfen?' });
+    if (await dialog.isVisible().catch(() => false)) {
+        await dialog.getByRole('button', { name: 'Verwerfen' }).click();
+        await expect(dialog).not.toBeVisible();
+    }
+}
+
 // Clicks "Nächstes Jahr" the exact number of times needed to reach
 // `targetYear` from whatever year is actually displayed right now.
 //
@@ -120,12 +138,16 @@ async function navigateToYear(page: import('@playwright/test').Page, targetYear:
     while (year < targetYear) {
         let advanced = false;
         for (let attempt = 0; attempt < 4 && !advanced; attempt++) {
+            await dismissDiscardDialogIfPresent(page);
             await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
             try {
                 await expect(page.getByText(`Abrechnungsjahr ${year + 1}`).first()).toBeVisible({ timeout: 5000 });
                 advanced = true;
             } catch {
-                // Click may not have registered, or the reload stalled/failed — try again.
+                // Click may not have registered, the reload stalled/failed, or it
+                // landed as a second click that triggered the discard dialog —
+                // clear that dialog before the next attempt either way.
+                await dismissDiscardDialogIfPresent(page);
             }
         }
         if (!advanced) throw new Error(`navigateToYear: could not advance past ${year} towards ${targetYear} after repeated clicks`);
@@ -170,11 +192,21 @@ test.beforeAll(async () => {
         );
         unitId2 = unit2Result.rows[0].property_unit_id as number;
 
+        // "Wert vorschlagen" derives Anteil Wohnung from NK-Vorauszahlung ÷
+        // WEG (Hausgeld) — not the units' living-area ratio, since a
+        // landlord can never be assumed to have registered every unit of a
+        // real building. 200 ÷ 400 = a clean 50% for easy-to-check math.
+        const maintenanceCostsResult = await client.query(
+            `INSERT INTO maintenance_costs (property_id, house_money) VALUES ($1, 400) RETURNING maintenance_costs_id`,
+            [propertyId],
+        );
+        const maintenanceCostsId = maintenanceCostsResult.rows[0].maintenance_costs_id as number;
+
         const tenancyResult = await client.query(
-            `INSERT INTO tenancy (property_id, property_unit_id, is_rented, tenancy_start_date, cold_rent, misc_rent, tenant_first_name, tenant_last_name, deposit)
-             VALUES ($1, $2, true, '2024-01-01', 900, 200, 'Erika', 'Testperson', 1800)
+            `INSERT INTO tenancy (property_id, property_unit_id, maintenance_costs_id, is_rented, tenancy_start_date, cold_rent, misc_rent, tenant_first_name, tenant_last_name, deposit)
+             VALUES ($1, $2, $3, true, '2024-01-01', 900, 200, 'Erika', 'Testperson', 1800)
              RETURNING tenancy_id`,
-            [propertyId, unitId],
+            [propertyId, unitId, maintenanceCostsId],
         );
         const tenancyId = tenancyResult.rows[0].tenancy_id as number;
 
@@ -277,8 +309,12 @@ test('filling in a cost item and saving persists the settlement and computes the
     // template, not a copy of the previous year's saved amount.
     await expect(firstRow.locator('input[type="number"]').nth(0)).toHaveValue('');
 
+    // Gesamt Objekt and Anteil Wohnung are a required pair per column now —
+    // filling only one blocks saving, so both must be filled here.
     await firstRow.locator('input[type="number"]').nth(0).fill('2000');
+    await firstRow.locator('input[type="number"]').nth(1).fill('1200');
     await firstRow.locator('input[type="number"]').nth(2).fill('2200');
+    await firstRow.locator('input[type="number"]').nth(3).fill('1320');
 
     // An unsaved edit now exists -> navigating away must ask for
     // confirmation instead of silently discarding it.
@@ -323,7 +359,7 @@ test('filling in a cost item and saving persists the settlement and computes the
     }
 });
 
-test('"Alle Werte vorschlagen" fills only empty Anteil Wohnung fields, computed from living-area share and occupancy', async ({ page }) => {
+test('"Alle Werte vorschlagen" fills only empty Anteil Wohnung fields, computed from NK-Vorauszahlung ÷ WEG and occupancy', async ({ page }) => {
     // A year the tenancy (started 2024-01-01, still ongoing) fully covers,
     // and far enough from currentYear/currentYear+1 (used by the test above)
     // to save into its own, unrelated settlement.
@@ -347,9 +383,10 @@ test('"Alle Werte vorschlagen" fills only empty Anteil Wohnung fields, computed 
     await page.getByRole('button', { name: 'Alle Werte vorschlagen' }).click();
 
     // Full-year occupancy (tenancy started years before this period and has
-    // no end date) at a 60/100 m² share -> 1000 * 0.6 = 600, 1100 * 0.6 = 660.
-    await expect(row1Numbers.nth(1)).toHaveValue('600');
-    await expect(row1Numbers.nth(3)).toHaveValue('660');
+    // no end date) at NK-Vorauszahlung 200 ÷ WEG 400 = 0.5 ->
+    // 1000 * 0.5 = 500, 1100 * 0.5 = 550.
+    await expect(row1Numbers.nth(1)).toHaveValue('500');
+    await expect(row1Numbers.nth(3)).toHaveValue('550');
     // The manually entered value on row 2 must survive unchanged.
     await expect(row2Numbers.nth(1)).toHaveValue('42');
 
@@ -364,7 +401,9 @@ test('a saved settlement can be deleted, and its cost items are removed with it'
 
     await expect(page.getByRole('button', { name: 'Abrechnung löschen' })).toHaveCount(0);
 
-    await page.locator('tbody tr').first().locator('input[type="number"]').first().fill('300');
+    const deleteTestRow = page.locator('tbody tr').first();
+    await deleteTestRow.locator('input[type="number"]').nth(0).fill('300');
+    await deleteTestRow.locator('input[type="number"]').nth(1).fill('150');
     await page.getByRole('button', { name: 'Abrechnung speichern' }).click();
     await expect(page.getByText('Nebenkostenabrechnung gespeichert.')).toBeVisible();
 
