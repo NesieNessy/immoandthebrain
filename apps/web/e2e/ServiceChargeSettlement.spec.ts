@@ -86,8 +86,16 @@ function requireDatabaseUrl(): string {
 // year is, not `new Date().getFullYear()`. Reading it back from the page
 // instead of assuming it keeps each test correct regardless of what
 // settlements earlier tests in this file happened to leave behind.
+//
+// Waits for the year-picker box itself to be visible first — a plain
+// `locator.textContent()` only waits for an element to be *attached*, not
+// for the page's initial units/tenancy/settlement fetch to have actually
+// resolved, so calling this the instant after `page.goto()` could read (or
+// hang on) a still-loading page instead of the real value.
 async function readDisplayedYear(page: import('@playwright/test').Page): Promise<number> {
-    const text = await page.getByText(/Abrechnungsjahr \d{4}/).first().textContent();
+    const yearBox = page.getByText(/Abrechnungsjahr \d{4}/).first();
+    await expect(yearBox).toBeVisible();
+    const text = await yearBox.textContent();
     const match = text?.match(/\d{4}/);
     if (!match) throw new Error(`Could not read the displayed Abrechnungsjahr from "${text}"`);
     return parseInt(match[0], 10);
@@ -95,12 +103,19 @@ async function readDisplayedYear(page: import('@playwright/test').Page): Promise
 
 // Clicks "Nächstes Jahr" the exact number of times needed to reach
 // `targetYear` from whatever year is actually displayed right now.
+//
+// Each click triggers a full reload of that year's settlement/tenancy data
+// from the (local, Dockerized) Supabase instance CI runs against, which can
+// occasionally take noticeably longer than Playwright's default 5s
+// assertion timeout under CI load — the original single-click test never
+// hit this, but chaining several clicks here makes it likely enough to
+// need real headroom rather than a marginal one.
 async function navigateToYear(page: import('@playwright/test').Page, targetYear: number): Promise<void> {
     let year = await readDisplayedYear(page);
     while (year < targetYear) {
         await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
         year += 1;
-        await expect(page.getByText(`Abrechnungsjahr ${year}`).first()).toBeVisible();
+        await expect(page.getByText(`Abrechnungsjahr ${year}`).first()).toBeVisible({ timeout: 15000 });
     }
 }
 
@@ -436,8 +451,12 @@ test('leaving the page with unsaved changes (Zurück, breadcrumb) asks for confi
 
 test('a unit with no current tenant ("Unvermietet") shows neutral placeholders, not Nachzahlung/Guthaben wording', async ({ page }) => {
     await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId2}`);
-    await expect(page.getByText('Nebenkostenabrechnung').first()).toBeVisible();
 
+    // Not checking for the page title text itself here: it's "Nebenkostenabrechnung",
+    // which is a substring of this spec's own STREET fixture constant
+    // ("E2E Nebenkostenabrechnung-Straße"), so a generic getByText(...).first()
+    // for it ambiguously matches the breadcrumb's address link instead of the
+    // real page title. The assertions below are specific enough on their own.
     await expect(page.getByText('Kein Mieter zu diesem Zeitraum')).toBeVisible();
     await expect(page.getByText('Nachzahlung/Guthaben ohne Mieter nicht anwendbar')).toBeVisible();
     await expect(page.getByText(/eine Anpassung der Nebenkostenvorauszahlung ist erst nach Vermietung möglich/)).toBeVisible();

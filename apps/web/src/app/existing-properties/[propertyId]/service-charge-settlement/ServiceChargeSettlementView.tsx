@@ -307,9 +307,11 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                             icon={<Icons.Calculator className="w-4 h-4" />}
                             variant="outline"
                             size="sm"
-                            disabled={!data.costItems.some((item) => item.actualAmount !== '' || item.budgetAmount !== '')}
+                            disabled={data.unitShare === 0 || !data.costItems.some((item) => item.actualAmount !== '' || item.budgetAmount !== '')}
                             onClick={data.suggestAllShares}
-                            title="Füllt Anteil Wohnung für jede Position mit Gesamtbetrag, die noch leer ist — bereits erfasste Werte bleiben unverändert."
+                            title={data.unitShare === 0
+                                ? 'Für diese Wohnung ist keine Wohnfläche hinterlegt — bitte zuerst unter Objektdaten die Wohnfläche eintragen, sonst ergibt der Vorschlag immer 0 €.'
+                                : 'Füllt Anteil Wohnung für jede Position mit Gesamtbetrag, die noch leer ist — bereits erfasste Werte bleiben unverändert.'}
                         />
                         <Button
                             label="Kostenposition hinzufügen"
@@ -378,9 +380,11 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                         <button
                                                             type="button"
                                                             onClick={() => data.suggestRowShares(index)}
-                                                            disabled={item.actualAmount === '' && item.budgetAmount === ''}
+                                                            disabled={data.unitShare === 0 || (item.actualAmount === '' && item.budgetAmount === '')}
                                                             aria-label="Wert vorschlagen"
-                                                            title="Wert vorschlagen: Wohnflächenanteil × Mietzeitraum (füllt Abrechnung und Wirtschaftsplan)"
+                                                            title={data.unitShare === 0
+                                                                ? 'Für diese Wohnung ist keine Wohnfläche hinterlegt — bitte zuerst unter Objektdaten die Wohnfläche eintragen.'
+                                                                : 'Wert vorschlagen: Wohnflächenanteil × Mietzeitraum (füllt Abrechnung und Wirtschaftsplan)'}
                                                             className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                                         >
                                                             <Icons.Calculator className="w-3.5 h-3.5" />
@@ -412,9 +416,11 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                         <button
                                                             type="button"
                                                             onClick={() => data.suggestRowShares(index)}
-                                                            disabled={item.actualAmount === '' && item.budgetAmount === ''}
+                                                            disabled={data.unitShare === 0 || (item.actualAmount === '' && item.budgetAmount === '')}
                                                             aria-label="Wert vorschlagen"
-                                                            title="Wert vorschlagen: Wohnflächenanteil × Mietzeitraum (füllt Abrechnung und Wirtschaftsplan)"
+                                                            title={data.unitShare === 0
+                                                                ? 'Für diese Wohnung ist keine Wohnfläche hinterlegt — bitte zuerst unter Objektdaten die Wohnfläche eintragen.'
+                                                                : 'Wert vorschlagen: Wohnflächenanteil × Mietzeitraum (füllt Abrechnung und Wirtschaftsplan)'}
                                                             className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                                         >
                                                             <Icons.Calculator className="w-3.5 h-3.5" />
