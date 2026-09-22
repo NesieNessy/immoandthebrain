@@ -220,7 +220,8 @@ function ServiceChargeStatementContent({
                                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Kostenpositionen erfasst</p>
                                         <div className="mt-1"><Pill ok={data.costItems.some((i) => i.actualAmount !== '')} label={data.costItems.some((i) => i.actualAmount !== '') ? 'Ja' : 'Noch keine'} /></div>
                                     </div>
-                                    <Field label="Gesamtkosten Objekt" value={euro(data.totalActualCostsAll)} />
+                                    <Field label="Gesamtkosten Objekt (umlagefähig)" value={euro(data.totalActualAllocable)} />
+                                    <Field label="davon nicht umlagefähig" value={euro(data.actualSplit.nonAllocable)} />
                                     <Field label={`Anteil ${unitLabel}`} value={euro(data.unitActualShare)} />
                                 </div>
                             </DataCard>

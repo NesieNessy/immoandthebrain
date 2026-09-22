@@ -57,6 +57,7 @@ function toTenancy(row: Record<string, unknown>): Tenancy {
     tenancyUnitsPrice: row.tenancy_units_price as number | null,
     parkingSpaceRent: row.parking_space_rent as number | null,
     miscRent: row.misc_rent as number | null,
+    houseMoney: row.house_money == null ? null : Number(row.house_money),
     warmRent: row.warm_rent as number | null,
     coldRent: row.cold_rent as number | null,
     createdAt: row.created_at as string,

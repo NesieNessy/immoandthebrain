@@ -44,8 +44,11 @@ describe('availableTaxYears', () => {
         expect(years).toEqual([...years].sort((a, b) => b - a));
     });
 
-    it('always includes the current year even with no documents', () => {
-        expect(availableTaxYears([])).toEqual([new Date().getFullYear()]);
+    it('is empty when there are no documents — the "always show a year" fallback is the hook\'s job, not this pure function\'s', () => {
+        // Forcing the current year in here meant its card could never be
+        // deleted: the very next render would re-derive it and put it right
+        // back, no matter what the user had just removed.
+        expect(availableTaxYears([])).toEqual([]);
     });
 });
 

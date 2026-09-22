@@ -69,11 +69,18 @@ export function MetricCard({
   value,
   detail,
   tone = 'neutral',
+  colorValue = false,
 }: {
   label: string;
   value: string;
   detail?: string;
   tone?: 'neutral' | 'positive' | 'warning';
+  /** Also applies `tone` to the big value itself, not just `detail` — for a
+   *  card whose headline number IS the signal (e.g. a surplus/shortfall
+   *  amount), where the color needs to carry the direction instead of a
+   *  "+"/"-" prefix on the number. Off by default so every other MetricCard
+   *  keeps its plain-colored value. */
+  colorValue?: boolean;
 }) {
   return (
     <div className="min-w-0 rounded-md border border-primary/15 bg-card p-4 shadow-sm">
@@ -81,7 +88,16 @@ export function MetricCard({
         <span>{label}</span>
         <LockKeyhole size={13} aria-hidden="true" />
       </div>
-      <output className="mt-2 block break-words text-2xl font-semibold text-foreground">{value || '-'}</output>
+      <output
+        className={cn(
+          'mt-2 block break-words text-2xl font-semibold',
+          colorValue && tone === 'positive' ? 'text-success'
+            : colorValue && tone === 'warning' ? 'text-warning'
+              : 'text-foreground',
+        )}
+      >
+        {value || '-'}
+      </output>
       {detail && (
         <p
           className={cn(

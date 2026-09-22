@@ -500,6 +500,11 @@ export interface Tenancy {
   tenancyUnitsPrice: number | null,
   parkingSpaceRent: number | null,
   miscRent: number | null,
+  /** WEG/Hausgeld for this tenancy's unit — lives on the linked
+   *  MaintenanceCosts row (via maintenanceCostsId), joined in here where
+   *  callers need it (e.g. the Nebenkostenabrechnung "Wert vorschlagen"
+   *  ratio) rather than being a native tenancy column. */
+  houseMoney?: number | null,
   warmRent: number | null,
   coldRent: number | null,
   tenantFirstName: string,

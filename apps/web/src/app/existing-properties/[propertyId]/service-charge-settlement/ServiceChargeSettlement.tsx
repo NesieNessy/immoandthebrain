@@ -56,6 +56,8 @@ async function loadUnitRow(
         miscRentHistory,
         periodStart: new Date(settlement.periodStart),
         periodEnd: new Date(settlement.periodEnd),
+        tenancyStart: tenancy.tenancyStartDate ? new Date(tenancy.tenancyStartDate) : null,
+        tenancyEnd: tenancy.tenancyEndDate ? new Date(tenancy.tenancyEndDate) : null,
     });
 
     return {
