@@ -1,4 +1,4 @@
-import { normalizeListingReference } from '@/lib/listingUrl';
+import { isValidListingUrl, LISTING_URL_ERROR, listingLinkHref, normalizeListingReference } from '@/lib/listingUrl';
 import { db } from '@/lib/server/db';
 import { requireUserId, workflowIdFor } from '@/lib/server/auth';
 import { NextResponse } from 'next/server';
@@ -66,10 +66,11 @@ export async function GET(request: Request) {
     propertyCategory: saved?.property_category ?? 'EIGENTUMSWOHNUNG',
     dataEntrySource: saved?.data_entry_source ?? quickCheck?.data_entry_source ?? '',
     tenancyType: saved?.tenancy_type ?? '',
-    // Carried over from the Ersteinschätzung as-is — a link or a plain note like
-    // "Kleinanzeigen" alike, under the same rule both steps use (lib/listingUrl.ts).
-    // This used to drop anything that was not link-shaped.
-    sourceUrl: saved?.source_url ?? normalizeListingReference(quickCheck?.portal_id),
+    // Carried over from the Ersteinschätzung when it holds a valid link, under
+    // the rule both steps share (lib/listingUrl.ts). Older quick checks can
+    // still contain plain text like "Kleinanzeigen"; that is left behind
+    // rather than pre-filling a value this step would then reject.
+    sourceUrl: saved?.source_url ?? listingLinkHref(quickCheck?.portal_id) ?? '',
     streetHouseNumber: saved?.street_house_number ?? quickCheck?.street ?? '',
     postalCode: saved?.postal_code ?? quickCheck?.postal_code ?? '',
     city: saved?.city ?? quickCheck?.city ?? '',
@@ -107,9 +108,9 @@ export async function POST(request: Request) {
   if (!PROPERTY_CATEGORIES.has(propertyCategory)) fieldErrors.propertyCategory = 'Bitte wählen Sie eine Objektkategorie.';
   if (!DATA_ENTRY_SOURCES.has(dataEntrySource)) fieldErrors.dataEntrySource = 'Bitte wählen Sie eine Erfassungsquelle.';
   if (!TENANCY_TYPES.has(tenancyType)) fieldErrors.tenancyType = 'Bitte wählen Sie eine Miet-/Nutzungsart.';
-  // No URL-format check: the field is a free-text listing reference, the same
-  // as the Ersteinschätzung's Portal-URL (see lib/listingUrl.ts). Requiring a
-  // full URL here rejected "www.immowelt.de/…" and "immowelt.de/…" (SCRUM-102).
+  // Same rule as the Ersteinschätzung's Portal-URL (lib/listingUrl.ts). A link
+  // typed without "https://" is valid and stored with it (SCRUM-102).
+  if (sourceUrl && !isValidListingUrl(sourceUrl)) fieldErrors.sourceUrl = LISTING_URL_ERROR;
   if (streetHouseNumber.length > 100) fieldErrors.streetHouseNumber = 'Maximal 100 Zeichen.';
   if (postalCode && !/^\d{4,5}$/.test(postalCode)) fieldErrors.postalCode = 'Bitte 4 bis 5 Ziffern eingeben.';
   if (!city || city.length > 100) fieldErrors.city = 'Ort ist ein Pflichtfeld.';

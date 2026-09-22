@@ -6,7 +6,7 @@ import { PortalImportSection } from '@/components/features/PortalImportSection';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
-import { normalizeListingReference } from '@/lib/listingUrl';
+import { isValidListingUrl, LISTING_URL_ERROR, normalizeListingReference } from '@/lib/listingUrl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
@@ -218,6 +218,7 @@ function PropertyDataContent() {
   const isValid = useMemo(() => {
     if (!form.propertyCategory) return false;
     if (!form.tenancyType) return false;
+    if (form.sourceUrl.trim() && !isValidListingUrl(form.sourceUrl)) return false;
     if (!form.city.trim()) return false;
     const year = Number(form.yearOfConstruction);
     if (!Number.isInteger(year) || year < 1000 || year > currentYear) return false;
@@ -261,9 +262,9 @@ function PropertyDataContent() {
 
     if (!form.propertyCategory) errors.propertyCategory = 'Bitte wählen Sie eine Objektkategorie.';
     if (!form.tenancyType) errors.tenancyType = 'Bitte wählen Sie eine Miet-/Nutzungsart.';
-    // The Inserats-URL is deliberately not validated: it is free text, exactly
-    // like the Ersteinschätzung's Portal-URL (lib/listingUrl.ts). A strict
-    // URL check here rejected anything typed without "https://" (SCRUM-102).
+    // Same rule as the Ersteinschätzung's Portal-URL (lib/listingUrl.ts): a
+    // link typed without "https://" counts as valid (SCRUM-102).
+    if (form.sourceUrl.trim() && !isValidListingUrl(form.sourceUrl)) errors.sourceUrl = LISTING_URL_ERROR;
     if (!form.city.trim()) errors.city = 'Ort ist ein Pflichtfeld.';
     if (!Number.isInteger(year) || year < 1000 || year > currentYear) {
       errors.yearOfConstruction = `Baujahr muss zwischen 1000 und ${currentYear} liegen.`;
@@ -377,9 +378,6 @@ function PropertyDataContent() {
                   />
                 }
               />
-              {form.sourceUrl.trim() && (
-                <p className="text-sm text-muted-foreground truncate -mt-1">Importiert von: {form.sourceUrl}</p>
-              )}
             </div>
 
             <div className="flex flex-col gap-2">
