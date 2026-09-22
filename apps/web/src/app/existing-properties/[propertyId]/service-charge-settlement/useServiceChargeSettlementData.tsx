@@ -437,35 +437,34 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     // manual, independent field, and the whole point of this action is that
     // it only ever proposes a starting point the landlord can still edit or
     // ignore, never a value that reappears or overwrites silently.
-    const suggestActualShare = useCallback((index: number) => {
+    // Fills BOTH columns' Anteil Wohnung for this one row in a single click
+    // (Abrechnung from the current settlement period, Wirtschaftsplan from
+    // next full calendar year — Wirtschaftsplan has no period fields of its
+    // own) — whichever of the two amounts is present gets its share
+    // computed; a missing amount's share is simply left as-is. Unlike the
+    // bulk "Alle Werte vorschlagen" action, this always recalculates (an
+    // explicit per-row click is the landlord asking for a fresh number),
+    // overwriting whatever was there before.
+    const suggestRowShares = useCallback((index: number) => {
         setCostItems((prev) => {
             const item = prev[index];
-            if (!item || item.actualAmount === '' || !periodStart || !periodEnd) return prev;
+            if (!item) return prev;
             const tenancyStart = tenancy?.tenancyStartDate ? new Date(tenancy.tenancyStartDate) : null;
             const tenancyEnd = tenancy?.tenancyEndDate ? new Date(tenancy.tenancyEndDate) : null;
-            const fraction = occupancyFraction(periodStart, periodEnd, tenancyStart, tenancyEnd);
-            const value = suggestApartmentShare(Number(item.actualAmount) || 0, unitShare, fraction);
-            return prev.map((it, i) => (i === index ? { ...it, actualShareOverride: String(value) } : it));
+            const patch: Partial<CostItemForm> = {};
+            if (item.actualAmount !== '' && periodStart && periodEnd) {
+                const fraction = occupancyFraction(periodStart, periodEnd, tenancyStart, tenancyEnd);
+                patch.actualShareOverride = String(suggestApartmentShare(Number(item.actualAmount) || 0, unitShare, fraction));
+            }
+            if (item.budgetAmount !== '') {
+                const nextYearStart = new Date(settlementYear + 1, 0, 1);
+                const nextYearEnd = new Date(settlementYear + 1, 11, 31);
+                const fraction = occupancyFraction(nextYearStart, nextYearEnd, tenancyStart, tenancyEnd);
+                patch.budgetShareOverride = String(suggestApartmentShare(Number(item.budgetAmount) || 0, unitShare, fraction));
+            }
+            return prev.map((it, i) => (i === index ? { ...it, ...patch } : it));
         });
-    }, [periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate, unitShare]);
-
-    const suggestBudgetShare = useCallback((index: number) => {
-        setCostItems((prev) => {
-            const item = prev[index];
-            if (!item || item.budgetAmount === '') return prev;
-            const tenancyStart = tenancy?.tenancyStartDate ? new Date(tenancy.tenancyStartDate) : null;
-            const tenancyEnd = tenancy?.tenancyEndDate ? new Date(tenancy.tenancyEndDate) : null;
-            // Wirtschaftsplan has no explicit period fields of its own — it's
-            // always framed as "next year" (see the settlementYear + 1
-            // headers), so the occupancy fraction is computed against that
-            // full projected calendar year.
-            const nextYearStart = new Date(settlementYear + 1, 0, 1);
-            const nextYearEnd = new Date(settlementYear + 1, 11, 31);
-            const fraction = occupancyFraction(nextYearStart, nextYearEnd, tenancyStart, tenancyEnd);
-            const value = suggestApartmentShare(Number(item.budgetAmount) || 0, unitShare, fraction);
-            return prev.map((it, i) => (i === index ? { ...it, budgetShareOverride: String(value) } : it));
-        });
-    }, [tenancy?.tenancyStartDate, tenancy?.tenancyEndDate, unitShare, settlementYear]);
+    }, [periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate, unitShare, settlementYear]);
 
     // Bulk version of the two suggestions above — fills in every row's
     // Anteil Wohnung at once, but (unlike the per-row buttons) only where
@@ -1093,7 +1092,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         canGeneratePdf, canGenerateAdjustmentDocx, canApplyPrepayment,
         // handlers
         updateCostItemField, addCostItem, removeCostItem,
-        suggestActualShare, suggestBudgetShare, suggestAllShares,
+        suggestRowShares, suggestAllShares,
         handleSave, handleUploadSourceDocument, handleViewSourceDocument, handleRemoveSourceDocument,
         handleGeneratePdf, handlePreview, closePreview,
         handleGenerateAdjustmentDocx, handlePreviewAdjustment, closeAdjustmentPreview,

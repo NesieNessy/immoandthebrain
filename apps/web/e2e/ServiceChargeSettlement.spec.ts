@@ -79,6 +79,31 @@ function requireDatabaseUrl(): string {
     return databaseUrl;
 }
 
+// A fresh page load with no explicit period defaults to the property's
+// *most recently saved* settlement (by period_end), not "this calendar
+// year" — so once an earlier test in this file has saved a settlement for a
+// later year, a later test's starting point is whatever that latest saved
+// year is, not `new Date().getFullYear()`. Reading it back from the page
+// instead of assuming it keeps each test correct regardless of what
+// settlements earlier tests in this file happened to leave behind.
+async function readDisplayedYear(page: import('@playwright/test').Page): Promise<number> {
+    const text = await page.getByText(/Abrechnungsjahr \d{4}/).first().textContent();
+    const match = text?.match(/\d{4}/);
+    if (!match) throw new Error(`Could not read the displayed Abrechnungsjahr from "${text}"`);
+    return parseInt(match[0], 10);
+}
+
+// Clicks "Nächstes Jahr" the exact number of times needed to reach
+// `targetYear` from whatever year is actually displayed right now.
+async function navigateToYear(page: import('@playwright/test').Page, targetYear: number): Promise<void> {
+    let year = await readDisplayedYear(page);
+    while (year < targetYear) {
+        await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
+        year += 1;
+        await expect(page.getByText(`Abrechnungsjahr ${year}`).first()).toBeVisible();
+    }
+}
+
 let propertyId: number;
 let unitId: number;
 let unitId2: number;
@@ -275,13 +300,7 @@ test('"Alle Werte vorschlagen" fills only empty Anteil Wohnung fields, computed 
     // to save into its own, unrelated settlement.
     const targetYear = new Date().getFullYear() + 3;
     await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId}`);
-    // Each click triggers an async reload of that year's settlement — wait
-    // for it to actually land before clicking again, or a fast run of
-    // clicks can outrace the reloads and leave the page on the wrong year.
-    for (let year = new Date().getFullYear() + 1; year <= targetYear; year++) {
-        await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
-        await expect(page.getByText(`Abrechnungsjahr ${year}`).first()).toBeVisible();
-    }
+    await navigateToYear(page, targetYear);
 
     const rows = page.locator('tbody tr');
     const row1Numbers = rows.nth(0).locator('input[type="number"]');
@@ -312,10 +331,7 @@ test('"Alle Werte vorschlagen" fills only empty Anteil Wohnung fields, computed 
 test('a saved settlement can be deleted, and its cost items are removed with it', async ({ page }) => {
     const targetYear = new Date().getFullYear() + 4;
     await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId}`);
-    for (let year = new Date().getFullYear() + 1; year <= targetYear; year++) {
-        await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
-        await expect(page.getByText(`Abrechnungsjahr ${year}`).first()).toBeVisible();
-    }
+    await navigateToYear(page, targetYear);
 
     await expect(page.getByRole('button', { name: 'Abrechnung löschen' })).toHaveCount(0);
 
@@ -398,10 +414,7 @@ test('an end date before the start date names the actual reason instead of a gen
 test('leaving the page with unsaved changes (Zurück, breadcrumb) asks for confirmation', async ({ page }) => {
     const targetYear = new Date().getFullYear() + 6;
     await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId}`);
-    for (let year = new Date().getFullYear() + 1; year <= targetYear; year++) {
-        await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
-        await expect(page.getByText(`Abrechnungsjahr ${year}`).first()).toBeVisible();
-    }
+    await navigateToYear(page, targetYear);
 
     await page.locator('tbody tr').first().locator('input[type="number"]').first().fill('123');
 
@@ -423,7 +436,7 @@ test('leaving the page with unsaved changes (Zurück, breadcrumb) asks for confi
 
 test('a unit with no current tenant ("Unvermietet") shows neutral placeholders, not Nachzahlung/Guthaben wording', async ({ page }) => {
     await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId2}`);
-    await expect(page.getByText('Nebenkostenabrechnung')).toBeVisible();
+    await expect(page.getByText('Nebenkostenabrechnung').first()).toBeVisible();
 
     await expect(page.getByText('Kein Mieter zu diesem Zeitraum')).toBeVisible();
     await expect(page.getByText('Nachzahlung/Guthaben ohne Mieter nicht anwendbar')).toBeVisible();

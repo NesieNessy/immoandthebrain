@@ -238,6 +238,43 @@ describe('computeUnitSettlementSummary', () => {
         expect(result.annualPrepayment).toBeCloseTo((100 * 12 * 173) / 365, 2);
     });
 
+    it('regression: Mietbeginn 01.04.26, Abrechnungszeitraum 01.01.26-20.09.26, 100 €/Monat NK-Vorauszahlung -> a positive, occupancy-clipped Vorauszahlung and a green "Erstattung", never a red "Nachzahlung"', () => {
+        // The exact real-world case that exposed the original bug: the
+        // tenant's Vorauszahlung must be prorated over the days they
+        // actually lived there within the period (01.04.26-20.09.26, 173
+        // days), not the full 01.01.26-20.09.26 span (263 days) — the old
+        // behavior inflated it to ~904 € and, in a worse variant of the same
+        // bug, could even go negative. Below, the tenant's allocable cost
+        // share (500 €, deliberately less than the correctly-clipped ~568.77
+        // € Vorauszahlung) must land as a *surplus* — a green "Erstattung"
+        // to the tenant — never the red "Nachzahlung" the un-clipped
+        // (inflated) Vorauszahlung would have wrongly produced by making it
+        // look like the tenant owed money instead of being owed a refund.
+        const result = computeUnitSettlementSummary({
+            costItems: [
+                { actualAmount: 1000, budgetAmount: null, allocable: true, actualShareOverride: 500, budgetShareOverride: null },
+            ],
+            unitLivingAreaM2: 50,
+            totalLivingAreaM2: 50,
+            currentMonthlyPrepayment: 100,
+            miscRentHistory: [],
+            periodStart: new Date(2026, 0, 1),
+            periodEnd: new Date(2026, 8, 20),
+            tenancyStart: new Date(2026, 3, 1),
+        });
+
+        const expectedVorauszahlung = (100 * 12 * 173) / 365; // ~568.77 €
+        expect(result.annualPrepayment).toBeCloseTo(expectedVorauszahlung, 2);
+        expect(result.annualPrepayment).toBeGreaterThan(0);
+        // Comfortably below the old, wrongly-inflated full-period figure
+        // (~904 €) — pins the fix, not just "some positive number".
+        expect(result.annualPrepayment).toBeLessThan(600);
+
+        expect(result.unitActualShare).toBe(500);
+        expect(result.overUnderCoverage).toBeLessThan(0);
+        expect(result.settlementCoverage).toBe('surplus');
+    });
+
     it('computes unitShare from living area (still reported, even though Anteil Wohnung no longer derives from it)', () => {
         const result = computeUnitSettlementSummary({
             costItems: [],

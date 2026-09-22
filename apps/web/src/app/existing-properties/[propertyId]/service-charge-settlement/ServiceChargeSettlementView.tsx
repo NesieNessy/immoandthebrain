@@ -376,10 +376,10 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                         <span className="text-muted-foreground text-xs">€</span>
                                                         <button
                                                             type="button"
-                                                            onClick={() => data.suggestActualShare(index)}
-                                                            disabled={item.actualAmount === ''}
+                                                            onClick={() => data.suggestRowShares(index)}
+                                                            disabled={item.actualAmount === '' && item.budgetAmount === ''}
                                                             aria-label="Wert vorschlagen"
-                                                            title="Wert vorschlagen: Wohnflächenanteil × Mietzeitraum"
+                                                            title="Wert vorschlagen: Wohnflächenanteil × Mietzeitraum (füllt Abrechnung und Wirtschaftsplan)"
                                                             className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                                         >
                                                             <Icons.Calculator className="w-3.5 h-3.5" />
@@ -410,10 +410,10 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                         <span className="text-muted-foreground text-xs">€</span>
                                                         <button
                                                             type="button"
-                                                            onClick={() => data.suggestBudgetShare(index)}
-                                                            disabled={item.budgetAmount === ''}
+                                                            onClick={() => data.suggestRowShares(index)}
+                                                            disabled={item.actualAmount === '' && item.budgetAmount === ''}
                                                             aria-label="Wert vorschlagen"
-                                                            title="Wert vorschlagen: Wohnflächenanteil × Mietzeitraum"
+                                                            title="Wert vorschlagen: Wohnflächenanteil × Mietzeitraum (füllt Abrechnung und Wirtschaftsplan)"
                                                             className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                                         >
                                                             <Icons.Calculator className="w-3.5 h-3.5" />
