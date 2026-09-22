@@ -204,7 +204,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                         />
                         <MetricCard
                             label="Über-/Unterdeckung"
-                            value={!data.tenancy ? '–' : data.settlementCoverage === 'balanced' ? euro(0) : `${data.overUnderCoverage < 0 ? '-' : '+'}${euro(Math.abs(data.overUnderCoverage))}`}
+                            value={!data.tenancy ? '–' : euro(Math.abs(data.overUnderCoverage))}
                             detail={
                                 !data.tenancy ? 'Nachzahlung/Guthaben ohne Mieter nicht anwendbar'
                                     : data.settlementCoverage === 'shortfall' ? 'Nachzahlung durch Mieter'
@@ -212,6 +212,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                             : 'Ausgeglichen'
                             }
                             tone={!data.tenancy ? 'neutral' : data.settlementCoverage === 'shortfall' ? 'warning' : data.settlementCoverage === 'surplus' ? 'positive' : 'neutral'}
+                            colorValue
                         />
                     </div>
 
