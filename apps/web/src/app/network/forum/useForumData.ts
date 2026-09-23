@@ -35,7 +35,7 @@ export function useForumData() {
 
     const createPost = async (form: NewPostForm): Promise<boolean> => {
         if (form.category.trim() === '' || form.title.trim() === '' || form.body.trim() === '') return false;
-        const created = await createForumPost({ category: form.category, title: form.title, body: form.body });
+        const created = await createForumPost({ authorUserId: user?.id ?? '', category: form.category, title: form.title, body: form.body });
         if (!created) {
             showToast('Beitrag konnte nicht erstellt werden.', 'error');
             return false;

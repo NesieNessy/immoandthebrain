@@ -8,7 +8,7 @@ describe('recentPostCount', () => {
         const posts = [
             { createdAt: '2026-06-15T00:00:00.000Z' }, // today
             { createdAt: '2026-06-10T00:00:00.000Z' }, // 5 days ago
-            { createdAt: '2026-06-08T00:00:00.000Z' }, // exactly 7 days ago
+            { createdAt: '2026-06-08T12:00:00.000Z' }, // exactly 7 days ago
         ];
         expect(recentPostCount(posts, NOW)).toBe(3);
     });
