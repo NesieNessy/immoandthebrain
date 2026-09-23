@@ -1,4 +1,5 @@
 import { roundCurrency } from './acquisitionCosts';
+import { compareScores, EARLIEST_BREAK_EVEN, type OptimizationObjective, type ScoredPlan } from './analysis/objectives';
 import { costForCase, type RenovationCase, type RenovationTiming } from './renovation';
 
 export type CalculatorMode = 'KNOWN' | 'POTENTIAL';
@@ -719,12 +720,20 @@ function optimizeKnownModernizations(
   capPercent: number,
   conservativeRentIndexPerM2: number,
   marketRentIndexPerM2: number,
+  objective: OptimizationObjective = EARLIEST_BREAK_EVEN,
 ) {
   const relevant = renovationCases.filter((item) => isPlannedCase(params, item));
   if (relevant.length === 0) return [];
 
-  type Candidate = { placements: number[]; plan: ModernizationPlanRow[]; breakEvenOffset: number; endingCashflow: number };
-  let candidates: Candidate[] = [{ placements: [], plan: [], breakEvenOffset: 9999, endingCashflow: -Infinity }];
+  type Candidate = { placements: number[]; plan: ModernizationPlanRow[]; score: number[] };
+  const scoreOf = (scored: ScoredPlan) => objective.score(scored);
+  // The seed stands for "nothing placed yet" and must lose against any real
+  // candidate: 9999 months to break-even and an infinitely poor cashflow.
+  let candidates: Candidate[] = [{
+    placements: [],
+    plan: [],
+    score: scoreOf({ breakEvenOffset: 9999, endingCashflow: -Infinity, sustainablyPositiveOffset: 9999 }),
+  }];
   const possibleOffsets = Array.from(
     { length: Math.floor((CALCULATION_HORIZON_MONTHS - 4) / 12) + 1 },
     (_, index) => 3 + index * 12,
@@ -736,11 +745,11 @@ function optimizeKnownModernizations(
       for (const offset of possibleOffsets) {
         const placements = [...candidate.placements, offset];
         const plan = buildPlanFromPlacements(params, relevant.slice(0, index + 1), placements, capAbs);
-        const score = placementScore(params, plan, capPercent, conservativeRentIndexPerM2, marketRentIndexPerM2);
-        next.push({ placements, plan, breakEvenOffset: score.breakEvenOffset, endingCashflow: score.endingCashflow });
+        const scored = placementScore(params, plan, capPercent, conservativeRentIndexPerM2, marketRentIndexPerM2);
+        next.push({ placements, plan, score: scoreOf(scored) });
       }
     }
-    next.sort((a, b) => a.breakEvenOffset - b.breakEvenOffset || b.endingCashflow - a.endingCashflow);
+    next.sort((a, b) => compareScores(a.score, b.score));
     candidates = next.slice(0, 8);
   }
 
@@ -754,13 +763,9 @@ function optimizeKnownModernizations(
     for (const offset of nearbyOffsets) {
       const placements = best.placements.map((value, placementIndex) => placementIndex === index ? offset : value);
       const plan = buildPlanFromPlacements(params, relevant, placements, capAbs);
-      const score = placementScore(params, plan, capPercent, conservativeRentIndexPerM2, marketRentIndexPerM2);
-      if (
-        score.breakEvenOffset < best.breakEvenOffset
-        || (score.breakEvenOffset === best.breakEvenOffset && score.endingCashflow > best.endingCashflow)
-      ) {
-        best = { placements, plan, breakEvenOffset: score.breakEvenOffset, endingCashflow: score.endingCashflow };
-      }
+      const score = scoreOf(placementScore(params, plan, capPercent, conservativeRentIndexPerM2, marketRentIndexPerM2));
+      // Strictly better only, like before: ties keep the incumbent.
+      if (compareScores(score, best.score) < 0) best = { placements, plan, score };
     }
   }
 
