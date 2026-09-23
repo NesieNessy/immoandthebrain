@@ -52,6 +52,18 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
     const address = `${property.street} ${property.houseNumber}, ${property.postalCode} ${property.city}`;
     const unitLabel = formatUnitLabel(unit.unitLabel, unit.floor, unit.locationNote);
 
+    // Why "Neue NK-Vorauszahlung übernehmen" is greyed out — an icon-only
+    // button with no visible label has nothing else to explain itself with,
+    // and a disabled control with only a generic title left the landlord
+    // unable to tell "nothing to apply yet" from "something's broken".
+    const applyPrepaymentDisabledReason = data.isApplyingPrepayment
+        ? 'Wird übernommen …'
+        : data.newMonthlyPrepayment == null
+            ? 'Für das Wirtschaftsplan-Jahr sind noch keine umlagefähigen Kosten erfasst.'
+            : data.prepaymentDelta === 0
+                ? 'Die aktuelle Vorauszahlung entspricht bereits dem Wirtschaftsplan — nichts zu übernehmen.'
+                : null;
+
     const breadcrumbItems: BreadcrumbItem[] = hasMultipleUnits
         ? [
             { label: 'Bestandsobjekte', href: '/existing-properties', onClick: (e) => { if (data.isEditing) { e.preventDefault(); data.goTo('/existing-properties'); } } },
@@ -608,9 +620,9 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                             <button
                                                 type="button"
                                                 onClick={() => void data.handleApplyPrepayment()}
-                                                disabled={!data.canApplyPrepayment || data.isApplyingPrepayment}
+                                                disabled={applyPrepaymentDisabledReason != null}
                                                 aria-label="Neue NK-Vorauszahlung übernehmen"
-                                                title="Neue NK-Vorauszahlung übernehmen"
+                                                title={applyPrepaymentDisabledReason ?? 'Neue NK-Vorauszahlung übernehmen'}
                                                 className="p-1 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                             >
                                                 <Icons.RefreshCw className="w-4 h-4" />
@@ -621,11 +633,9 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                         label="Neue monatliche Gesamtmiete"
                                         value={euro(data.newTotalRent)}
                                         detail={`${euro(data.tenancy?.coldRent)} Nettomiete + ${euro(data.newMonthlyPrepayment ?? data.currentMonthlyPrepayment)} NK-Vorauszahlung`}
+                                        footnote={`Gültig ab: ${formatDeDate(data.nextPrepaymentEffectiveDate.toISOString())}`}
                                     />
                                 </div>
-                                <p className="mt-2 text-sm text-muted-foreground">
-                                    Gültig ab: {formatDeDate(data.nextPrepaymentEffectiveDate.toISOString())}
-                                </p>
                             </>
                         ) : (
                             <div className="mt-3 px-4 py-3 rounded-lg bg-muted/30 border border-border text-sm text-muted-foreground">

@@ -51,6 +51,7 @@ import type {
     Tenancy,
     TenancyAdjustmentHistoryEntry,
     TenancyDocument,
+    TenancyPerson,
 } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -116,6 +117,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const [deletedCostItemIds, setDeletedCostItemIds] = useState<number[]>([]);
     const [originalSnapshot, setOriginalSnapshot] = useState('');
     const [tenancy, setTenancy] = useState<Tenancy | null>(null);
+    const [tenancyPersons, setTenancyPersons] = useState<TenancyPerson[]>([]);
     const [miscRentHistory, setMiscRentHistory] = useState<TenancyAdjustmentHistoryEntry[]>([]);
     const [maintenanceCosts, setMaintenanceCosts] = useState<MaintenanceCosts | null>(null);
     const [landlord, setLandlord] = useState<PersonalData | null | undefined>(undefined);
@@ -160,14 +162,16 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             setTenancy(currentTenancy);
             setSettlement(currentSettlement);
 
-            const [history, loadedMaintenanceCosts, loadedDocuments] = await Promise.all([
+            const [history, loadedMaintenanceCosts, loadedDocuments, loadedPersons] = await Promise.all([
                 currentTenancy ? getAdjustmentHistoryByTenancy(currentTenancy.tenancyId) : Promise.resolve([]),
                 currentTenancy?.maintenanceCostsId ? getMaintenanceCostsById(currentTenancy.maintenanceCostsId) : Promise.resolve(null),
                 currentTenancy ? getTenancyDocumentsByTenancy(currentTenancy.tenancyId) : Promise.resolve([]),
+                currentTenancy ? getTenancyPersonsByTenancy(currentTenancy.tenancyId) : Promise.resolve([]),
             ]);
             setDocuments(loadedDocuments);
             setMiscRentHistory(history.filter((entry) => entry.adjustmentType === 'miscRent'));
             setMaintenanceCosts(loadedMaintenanceCosts);
+            setTenancyPersons(loadedPersons);
 
             const defaultItems = () => DEFAULT_COST_ITEMS.map((item) => ({ id: null, label: item.label, allocable: item.allocable, actualAmount: '', budgetAmount: '', actualShareOverride: '', budgetShareOverride: '' }));
 
@@ -492,9 +496,19 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         // Most relevant (current/most recently started) tenant first.
         .sort((a, b) => b.startDateStr.localeCompare(a.startDateStr));
 
-    // Shown as the avatar+name on the document box rows — same tenant the
+    // Shown as the avatar+name on the document box rows — same tenant(s) the
     // generated Nebenkostenabrechnung/Anpassungsschreiben actually goes to.
-    const tenantLabel = tenancy ? `${tenancy.tenantFirstName ?? ''} ${tenancy.tenantLastName ?? ''}`.trim() || 'Mieter' : undefined;
+    // A tenancy can have more than one current tenant (a couple, roommates)
+    // recorded as separate tenancy_person rows — this must show all of them,
+    // not just tenancy.tenantFirstName/tenantLastName (the single primary
+    // tenant denormalized onto the tenancy row itself), or the document
+    // recipient shown here silently drops every non-primary tenant.
+    const tenantPersonNames = tenancyPersons
+        .filter((p) => (p.lastName ?? '').trim() !== '' || (p.firstName ?? '').trim() !== '')
+        .map((p) => `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim());
+    const tenantLabel = tenantPersonNames.length > 0
+        ? tenantPersonNames.join(' und ')
+        : tenancy ? `${tenancy.tenantFirstName ?? ''} ${tenancy.tenantLastName ?? ''}`.trim() || 'Mieter' : undefined;
 
     // ── Cost item editing ────────────────────────────────────────────────────
     const updateCostItemField = (index: number, patch: Partial<CostItemForm>) => {

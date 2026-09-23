@@ -71,6 +71,7 @@ export function MetricCard({
   tone = 'neutral',
   colorValue = false,
   action,
+  footnote,
 }: {
   label: string;
   value: string;
@@ -88,6 +89,12 @@ export function MetricCard({
    *  floating below the whole card grid with no visual tie to which value
    *  it acts on. Absent by default so every other MetricCard is unaffected. */
   action?: ReactNode;
+  /** A second, always-muted line below `detail` — for a fact about the value
+   *  that isn't part of the tone-colored detail message itself (e.g. the
+   *  date a figure takes effect), kept inside the card instead of floating
+   *  below it with no visual tie to which value it's about. Absent by
+   *  default so every other MetricCard is unaffected. */
+  footnote?: ReactNode;
 }) {
   return (
     <div className="min-w-0 rounded-md border border-primary/15 bg-card p-4 shadow-sm">
@@ -120,6 +127,7 @@ export function MetricCard({
           {detail}
         </p>
       )}
+      {footnote && <p className="mt-1 text-xs text-muted-foreground">{footnote}</p>}
     </div>
   );
 }
