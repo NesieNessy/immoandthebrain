@@ -64,7 +64,7 @@ function SuggestSharePopover({
     const canSaveKey = numerator.trim() !== '' && denominator.trim() !== '' && Number(denominator) !== 0;
 
     return (
-        <div className="w-80 space-y-3 text-sm">
+        <div className="space-y-3 text-sm">
             {suggestion ? (
                 <div>
                     <p className="font-semibold text-foreground">Vorschlag: {euro(suggestion.value)}</p>
@@ -94,6 +94,57 @@ function SuggestSharePopover({
                     onClick={() => { onSaveKey(Number(numerator), Number(denominator), allocationType.trim() || null); setSaved(true); }}
                 />
             </div>
+        </div>
+    );
+}
+
+// The bulk counterpart to SuggestSharePopover's own key form — sets one
+// Verteilerschlüssel for every cost item label that doesn't already have its
+// own (a WEG almost always uses one dominant Miteigentumsanteil for most
+// positions, so typing it once here beats opening each row's popover in
+// turn), then immediately fills every still-empty Anteil Wohnung field from
+// it. Always starts blank — unlike the per-row form, there's no single
+// "existing key" to show here, since it deliberately never overwrites a
+// label that already has its own.
+function OverallAllocationKeyPopover({ onApply }: { onApply: (numerator: number, denominator: number, allocationType: string | null) => Promise<void> }) {
+    const [numerator, setNumerator] = useState('');
+    const [denominator, setDenominator] = useState('');
+    const [allocationType, setAllocationType] = useState('');
+    const [isApplying, setIsApplying] = useState(false);
+
+    const canApply = numerator.trim() !== '' && denominator.trim() !== '' && Number(denominator) !== 0;
+
+    return (
+        <div className="space-y-3 text-sm">
+            <div>
+                <p className="text-xs font-medium text-foreground">Verteilerschlüssel für alle Positionen festlegen</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                    Gilt für jede Kostenposition, die noch keinen eigenen Verteilerschlüssel hat, und füllt anschließend deren leere Anteil-Wohnung-Felder.
+                </p>
+            </div>
+            <div className="flex items-center gap-1.5">
+                <NumberField aria-label="Zähler" placeholder="80" value={numerator} onChange={(e) => setNumerator(e.target.value)} min={0} hideStepper className="w-20" />
+                <span className="text-muted-foreground">/</span>
+                <NumberField aria-label="Nenner" placeholder="1000" value={denominator} onChange={(e) => setDenominator(e.target.value)} min={0} hideStepper className="w-20" />
+            </div>
+            <TextField aria-label="Art" placeholder="Miteigentumsanteil" value={allocationType} onChange={(e) => setAllocationType(e.target.value)} className="w-full" />
+            <Button
+                label="Festlegen & anwenden"
+                size="sm"
+                className="w-full"
+                disabled={!canApply || isApplying}
+                onClick={async () => {
+                    setIsApplying(true);
+                    try {
+                        await onApply(Number(numerator), Number(denominator), allocationType.trim() || null);
+                        setNumerator('');
+                        setDenominator('');
+                        setAllocationType('');
+                    } finally {
+                        setIsApplying(false);
+                    }
+                }}
+            />
         </div>
     );
 }
@@ -380,9 +431,24 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                             variant="outline"
                             size="sm"
                             disabled={!data.costItems.some((item) => item.actualAmount !== '' || item.budgetAmount !== '')}
-                            onClick={data.suggestAllShares}
+                            onClick={() => data.suggestAllShares()}
                             title="Füllt Anteil Wohnung für jede Position mit Gesamtbetrag, für die ein Verteilerschlüssel oder eine Vorjahres-Abrechnung vorliegt und die noch leer ist — bereits erfasste Werte bleiben unverändert, Positionen ohne Grundlage bleiben leer."
                         />
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <button
+                                    type="button"
+                                    className="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-primary bg-transparent px-3 py-1.5 text-sm text-primary transition-all duration-200 cursor-pointer hover:bg-primary hover:text-primary-foreground"
+                                    title="Legt einen Verteilerschlüssel für alle Kostenpositionen ohne eigenen fest und füllt anschließend deren leere Anteil-Wohnung-Felder."
+                                >
+                                    <Icons.PieChart className="w-4 h-4" />
+                                    Verteilerschlüssel
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent align="end" className="w-80">
+                                <OverallAllocationKeyPopover onApply={data.setOverallAllocationKey} />
+                            </PopoverContent>
+                        </Popover>
                         <Button
                             label="Kostenposition hinzufügen"
                             icon={<Icons.Plus className="w-4 h-4" />}
@@ -496,7 +562,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                                         <Icons.Calculator className="w-3.5 h-3.5" />
                                                                     </button>
                                                                 </PopoverTrigger>
-                                                                <PopoverContent align="end">
+                                                                <PopoverContent align="end" className="w-80">
                                                                     <SuggestSharePopover
                                                                         suggestion={data.computeSuggestion(index, 'actual')}
                                                                         existingKey={data.allocationKeys.find((k) => k.label.trim().toLowerCase() === item.label.trim().toLowerCase())}
@@ -559,7 +625,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                                         <Icons.Calculator className="w-3.5 h-3.5" />
                                                                     </button>
                                                                 </PopoverTrigger>
-                                                                <PopoverContent align="end">
+                                                                <PopoverContent align="end" className="w-80">
                                                                     <SuggestSharePopover
                                                                         suggestion={data.computeSuggestion(index, 'budget')}
                                                                         existingKey={data.allocationKeys.find((k) => k.label.trim().toLowerCase() === item.label.trim().toLowerCase())}

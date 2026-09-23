@@ -614,13 +614,17 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     // where a suggestion actually exists; a row with neither an explicit
     // key nor a usable prior-period ratio is left empty rather than
     // fabricating a number.
-    const suggestAllShares = useCallback(() => {
+    // keysOverride lets a caller (setOverallAllocationKey below) run this
+    // immediately against keys it just created, without waiting for the
+    // setAllocationKeys state update to actually land in a re-render first.
+    const suggestAllShares = useCallback((keysOverride?: ServiceChargeAllocationKey[]) => {
+        const keys = keysOverride ?? allocationKeys;
         setCostItems((prev) => prev.map((item) => {
             const actualSuggestion = item.actualShareOverride === '' && item.actualAmount !== ''
-                ? suggestShareForCostItem(Number(item.actualAmount) || 0, item.label, allocationKeys, historyCandidatesFor(item, 'actual'))
+                ? suggestShareForCostItem(Number(item.actualAmount) || 0, item.label, keys, historyCandidatesFor(item, 'actual'))
                 : null;
             const budgetSuggestion = item.budgetShareOverride === '' && item.budgetAmount !== ''
-                ? suggestShareForCostItem(Number(item.budgetAmount) || 0, item.label, allocationKeys, historyCandidatesFor(item, 'budget'))
+                ? suggestShareForCostItem(Number(item.budgetAmount) || 0, item.label, keys, historyCandidatesFor(item, 'budget'))
                 : null;
             return {
                 ...item,
@@ -643,6 +647,31 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             : await createAllocationKey({ propertyUnitId: unit.propertyUnitId, propertyId: property.propertyId, label: normalizedLabel, numerator, denominator, allocationType });
         if (!saved) return;
         setAllocationKeys((prev) => (existing ? prev.map((k) => (k.serviceChargeAllocationKeyId === saved.serviceChargeAllocationKeyId ? saved : k)) : [...prev, saved]));
+    };
+
+    // "Verteilerschlüssel für alle festlegen" — a WEG almost always uses one
+    // dominant Miteigentumsanteil for most cost items, so this sets the same
+    // explicit key on every label in the table at once instead of making the
+    // landlord open each row's own popover in turn. Only labels that don't
+    // already have their own key are touched, so a label deliberately given
+    // a different key (e.g. a consumption-based one for heating) is never
+    // overwritten. Immediately runs the normal bulk suggestion afterwards so
+    // every still-empty field picks the new key up right away.
+    const setOverallAllocationKey = async (numerator: number, denominator: number, allocationType: string | null): Promise<void> => {
+        if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return;
+        const labels = Array.from(new Set(costItems.map((item) => item.label.trim()).filter((label) => label !== '')));
+        const labelsWithoutKey = labels.filter((label) => !allocationKeys.some((k) => k.label.trim().toLowerCase() === label.toLowerCase()));
+        const created = await Promise.all(labelsWithoutKey.map((label) => createAllocationKey({
+            propertyUnitId: unit.propertyUnitId,
+            propertyId: property.propertyId,
+            label,
+            numerator,
+            denominator,
+            allocationType,
+        })));
+        const newKeys = created.filter((k): k is ServiceChargeAllocationKey => k != null);
+        if (newKeys.length > 0) setAllocationKeys((prev) => [...prev, ...newKeys]);
+        suggestAllShares([...allocationKeys, ...newKeys]);
     };
 
     // ── Save ─────────────────────────────────────────────────────────────────
@@ -1290,7 +1319,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         canGeneratePdf, canGenerateAdjustmentDocx, canApplyPrepayment,
         // handlers
         updateCostItemField, addCostItem, removeCostItem,
-        computeSuggestion, applySuggestion, suggestAllShares, saveAllocationKey,
+        computeSuggestion, applySuggestion, suggestAllShares, saveAllocationKey, setOverallAllocationKey,
         handleSave, handleUploadSourceDocument, handleViewSourceDocument, handleRemoveSourceDocument,
         handleGeneratePdf, handlePreview, closePreview,
         handleGenerateAdjustmentDocx, handlePreviewAdjustment, closeAdjustmentPreview,
