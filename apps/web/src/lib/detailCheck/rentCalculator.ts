@@ -318,6 +318,7 @@ function placePotentialModernizations(params: CalculatorParams, capAbs: number) 
 export function preProjection558(params: CalculatorParams): { effectiveYyyymm: string; monthlyDelta: number } | null {
   if (!params.last558Date || params.last558RentBefore == null) return null;
   const effectiveYyyymm = normalizeYyyymm(params.last558Date, params.startYyyymm);
+  if (compareMonth(effectiveYyyymm, params.startYyyymm) > 0) return null;
   const later559 = params.last559Date
     && compareMonth(params.last559Date, effectiveYyyymm) > 0
     && compareMonth(params.last559Date, params.startYyyymm) <= 0

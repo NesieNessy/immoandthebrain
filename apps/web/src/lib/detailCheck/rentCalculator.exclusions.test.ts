@@ -15,6 +15,14 @@ describe('excluded measures (SCRUM-96 selection proposals)', () => {
     expect(plan.map((item) => item.id)).toEqual(['a']);
   });
 
+  it('excluding all modernization ids leaves nothing to place', () => {
+    const plan = runRentCalculator(
+      calculatorParams({ placementMode: 'OPTIMIZED', excludedModernizationIds: ['a', 'b'] }),
+      cases,
+    ).modernizationPlan;
+    expect(plan).toEqual([]);
+  });
+
   it('changes nothing when omitted or empty', () => {
     const none = runRentCalculator(calculatorParams(), cases).modernizationPlan;
     const empty = runRentCalculator(calculatorParams({ excludedModernizationIds: [] }), cases).modernizationPlan;

@@ -33,8 +33,10 @@ export type OptimizationObjective = {
 export function compareScores(a: number[], b: number[]): number {
   const length = Math.max(a.length, b.length);
   for (let index = 0; index < length; index += 1) {
-    const difference = (a[index] ?? 0) - (b[index] ?? 0);
-    if (difference !== 0) return difference;
+    const left = a[index] ?? 0;
+    const right = b[index] ?? 0;
+    if (left < right) return -1;
+    if (left > right) return 1;
   }
   return 0;
 }

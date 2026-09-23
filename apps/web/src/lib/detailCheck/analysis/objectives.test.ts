@@ -14,6 +14,13 @@ describe('compareScores', () => {
     expect(compareScores([1, 3], [1, 5])).toBeLessThan(0);
     expect(compareScores([1, 5], [1, 5])).toBe(0);
   });
+
+  it('never yields NaN when scores contain Infinity', () => {
+    expect(compareScores([Infinity, 1], [Infinity, 1])).toBe(0);
+    expect(compareScores([Infinity, 1], [Infinity, 2])).toBeLessThan(0);
+    expect(compareScores([Infinity, 2], [Infinity, 1])).toBeGreaterThan(0);
+    expect(compareScores([-Infinity, 1], [-Infinity, 1])).toBe(0);
+  });
 });
 
 describe('EARLIEST_BREAK_EVEN', () => {

@@ -168,4 +168,10 @@ describe('preProjection558', () => {
     expect(preProjection558(calculatorParams({ last558Date: '2024-11' }))).toBeNull();
     expect(preProjection558(calculatorParams({ monthlyRentStart: 1000, last558Date: '2024-11', last558RentBefore: 1000 }))).toBeNull();
   });
+
+  it('is null when the increase takes effect after the projection start, since monthlyRentStart does not include it yet', () => {
+    // startYyyymm defaults to 2026-01; an increase effective 2026-06 lies after it.
+    expect(preProjection558(calculatorParams({ monthlyRentStart: 1200, last558Date: '2026-06', last558RentBefore: 1000 })))
+      .toBeNull();
+  });
 });
