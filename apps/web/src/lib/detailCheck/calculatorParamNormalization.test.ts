@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   buildEffectiveCalculatorParams,
   clampInterestRate,
+  normalizeLast558RentBefore,
   normalizeRecentMonth,
   normalizeRentIncreaseIntervalMonths,
   normalizeRentIncreaseUtilizationPercent,
+  normalizeRentIndexGrowthPercent,
   normalizeTaxRate,
+  normalizeViewPeriodYears,
   overridesFromParams,
   recomputeMonthlyDebtService,
   safeCases,
@@ -180,6 +183,9 @@ function fieldsFromParams(params: CalculatorParams): CalculatorParameterFields {
     rentIncreaseIntervalMonths: params.rentIncreaseIntervalMonths,
     rentIncreaseUtilizationPercent: params.rentIncreaseUtilizationPercent,
     mode: params.mode,
+    rentIndexGrowthPercent: '',
+    last558RentBefore: '',
+    viewPeriodYears: 15,
   };
 }
 
@@ -201,7 +207,14 @@ describe('buildEffectiveCalculatorParams — parity with a real server response'
     // `undefined` both make every per-id lookup inside it resolve to
     // `undefined` — which the next test proves by comparing actual computed
     // output rather than raw param shape.
-    expect(rebuilt).toEqual({ ...fixtureParams, rentIncreaseOverrides: {}, excludedModernizationIds: [] });
+    expect(rebuilt).toEqual({
+      ...fixtureParams,
+      rentIncreaseOverrides: {},
+      excludedModernizationIds: [],
+      rentIndexGrowthPercent: 2,
+      last558RentBefore: null,
+      viewPeriodYears: 15,
+    });
   });
 
   it('produces a result identical to what the server computed for its own saved state', () => {
@@ -375,5 +388,57 @@ describe('overridesFromParams', () => {
     expect(overrides.equityIncluded).toBe(fixtureParams.equityIncluded === true);
     expect(overrides.taxRate).toBe(fixtureParams.taxRate);
     expect(overrides.modernizationPlacements).toEqual(fixtureParams.modernizationPlacements ?? {});
+  });
+});
+
+describe('SCRUM-96 Schnitt 1 inputs', () => {
+  it('rent index growth: empty/invalid → 2, German decimal parsed, clamped to -5..10', () => {
+    expect(normalizeRentIndexGrowthPercent('')).toBe(2);
+    expect(normalizeRentIndexGrowthPercent(null)).toBe(2);
+    expect(normalizeRentIndexGrowthPercent('abc')).toBe(2);
+    expect(normalizeRentIndexGrowthPercent('1,5')).toBe(1.5);
+    expect(normalizeRentIndexGrowthPercent(3)).toBe(3);
+    expect(normalizeRentIndexGrowthPercent('0')).toBe(0);
+    expect(normalizeRentIndexGrowthPercent('25')).toBe(10);
+    expect(normalizeRentIndexGrowthPercent(-9)).toBe(-5);
+    expect(normalizeRentIndexGrowthPercent('-1,5')).toBe(-1.5);
+  });
+
+  it('rent before last §558: only with a valid last558Date and a positive amount', () => {
+    expect(normalizeLast558RentBefore('950', null)).toBeNull();
+    expect(normalizeLast558RentBefore('', '2025-11')).toBeNull();
+    expect(normalizeLast558RentBefore('0', '2025-11')).toBeNull();
+    expect(normalizeLast558RentBefore('1.234,50', '2025-11')).toBe(1234.5);
+    expect(normalizeLast558RentBefore(900, '2025-11')).toBe(900);
+  });
+
+  it('view period: integer 5..50, default 15', () => {
+    expect(normalizeViewPeriodYears(undefined)).toBe(15);
+    expect(normalizeViewPeriodYears('x')).toBe(15);
+    expect(normalizeViewPeriodYears(20)).toBe(20);
+    expect(normalizeViewPeriodYears(2)).toBe(5);
+    expect(normalizeViewPeriodYears(80)).toBe(50);
+    expect(normalizeViewPeriodYears(12.6)).toBe(13);
+  });
+
+  it('passes the three new inputs through', () => {
+    const last558Date = `${new Date().getFullYear() - 1}-11`;
+    const overrides = overridesFromParams(fixtureParams);
+    const fields: CalculatorParameterFields = {
+      ...fieldsFromParams(fixtureParams),
+      last558Date,
+      rentIndexGrowthPercent: '3,5',
+      last558RentBefore: '900',
+      viewPeriodYears: 20,
+    };
+
+    const result = buildEffectiveCalculatorParams(fixtureParams, fields, overrides, {
+      resetRentIncreasePlan: false,
+      storedRentIncreasePlan: fixtureParams.rentIncreasePlan,
+    });
+
+    expect(result.rentIndexGrowthPercent).toBe(3.5);
+    expect(result.last558RentBefore).toBe(900);
+    expect(result.viewPeriodYears).toBe(20);
   });
 });

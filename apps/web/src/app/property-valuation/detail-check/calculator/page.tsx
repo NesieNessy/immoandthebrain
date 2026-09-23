@@ -125,6 +125,11 @@ function parameterFieldsFromParams(params: CalculatorParams): CalculatorParamete
     rentIncreaseIntervalMonths: params.rentIncreaseIntervalMonths ?? 15,
     rentIncreaseUtilizationPercent: params.rentIncreaseUtilizationPercent ?? 100,
     mode: params.mode,
+    // TODO(SCRUM-96 Schnitt 2/3): wire real Parameter-panel inputs for these;
+    // until then the load effect has nothing to seed them from.
+    rentIndexGrowthPercent: valueString(params.rentIndexGrowthPercent),
+    last558RentBefore: valueString(params.last558RentBefore),
+    viewPeriodYears: params.viewPeriodYears ?? 15,
   };
 }
 
@@ -1625,6 +1630,11 @@ function CalculatorContent() {
     rentIncreaseIntervalMonths,
     rentIncreaseUtilizationPercent,
     mode,
+    // TODO(SCRUM-96 Schnitt 2/3): no Parameter-panel inputs for these yet;
+    // empty/default text keeps buildEffectiveCalculatorParams on its defaults.
+    rentIndexGrowthPercent: '',
+    last558RentBefore: '',
+    viewPeriodYears: 15,
   }), [startYyyymm, last558Date, last559Date, last559MonthlyDelta, rentIndexPerM2, rentIndexSource, rentIncreaseIntervalMonths, rentIncreaseUtilizationPercent, mode]);
 
   /**

@@ -24,6 +24,9 @@ export const CALCULATION_HORIZON_MONTHS = CALCULATION_HORIZON_YEARS * 12;
 /** The rent-index growth that used to be hard-wired; kept as the default so results do not move. */
 export const DEFAULT_RENT_INDEX_GROWTH_PERCENT = 2;
 
+/** Betrachtungszeitraum B der Auswertungen (SCRUM-96); beeinflusst die Engine nicht. */
+export const DEFAULT_VIEW_PERIOD_YEARS = 15;
+
 /**
  * Growth factor of the rent index `offset` months into the projection. Stepped
  * yearly (Math.floor), exactly like the former hard-wired Math.pow(1.02, …):
@@ -64,6 +67,8 @@ export type CalculatorParams = {
    * to be hard-wired.
    */
   rentIndexGrowthPercent?: number;
+  /** Betrachtungszeitraum der Auswertungen in Jahren; nur gespeichert, von runRentCalculator ignoriert. */
+  viewPeriodYears?: number;
   monthlyDebtService: number;
   loanAmount: number;
   interestRate: number;
