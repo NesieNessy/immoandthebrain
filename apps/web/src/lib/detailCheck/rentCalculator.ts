@@ -45,6 +45,14 @@ export type CalculatorParams = {
   last558Date: string | null;
   last559Date: string | null;
   last559MonthlyDelta: number;
+  /**
+   * Monthly rent before the last §558 increase (the one at last558Date).
+   * Needed because §558 Abs. 3 measures the cap against the rent at the start
+   * of the rolling three-year window — an increase shortly before purchase
+   * uses up part of that window. Omitted = unknown, window counts only
+   * increases inside the projection (the former behaviour).
+   */
+  last558RentBefore?: number | null;
   rentIncreaseIntervalMonths: number;
   rentIncreaseUtilizationPercent: number;
   rentIndexPerM2: number | null;
@@ -291,6 +299,36 @@ function placePotentialModernizations(params: CalculatorParams, capAbs: number) 
   return plan;
 }
 
+/**
+ * The §558 increase that took effect before the projection starts, when the
+ * rent before it is known. A §559 increase after it is subtracted, because
+ * monthlyRentStart contains it but §558 Abs. 3 excludes §559 from the cap.
+ */
+export function preProjection558(params: CalculatorParams): { effectiveYyyymm: string; monthlyDelta: number } | null {
+  if (!params.last558Date || params.last558RentBefore == null) return null;
+  const effectiveYyyymm = normalizeYyyymm(params.last558Date, params.startYyyymm);
+  const later559 = params.last559Date
+    && compareMonth(params.last559Date, effectiveYyyymm) > 0
+    && compareMonth(params.last559Date, params.startYyyymm) <= 0
+    ? Math.max(0, params.last559MonthlyDelta)
+    : 0;
+  const monthlyDelta = roundCurrency(Math.max(0, params.monthlyRentStart - params.last558RentBefore - later559));
+  return monthlyDelta > 0 ? { effectiveYyyymm, monthlyDelta } : null;
+}
+
+/** The pre-projection increase's share of the window [windowStart, month], or 0. */
+function preProjectionUsedInWindow(
+  prior: { effectiveYyyymm: string; monthlyDelta: number } | null,
+  windowStart: string,
+  month: string,
+): number {
+  return prior
+    && compareMonth(prior.effectiveYyyymm, windowStart) >= 0
+    && compareMonth(prior.effectiveYyyymm, month) <= 0
+    ? prior.monthlyDelta
+    : 0;
+}
+
 function plan558(
   params: CalculatorParams,
   capPercent: number,
@@ -309,6 +347,7 @@ function plan558(
   let active559 = 0;
   const intervalMonths = Math.round(clamp(params.rentIncreaseIntervalMonths, 15, 60));
   const utilization = clamp(params.rentIncreaseUtilizationPercent, 0, 100) / 100;
+  const prior = preProjection558(params);
 
   for (let offset = 0; offset < CALCULATION_HORIZON_MONTHS; offset += 1) {
     const month = addMonths(params.startYyyymm, offset);
@@ -332,7 +371,7 @@ function plan558(
         return sum + step.monthlyDelta;
       }
       return sum;
-    }, 0);
+    }, 0) + preProjectionUsedInWindow(prior, windowStart, month);
     // §558 Abs. 3: the 20 % / 15 % ceiling is measured against the rent at the
     // start of the rolling three-year window, not against the rent at the very
     // beginning of the projection. `current558Base` is the rent before this
@@ -401,6 +440,7 @@ function applyRentIncreaseOverrides(
   let previous = params.last558Date ? normalizeYyyymm(params.last558Date) : params.rentStartYyyymm;
   let current558Base = params.monthlyRentStart;
   const accepted: RentIncrease558Row[] = [];
+  const prior = preProjection558(params);
 
   /** §558 and §559 must not take effect in the same month. */
   const collidesWith559 = (effectiveYyyymm: string) =>
@@ -415,7 +455,8 @@ function applyRentIncreaseOverrides(
     const windowStart = addMonths(effectiveYyyymm, -35);
     const usedInWindow = accepted
       .filter((item) => compareMonth(item.effectiveYyyymm, windowStart) >= 0)
-      .reduce((sum, item) => sum + item.monthlyDelta, 0);
+      .reduce((sum, item) => sum + item.monthlyDelta, 0)
+      + preProjectionUsedInWindow(prior, windowStart, effectiveYyyymm);
     // Same rolling-window base as plan558 — see the comment there.
     const rentAtWindowStart = Math.max(0, current558Base - usedInWindow);
     const capRoom = Math.max(0, rentAtWindowStart * capPercent - usedInWindow);
