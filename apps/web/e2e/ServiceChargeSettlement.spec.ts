@@ -46,11 +46,13 @@ import { expect, test } from '@playwright/test';
  * test to avoid colliding with settlements other tests in this file save):
  *
  * - "Wert vorschlagen" (per-row and "Alle Werte vorschlagen" bulk action)
- *   computes Anteil Wohnung as amount × living-area share × occupancy
- *   fraction — clipped to the tenancy's actual start/end, not the whole
- *   settlement period — and only ever fills an *empty* field, never
- *   overwriting one that already has a value (manual or previously
- *   suggested).
+ *   derives Anteil Wohnung from an allocation factor for that cost item's
+ *   label — an explicitly stored Verteilerschlüssel if one exists, else the
+ *   ratio learned from that label's own actual/share pair in the unit's most
+ *   recent prior settlement — never a living-area or occupancy fraction, and
+ *   never fabricated when neither basis exists. It only ever fills an
+ *   *empty* field, never overwriting one that already has a value (manual or
+ *   previously suggested).
  * - A saved settlement can now be deleted ("Abrechnung löschen"), which
  *   cascade-deletes its cost items and leaves the page on a fresh draft.
  * - Saving with an end date before the start date used to fail with the
@@ -214,10 +216,9 @@ test.beforeAll(async () => {
         );
         unitId2 = unit2Result.rows[0].property_unit_id as number;
 
-        // "Wert vorschlagen" derives Anteil Wohnung from NK-Vorauszahlung ÷
-        // WEG (Hausgeld) — not the units' living-area ratio, since a
-        // landlord can never be assumed to have registered every unit of a
-        // real building. 200 ÷ 400 = a clean 50% for easy-to-check math.
+        // house_money isn't exercised by any assertion below (it only feeds
+        // the separate Nebenkostenvorauszahlung/Über-Unterdeckung math), but
+        // tenancy.maintenance_costs_id is required, so a row must exist.
         const maintenanceCostsResult = await client.query(
             `INSERT INTO maintenance_costs (property_id, house_money) VALUES ($1, 400) RETURNING maintenance_costs_id`,
             [propertyId],
@@ -381,12 +382,28 @@ test('filling in a cost item and saving persists the settlement and computes the
     }
 });
 
-test('"Alle Werte vorschlagen" fills only empty Anteil Wohnung fields, computed from NK-Vorauszahlung ÷ WEG and occupancy', async ({ page }) => {
-    // A year the tenancy (started 2024-01-01, still ongoing) fully covers,
-    // and far enough from currentYear/currentYear+1 (used by the test above)
-    // to save into its own, unrelated settlement.
-    const targetYear = new Date().getFullYear() + 3;
+test('"Alle Werte vorschlagen" fills only empty Anteil Wohnung fields, using the ratio learned from the previous settlement', async ({ page }) => {
+    // Two otherwise-unused years (need not be adjacent — navigateToYear just
+    // clicks forward until it reaches each one), distinct from the years the
+    // other tests in this file save into.
+    const priorYear = new Date().getFullYear() + 2;
+    const targetYear = new Date().getFullYear() + 5;
+
+    // Seed a "previous" settlement with a known, easy-to-check Grundsteuer
+    // ratio (600/1000 = 60%, and — deliberately the same — 660/1100 = 60%
+    // for the budget side) via the app itself, so this test's expectations
+    // don't depend on incidental history left behind by other tests in this
+    // file.
     await page.goto(`/existing-properties/${propertyId}/service-charge-settlement/${unitId}`);
+    await navigateToYear(page, priorYear);
+    const priorRowNumbers = page.locator('tbody tr').first().locator('input[type="number"]');
+    await priorRowNumbers.nth(0).fill('1000');
+    await priorRowNumbers.nth(1).fill('600');
+    await priorRowNumbers.nth(2).fill('1100');
+    await priorRowNumbers.nth(3).fill('660');
+    await page.getByRole('button', { name: 'Abrechnung speichern' }).click();
+    await expect(page.getByText('Nebenkostenabrechnung gespeichert.')).toBeVisible();
+
     await navigateToYear(page, targetYear);
 
     const rows = page.locator('tbody tr');
@@ -394,21 +411,21 @@ test('"Alle Werte vorschlagen" fills only empty Anteil Wohnung fields, computed 
     const row2Numbers = rows.nth(1).locator('input[type="number"]');
 
     // Row 1 (Grundsteuer): only the amounts are filled in — Anteil Wohnung
-    // starts empty and should be picked up by the bulk suggestion.
-    await row1Numbers.nth(0).fill('1000');
-    await row1Numbers.nth(2).fill('1100');
+    // starts empty and should be picked up by the bulk suggestion, using the
+    // 60% ratio learned from the prior settlement seeded above.
+    await row1Numbers.nth(0).fill('2000');
+    await row1Numbers.nth(2).fill('2200');
     // Row 2 (Wasserversorgung): an amount AND a manually entered Anteil
-    // Wohnung — the bulk action must leave this one untouched.
+    // Wohnung — the bulk action must leave this one untouched (and has no
+    // prior-settlement history to suggest from anyway).
     await row2Numbers.nth(0).fill('500');
     await row2Numbers.nth(1).fill('42');
 
     await page.getByRole('button', { name: 'Alle Werte vorschlagen' }).click();
 
-    // Full-year occupancy (tenancy started years before this period and has
-    // no end date) at NK-Vorauszahlung 200 ÷ WEG 400 = 0.5 ->
-    // 1000 * 0.5 = 500, 1100 * 0.5 = 550.
-    await expect(row1Numbers.nth(1)).toHaveValue('500');
-    await expect(row1Numbers.nth(3)).toHaveValue('550');
+    // 2000 * 60% = 1200; 2200 * 60% = 1320.
+    await expect(row1Numbers.nth(1)).toHaveValue('1200');
+    await expect(row1Numbers.nth(3)).toHaveValue('1320');
     // The manually entered value on row 2 must survive unchanged.
     await expect(row2Numbers.nth(1)).toHaveValue('42');
 
