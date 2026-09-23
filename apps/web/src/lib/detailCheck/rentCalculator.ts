@@ -20,6 +20,20 @@ export type RentIncreasePlanRow = {
 export const CALCULATION_HORIZON_YEARS = 50;
 export const CALCULATION_HORIZON_MONTHS = CALCULATION_HORIZON_YEARS * 12;
 
+/** The rent-index growth that used to be hard-wired; kept as the default so results do not move. */
+export const DEFAULT_RENT_INDEX_GROWTH_PERCENT = 2;
+
+/**
+ * Growth factor of the rent index `offset` months into the projection. Stepped
+ * yearly (Math.floor), exactly like the former hard-wired Math.pow(1.02, …):
+ * with the default 2 %, `1 + 2 / 100` is bit-identical to 1.02.
+ */
+function rentIndexGrowthFactor(params: CalculatorParams, offset: number): number {
+  const growth = params.rentIndexGrowthPercent;
+  const percent = growth != null && Number.isFinite(growth) ? growth : DEFAULT_RENT_INDEX_GROWTH_PERCENT;
+  return Math.pow(1 + percent / 100, Math.floor(offset / 12));
+}
+
 export type CalculatorParams = {
   startYyyymm: string;
   rentStartYyyymm: string;
@@ -35,6 +49,12 @@ export type CalculatorParams = {
   rentIncreaseUtilizationPercent: number;
   rentIndexPerM2: number | null;
   rentIndexSource: RentIndexSource;
+  /**
+   * Annual growth of the ortsübliche Vergleichsmiete in percent, stepped once
+   * per year. Omitted = DEFAULT_RENT_INDEX_GROWTH_PERCENT, the value that used
+   * to be hard-wired.
+   */
+  rentIndexGrowthPercent?: number;
   monthlyDebtService: number;
   loanAmount: number;
   interestRate: number;
@@ -305,7 +325,7 @@ function plan558(
     // modernization keeps the month; the rent-index increase waits.
     if (sortedModernizations.some((item) => item.effectiveYyyymm === month)) continue;
 
-    const target = roundCurrency(targetPerM2 * Math.pow(1.02, Math.floor(offset / 12)) * params.livingAreaM2);
+    const target = roundCurrency(targetPerM2 * rentIndexGrowthFactor(params, offset) * params.livingAreaM2);
     const windowStart = addMonths(month, -35);
     const usedInWindow = steps.reduce((sum, step) => {
       if (compareMonth(step.effectiveYyyymm, windowStart) >= 0 && compareMonth(step.effectiveYyyymm, month) <= 0) {
@@ -388,7 +408,7 @@ function applyRentIncreaseOverrides(
 
   const legalMaximumAt = (effectiveYyyymm: string) => {
     const offset = Math.max(0, monthDiff(params.startYyyymm, effectiveYyyymm));
-    const target = roundCurrency(targetPerM2 * Math.pow(1.02, Math.floor(offset / 12)) * params.livingAreaM2);
+    const target = roundCurrency(targetPerM2 * rentIndexGrowthFactor(params, offset) * params.livingAreaM2);
     const active559 = modernizations
       .filter((item) => compareMonth(item.effectiveYyyymm, effectiveYyyymm) <= 0)
       .reduce((sum, item) => sum + item.monthlyDelta, 0);
