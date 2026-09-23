@@ -1,5 +1,5 @@
 import { roundCurrency } from './acquisitionCosts';
-import { compareScores, EARLIEST_BREAK_EVEN, type OptimizationObjective, type ScoredPlan } from './analysis/objectives';
+import { compareScores, EARLIEST_BREAK_EVEN, OBJECTIVES, type ObjectiveId, type OptimizationObjective, type ScoredPlan } from './analysis/objectives';
 import { costForCase, type RenovationCase, type RenovationTiming } from './renovation';
 
 export type CalculatorMode = 'KNOWN' | 'POTENTIAL';
@@ -69,6 +69,12 @@ export type CalculatorParams = {
   rentIndexGrowthPercent?: number;
   /** Betrachtungszeitraum der Auswertungen in Jahren; nur gespeichert, von runRentCalculator ignoriert. */
   viewPeriodYears?: number;
+  /**
+   * Mieterhöhungsstrategie für den Optimierer; nur wirksam, wenn placementMode
+   * === 'OPTIMIZED' und keine modernizationPlacements gesetzt sind. Fehlt/unbekannt
+   * = EARLIEST_BREAK_EVEN.
+   */
+  optimizationObjective?: ObjectiveId;
   monthlyDebtService: number;
   loanAmount: number;
   interestRate: number;
@@ -591,6 +597,8 @@ export function buildTimeline(
   // the optimizer (includeTimeline = false) gets it without materializing
   // 600 rows per candidate.
   let lastNegativeCashflowOffset = -1;
+  const viewMonths = (params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS) * 12;
+  let rentSumInView = 0;
   const timeline: RentTimelineRow[] = [];
   const delta558ByMonth = totalsByMonth(increases558, (item) => item.effectiveYyyymm, (item) => item.monthlyDelta);
   const indexedDelta558ByMonth = totalsByMonth(increases558WithRentIndex, (item) => item.effectiveYyyymm, (item) => item.monthlyDelta);
@@ -623,6 +631,7 @@ export function buildTimeline(
     const afa = roundCurrency(params.monthlyAfa);
     const income = rentalHasStarted ? rentTotal : 0;
     const indexedIncome = rentalHasStarted ? rentTotalWithRentIndex : 0;
+    if (offset < viewMonths) rentSumInView += income;
     const taxableIncome = roundCurrency(income - nonAllocableCosts - afa - interest);
     const taxResult = calculateTaxes(
       taxableIncome,
@@ -690,6 +699,7 @@ export function buildTimeline(
     endingCashflowWithRentIndex: runningWithRentIndex,
     /** First month from which the monthly after-tax cashflow never turns negative again; CALCULATION_HORIZON_MONTHS = never. */
     sustainablyPositiveOffset: lastNegativeCashflowOffset + 1,
+    rentSumInView: roundCurrency(rentSumInView),
   };
 }
 
@@ -738,7 +748,7 @@ function optimizeKnownModernizations(
   let candidates: Candidate[] = [{
     placements: [],
     plan: [],
-    score: scoreOf({ breakEvenOffset: 9999, endingCashflow: -Infinity, sustainablyPositiveOffset: 9999 }),
+    score: scoreOf({ breakEvenOffset: 9999, endingCashflow: -Infinity, sustainablyPositiveOffset: 9999, rentSumInView: -Infinity }),
   }];
   const possibleOffsets = Array.from(
     { length: Math.floor((CALCULATION_HORIZON_MONTHS - 4) / 12) + 1 },
@@ -799,7 +809,15 @@ export function runRentCalculator(params: CalculatorParams, renovationCases: Ren
   const modernizationPlan = params.placementMode === 'OPTIMIZED'
     && params.mode === 'KNOWN'
     && !params.modernizationPlacements
-    ? optimizeKnownModernizations(params, renovationCases, capAbs, capPercent, conservativeRentIndexPerM2, marketRentIndexPerM2)
+    ? optimizeKnownModernizations(
+      params,
+      renovationCases,
+      capAbs,
+      capPercent,
+      conservativeRentIndexPerM2,
+      marketRentIndexPerM2,
+      OBJECTIVES[params.optimizationObjective ?? 'EARLIEST_BREAK_EVEN'] ?? EARLIEST_BREAK_EVEN,
+    )
     : defaultPlan;
   const increases558 = applyRentIncreaseOverrides(
     params,
