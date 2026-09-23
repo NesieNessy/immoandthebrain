@@ -64,7 +64,7 @@ function SuggestSharePopover({
     const canSaveKey = numerator.trim() !== '' && denominator.trim() !== '' && Number(denominator) !== 0;
 
     return (
-        <div className="w-72 space-y-3 text-sm">
+        <div className="w-80 space-y-3 text-sm">
             {suggestion ? (
                 <div>
                     <p className="font-semibold text-foreground">Vorschlag: {euro(suggestion.value)}</p>
@@ -83,8 +83,8 @@ function SuggestSharePopover({
                     <NumberField aria-label="Zähler" placeholder="80" value={numerator} onChange={(e) => { setNumerator(e.target.value); setSaved(false); }} min={0} hideStepper className="w-20" />
                     <span className="text-muted-foreground">/</span>
                     <NumberField aria-label="Nenner" placeholder="1000" value={denominator} onChange={(e) => { setDenominator(e.target.value); setSaved(false); }} min={0} hideStepper className="w-20" />
-                    <TextField aria-label="Art" placeholder="Miteigentumsanteil" value={allocationType} onChange={(e) => { setAllocationType(e.target.value); setSaved(false); }} className="flex-1" />
                 </div>
+                <TextField aria-label="Art" placeholder="Miteigentumsanteil" value={allocationType} onChange={(e) => { setAllocationType(e.target.value); setSaved(false); }} className="mt-1.5 w-full" />
                 <Button
                     label={saved ? 'Gespeichert' : 'Speichern'}
                     variant="outline"
