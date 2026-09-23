@@ -24,10 +24,10 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
-import { isFullCalendarYear } from '@/lib/serviceCharge/settlementMath';
+import { isFullCalendarYear, type SuggestedShare } from '@/lib/serviceCharge/settlementMath';
 import { cn, formatDeDate } from '@/lib/utils';
-import type { Property, PropertyUnit, ServiceChargeSettlement } from '@immoandthebrain/types';
-import { useMemo, useRef } from 'react';
+import type { Property, PropertyUnit, ServiceChargeAllocationKey, ServiceChargeSettlement } from '@immoandthebrain/types';
+import { useMemo, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 
 import { euro, useServiceChargeSettlementData } from './useServiceChargeSettlementData';
@@ -36,6 +36,66 @@ function settlementPeriodLabel(s: ServiceChargeSettlement): string {
     const start = new Date(s.periodStart);
     const end = new Date(s.periodEnd);
     return isFullCalendarYear(start, end) ? `Abrechnungsjahr ${end.getFullYear()}` : `${formatDeDate(s.periodStart)} – ${formatDeDate(s.periodEnd)}`;
+}
+
+// The suggestion is never written into the field just from opening this —
+// only "Übernehmen" applies it — and it always explains its own basis
+// (an explicit Verteilerschlüssel or a ratio learned from last period),
+// since a bare number with no reasoning is exactly what made the earlier
+// single-ratio-per-unit version impossible to sanity-check by eye. When
+// neither basis exists, this doubles as the one place to set an explicit
+// key for that cost item label so future settlements never need history at all.
+function SuggestSharePopover({
+    suggestion,
+    existingKey,
+    onApply,
+    onSaveKey,
+}: {
+    suggestion: SuggestedShare | null;
+    existingKey: ServiceChargeAllocationKey | undefined;
+    onApply: () => void;
+    onSaveKey: (numerator: number, denominator: number, allocationType: string | null) => void;
+}) {
+    const [numerator, setNumerator] = useState(existingKey ? String(existingKey.numerator) : '');
+    const [denominator, setDenominator] = useState(existingKey ? String(existingKey.denominator) : '');
+    const [allocationType, setAllocationType] = useState(existingKey?.allocationType ?? '');
+    const [saved, setSaved] = useState(false);
+
+    const canSaveKey = numerator.trim() !== '' && denominator.trim() !== '' && Number(denominator) !== 0;
+
+    return (
+        <div className="w-72 space-y-3 text-sm">
+            {suggestion ? (
+                <div>
+                    <p className="font-semibold text-foreground">Vorschlag: {euro(suggestion.value)}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{suggestion.explanation}</p>
+                    <Button label={`${euro(suggestion.value)} übernehmen`} size="sm" className="mt-2 w-full" onClick={onApply} />
+                </div>
+            ) : (
+                <p className="text-xs text-muted-foreground">
+                    Kein Vorschlag verfügbar — für diese Position liegt weder ein Verteilerschlüssel noch eine Vorjahres-Abrechnung vor.
+                </p>
+            )}
+            <div className="border-t border-border pt-3">
+                <p className="text-xs font-medium text-foreground">{existingKey ? 'Verteilerschlüssel bearbeiten' : 'Verteilerschlüssel festlegen'}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Einmal festgelegt, gilt er für diese Position auch in künftigen Abrechnungen.</p>
+                <div className="mt-2 flex items-center gap-1.5">
+                    <NumberField aria-label="Zähler" placeholder="80" value={numerator} onChange={(e) => { setNumerator(e.target.value); setSaved(false); }} min={0} hideStepper className="w-20" />
+                    <span className="text-muted-foreground">/</span>
+                    <NumberField aria-label="Nenner" placeholder="1000" value={denominator} onChange={(e) => { setDenominator(e.target.value); setSaved(false); }} min={0} hideStepper className="w-20" />
+                    <TextField aria-label="Art" placeholder="Miteigentumsanteil" value={allocationType} onChange={(e) => { setAllocationType(e.target.value); setSaved(false); }} className="flex-1" />
+                </div>
+                <Button
+                    label={saved ? 'Gespeichert' : 'Speichern'}
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-full"
+                    disabled={!canSaveKey}
+                    onClick={() => { onSaveKey(Number(numerator), Number(denominator), allocationType.trim() || null); setSaved(true); }}
+                />
+            </div>
+        </div>
+    );
 }
 
 interface ServiceChargeSettlementViewProps {
@@ -309,7 +369,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
 
                     {/* Info banner */}
                     <div className="px-4 py-3 rounded-lg bg-primary/5 border border-primary/20 text-sm text-foreground">
-                        Erfasse alle Kostenpositionen des Abrechnungsjahres sowie den jeweiligen Wohnungsanteil pro Position — der Gesamtbetrag des Objekts entspricht nicht automatisch dem Anteil der Wohnung und muss separat erfasst werden. Über „Wert vorschlagen&quot; kannst du dir pro Position einen Vorschlag auf Basis von Wohnflächenanteil und Mietzeitraum anzeigen lassen und bei Bedarf anpassen.
+                        Erfasse alle Kostenpositionen des Abrechnungsjahres sowie den jeweiligen Wohnungsanteil pro Position — der Gesamtbetrag des Objekts entspricht nicht automatisch dem Anteil der Wohnung und muss separat erfasst werden. Über „Wert vorschlagen&quot; kannst du dir pro Position einen Vorschlag anzeigen lassen — auf Basis eines hinterlegten Verteilerschlüssels oder, falls keiner besteht, des Verhältnisses aus der letzten Abrechnung dieser Position. Ohne beide Grundlagen wird kein Wert vorgeschlagen.
                     </div>
 
                     {/* Cost item table */}
@@ -319,11 +379,9 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                             icon={<Icons.Calculator className="w-4 h-4" />}
                             variant="outline"
                             size="sm"
-                            disabled={!data.canSuggestShares || !data.costItems.some((item) => item.actualAmount !== '' || item.budgetAmount !== '')}
+                            disabled={!data.costItems.some((item) => item.actualAmount !== '' || item.budgetAmount !== '')}
                             onClick={data.suggestAllShares}
-                            title={!data.canSuggestShares
-                                ? 'NK-Vorauszahlung und WEG müssen im Mietvertrag ausgefüllt sein, bevor ein Anteil Wohnung vorgeschlagen werden kann.'
-                                : 'Füllt Anteil Wohnung für jede Position mit Gesamtbetrag, die noch leer ist — bereits erfasste Werte bleiben unverändert.'}
+                            title="Füllt Anteil Wohnung für jede Position mit Gesamtbetrag, für die ein Verteilerschlüssel oder eine Vorjahres-Abrechnung vorliegt und die noch leer ist — bereits erfasste Werte bleiben unverändert, Positionen ohne Grundlage bleiben leer."
                         />
                         <Button
                             label="Kostenposition hinzufügen"
@@ -426,18 +484,27 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                             <span className="w-4 text-center text-muted-foreground text-xs">€</span>
                                                         )}
                                                         <span className="inline-flex items-center justify-center w-[22px] h-[22px]">
-                                                            {data.canSuggestShares && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => data.suggestRowShare(index, 'actual')}
-                                                                    disabled={item.actualAmount === ''}
-                                                                    aria-label="Wert vorschlagen"
-                                                                    title="Wert vorschlagen: NK-Vorauszahlung ÷ WEG × Mietzeitraum (nur dieses Feld)"
-                                                                    className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                                                                >
-                                                                    <Icons.Calculator className="w-3.5 h-3.5" />
-                                                                </button>
-                                                            )}
+                                                            <Popover>
+                                                                <PopoverTrigger asChild>
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={item.actualAmount === ''}
+                                                                        aria-label="Wert vorschlagen"
+                                                                        title="Wert vorschlagen (nur dieses Feld)"
+                                                                        className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                                    >
+                                                                        <Icons.Calculator className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                </PopoverTrigger>
+                                                                <PopoverContent align="end">
+                                                                    <SuggestSharePopover
+                                                                        suggestion={data.computeSuggestion(index, 'actual')}
+                                                                        existingKey={data.allocationKeys.find((k) => k.label.trim().toLowerCase() === item.label.trim().toLowerCase())}
+                                                                        onApply={() => data.applySuggestion(index, 'actual')}
+                                                                        onSaveKey={(numerator, denominator, allocationType) => void data.saveAllocationKey(item.label, numerator, denominator, allocationType)}
+                                                                    />
+                                                                </PopoverContent>
+                                                            </Popover>
                                                         </span>
                                                     </div>
                                                 </div>
@@ -480,18 +547,27 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                             <span className="w-4 text-center text-muted-foreground text-xs">€</span>
                                                         )}
                                                         <span className="inline-flex items-center justify-center w-[22px] h-[22px]">
-                                                            {data.canSuggestShares && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => data.suggestRowShare(index, 'budget')}
-                                                                    disabled={item.budgetAmount === ''}
-                                                                    aria-label="Wert vorschlagen"
-                                                                    title="Wert vorschlagen: NK-Vorauszahlung ÷ WEG × Mietzeitraum (nur dieses Feld)"
-                                                                    className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                                                                >
-                                                                    <Icons.Calculator className="w-3.5 h-3.5" />
-                                                                </button>
-                                                            )}
+                                                            <Popover>
+                                                                <PopoverTrigger asChild>
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={item.budgetAmount === ''}
+                                                                        aria-label="Wert vorschlagen"
+                                                                        title="Wert vorschlagen (nur dieses Feld)"
+                                                                        className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                                    >
+                                                                        <Icons.Calculator className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                </PopoverTrigger>
+                                                                <PopoverContent align="end">
+                                                                    <SuggestSharePopover
+                                                                        suggestion={data.computeSuggestion(index, 'budget')}
+                                                                        existingKey={data.allocationKeys.find((k) => k.label.trim().toLowerCase() === item.label.trim().toLowerCase())}
+                                                                        onApply={() => data.applySuggestion(index, 'budget')}
+                                                                        onSaveKey={(numerator, denominator, allocationType) => void data.saveAllocationKey(item.label, numerator, denominator, allocationType)}
+                                                                    />
+                                                                </PopoverContent>
+                                                            </Popover>
                                                         </span>
                                                     </div>
                                                 </div>

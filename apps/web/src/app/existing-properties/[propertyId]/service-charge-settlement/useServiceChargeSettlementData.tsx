@@ -7,14 +7,21 @@ import { getPersonalData } from '@/lib/supabase/personal_data.supabase';
 import {
     createCostItem,
     deleteCostItem,
+    getCostItemsBySettlement,
     updateCostItem,
 } from '@/lib/supabase/service_charge_cost_item.supabase';
 import {
+    createAllocationKey,
+    getAllocationKeysByUnit,
+    updateAllocationKey,
+} from '@/lib/supabase/service_charge_allocation_key.supabase';
+import {
     createSettlement,
     deleteSettlement,
+    getPreviousSettlementForUnit,
     getSettlementByPeriod,
     getSettlementSourceDocumentUrl,
-    getSettlementsByProperty,
+    getSettlementsByUnit,
     removeSettlementSourceDocument,
     updateSettlement,
     uploadSettlementSourceDocument,
@@ -35,10 +42,11 @@ import {
     isFullCalendarYear,
     isPeriodTooLong,
     monthlyRateAsOf,
-    occupancyFraction,
     prorateAnnualPrepayment,
     splitByAllocable,
-    suggestApartmentShare,
+    suggestShareForCostItem,
+    type PreviousCostItemInput,
+    type SuggestedShare,
 } from '@/lib/serviceCharge/settlementMath';
 import { mergeExtractedCostItems, type ExtractedSettlementData } from '@/lib/serviceCharge/settlementExtraction';
 import type {
@@ -46,6 +54,7 @@ import type {
     PersonalData,
     Property,
     PropertyUnit,
+    ServiceChargeAllocationKey,
     ServiceChargeCostItem,
     ServiceChargeSettlement,
     Tenancy,
@@ -120,6 +129,11 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const [tenancyPersons, setTenancyPersons] = useState<TenancyPerson[]>([]);
     const [miscRentHistory, setMiscRentHistory] = useState<TenancyAdjustmentHistoryEntry[]>([]);
     const [maintenanceCosts, setMaintenanceCosts] = useState<MaintenanceCosts | null>(null);
+    // Wert-vorschlagen inputs — explicit keys persist across periods (fetched
+    // by unit, not by settlement); previousCostItems is a label -> row lookup
+    // for whichever settlement immediately precedes the one currently loaded.
+    const [allocationKeys, setAllocationKeys] = useState<ServiceChargeAllocationKey[]>([]);
+    const [previousCostItems, setPreviousCostItems] = useState<Record<string, PreviousCostItemInput>>({});
     const [landlord, setLandlord] = useState<PersonalData | null | undefined>(undefined);
     const [documents, setDocuments] = useState<TenancyDocument[]>([]);
     const [pendingDeleteDoc, setPendingDeleteDoc] = useState<TenancyDocument | null>(null);
@@ -138,13 +152,15 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const [previewAdjustmentHtml, setPreviewAdjustmentHtml] = useState<string | null>(null);
     const [isLoadingAdjustmentPreview, setIsLoadingAdjustmentPreview] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    // Every settlement ever saved for this property — lets the picker reopen
-    // one whose period isn't reachable via the year chevron (a custom range,
-    // or a year other than the currently loaded one).
+    // Every settlement ever saved for this unit — lets the picker reopen one
+    // whose period isn't reachable via the year chevron (a custom range, or
+    // a year other than the currently loaded one). Settlements are per unit,
+    // not shared across a building, so this must never mix in another
+    // unit's settlements.
     const [savedSettlements, setSavedSettlements] = useState<ServiceChargeSettlement[]>([]);
     const refreshSavedSettlements = useCallback(async () => {
-        setSavedSettlements(await getSettlementsByProperty(property.propertyId));
-    }, [property.propertyId]);
+        setSavedSettlements(await getSettlementsByUnit(property.propertyId, unit.propertyUnitId));
+    }, [property.propertyId, unit.propertyUnitId]);
     useEffect(() => { void refreshSavedSettlements(); }, [refreshSavedSettlements]);
 
     // `explicitPeriod` set means "load the settlement for exactly this
@@ -175,9 +191,14 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
             const defaultItems = () => DEFAULT_COST_ITEMS.map((item) => ({ id: null, label: item.label, allocable: item.allocable, actualAmount: '', budgetAmount: '', actualShareOverride: '', budgetShareOverride: '' }));
 
+            let resolvedStart: Date;
+            let resolvedEnd: Date;
+
             if (currentSettlement) {
                 const start = new Date(currentSettlement.periodStart);
                 const end = new Date(currentSettlement.periodEnd);
+                resolvedStart = start;
+                resolvedEnd = end;
                 setPeriodStart(start);
                 setPeriodEnd(end);
                 setPeriodModeState(isFullCalendarYear(start, end) ? 'year' : 'custom');
@@ -201,6 +222,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 // saved settlement yet — start a fresh draft for exactly
                 // that period rather than falling back to the "brand new
                 // settlement" defaulting logic below.
+                resolvedStart = explicitPeriod.start;
+                resolvedEnd = explicitPeriod.end;
                 setPeriodStart(explicitPeriod.start);
                 setPeriodEnd(explicitPeriod.end);
                 setPeriodModeState(isFullCalendarYear(explicitPeriod.start, explicitPeriod.end) ? 'year' : 'custom');
@@ -213,6 +236,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 // always needs to end there, not run through Dec 31.
                 const moveOutDate = currentTenancy?.tenancyEndDate ? new Date(currentTenancy.tenancyEndDate) : null;
                 const { start, end } = defaultSettlementPeriod(moveOutDate, new Date().getFullYear());
+                resolvedStart = start;
+                resolvedEnd = end;
                 setPeriodStart(start);
                 setPeriodEnd(end);
                 setPeriodModeState(isFullCalendarYear(start, end) ? 'year' : 'custom');
@@ -221,6 +246,28 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 setOriginalSnapshot(serializeCostItems(items, start, end));
             }
             setDeletedCostItemIds([]);
+
+            // Wert-vorschlagen inputs: the explicit allocation keys for this
+            // unit (stable across periods), and a label -> row lookup of
+            // whichever settlement immediately precedes the one just resolved
+            // above (the "previous period" a ratio can be learned from).
+            const [loadedAllocationKeys, previousSettlement] = await Promise.all([
+                getAllocationKeysByUnit(property.propertyId, unit.propertyUnitId),
+                getPreviousSettlementForUnit(property.propertyId, unit.propertyUnitId, format(resolvedStart, 'yyyy-MM-dd')),
+            ]);
+            setAllocationKeys(loadedAllocationKeys);
+            const previousItems = previousSettlement
+                ? await getCostItemsBySettlement(previousSettlement.serviceChargeSettlementId)
+                : [];
+            setPreviousCostItems(Object.fromEntries(
+                previousItems
+                    .filter((item) => item.label.trim() !== '')
+                    .map((item) => [item.label.trim().toLowerCase(), {
+                        label: item.label,
+                        actualAmount: item.actualAmount,
+                        actualShareOverride: item.actualShareOverride,
+                    }]),
+            ));
         } catch {
             setError('Die Nebenkostenabrechnung konnte nicht geladen werden.');
         } finally {
@@ -378,20 +425,14 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     const currentMonthlyPrepayment = tenancy?.miscRent ?? 0;
 
-    // "Wert vorschlagen" must never rely on the living-area ratio of
-    // whichever units happen to be registered for this property — a
-    // landlord can never be assumed to have entered every unit of a real
-    // building, so that ratio can be silently wrong (see the Hauptstraße 12
-    // incident: one registered unit computed a 100% share that had nothing
-    // to do with reality). NK-Vorauszahlung (this tenant's monthly advance)
-    // ÷ WEG/Hausgeld (this unit's monthly payment to the WEG) is used as
-    // the allocation key instead — both live on Mietvertrag, independent of
-    // how many other units exist in the system. miscRent === 0 is a valid,
-    // filled value (a tenant who genuinely pays no NK-Vorauszahlung);
-    // houseMoney null/0 is not, since it would either mean "not filled" or
-    // divide by zero.
-    const canSuggestShares = tenancy != null && tenancy.miscRent != null && tenancy.houseMoney != null && tenancy.houseMoney !== 0;
-    const suggestShareRatio = canSuggestShares ? (tenancy!.miscRent as number) / (tenancy!.houseMoney as number) : null;
+    // "Wert vorschlagen" must never rely on a single ratio applied to every
+    // cost item — different items legitimately use different Verteilerschlüssel
+    // (ownership share, consumption, unit count, ...), so the ratio has to be
+    // derived per cost item label instead (see suggestShareForCostItem):
+    // an explicit, landlord-entered allocation key first, else the ratio
+    // implied by this same unit's own previous settlement for that label,
+    // else no suggestion at all. allocationKeys and previousCostItems are
+    // fetched once in `load` below and looked up per row from here.
     // (2) Annual total from the tenant's NK-Vorauszahlung, prorated for any
     // miscRent change that took effect during the settlement period, and
     // clipped to the days the tenant actually occupied the unit — a
@@ -527,68 +568,86 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         });
     };
 
-    // Opt-in "Wert vorschlagen" — fills Anteil Wohnung with property cost ×
-    // (NK-Vorauszahlung ÷ WEG) × occupancy fraction, once, only when the
-    // landlord explicitly clicks it. This must never run on its own (e.g.
-    // when actualAmount/budgetAmount changes, or on load) — Anteil Wohnung
-    // is a manual, independent field, and the whole point of this action is
-    // that it only ever proposes a starting point the landlord can still
-    // edit or ignore, never a value that reappears or overwrites silently.
-    // Blocked entirely when canSuggestShares is false (NK-Vorauszahlung
-    // and/or WEG missing in Mietvertrag) — the button is disabled/hidden in
-    // that case, but this guard protects against a stale click too.
-    // Each icon only touches its own column (Abrechnung from the current
-    // settlement period, Wirtschaftsplan from next full calendar year —
-    // Wirtschaftsplan has no period fields of its own) — clicking the
-    // Wirtschaftsplan icon must never also change the already-reviewed
-    // Abrechnung value in the same row, and vice versa. Unlike the bulk
-    // "Alle Werte vorschlagen" action, this always recalculates (an explicit
-    // per-row click is the landlord asking for a fresh number), overwriting
-    // whatever was there before in that one field.
-    const suggestRowShare = useCallback((index: number, column: 'actual' | 'budget') => {
-        if (suggestShareRatio == null) return;
-        setCostItems((prev) => {
-            const item = prev[index];
-            if (!item) return prev;
-            const tenancyStart = tenancy?.tenancyStartDate ? new Date(tenancy.tenancyStartDate) : null;
-            const tenancyEnd = tenancy?.tenancyEndDate ? new Date(tenancy.tenancyEndDate) : null;
-            const patch: Partial<CostItemForm> = {};
-            if (column === 'actual' && item.actualAmount !== '' && periodStart && periodEnd) {
-                const fraction = occupancyFraction(periodStart, periodEnd, tenancyStart, tenancyEnd);
-                patch.actualShareOverride = String(suggestApartmentShare(Number(item.actualAmount) || 0, suggestShareRatio, fraction));
-            }
-            if (column === 'budget' && item.budgetAmount !== '') {
-                const nextYearStart = new Date(settlementYear + 1, 0, 1);
-                const nextYearEnd = new Date(settlementYear + 1, 11, 31);
-                const fraction = occupancyFraction(nextYearStart, nextYearEnd, tenancyStart, tenancyEnd);
-                patch.budgetShareOverride = String(suggestApartmentShare(Number(item.budgetAmount) || 0, suggestShareRatio, fraction));
-            }
-            return prev.map((it, i) => (i === index ? { ...it, ...patch } : it));
-        });
-    }, [periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate, suggestShareRatio, settlementYear]);
+    // Opt-in "Wert vorschlagen" — never runs on its own (e.g. when
+    // actualAmount/budgetAmount changes, or on load) and never overwrites a
+    // value the landlord already entered or previously accepted. The ratio
+    // itself is per cost item label (see suggestShareForCostItem): an
+    // explicit allocation key first, else a learned ratio for that label,
+    // else no suggestion — "Allocable" never enters the decision, it only
+    // governs what's later charged to the tenant, not what a landlord's own
+    // share of a cost item is.
+    //
+    // The "learned ratio" source differs by column: Wirtschaftsplan (budget)
+    // is next year's projection for THIS SAME settlement, so this settlement's
+    // own already-filled Abrechnung (actual) side for that label is the most
+    // relevant, most recent ratio available — checked before falling back to
+    // a genuinely earlier settlement. Abrechnung (actual) itself has no such
+    // same-settlement fallback (there's nothing more recent than "now" to
+    // learn from) and only ever looks at a truly previous settlement.
+    const historyCandidatesFor = useCallback((item: CostItemForm, column: 'actual' | 'budget'): PreviousCostItemInput[] => {
+        const sameSettlementActual: PreviousCostItemInput[] = column === 'budget' && item.actualAmount !== '' && item.actualShareOverride !== ''
+            ? [{ label: item.label, actualAmount: Number(item.actualAmount) || 0, actualShareOverride: Number(item.actualShareOverride) || 0 }]
+            : [];
+        return [...sameSettlementActual, ...Object.values(previousCostItems)];
+    }, [previousCostItems]);
 
-    // Bulk version of the two suggestions above — fills in every row's
-    // Anteil Wohnung at once, but (unlike the per-row buttons) only where
-    // it's still empty: an already-entered value, manual or previously
-    // suggested, is left untouched rather than recalculated over it.
+    const computeSuggestion = useCallback((index: number, column: 'actual' | 'budget'): SuggestedShare | null => {
+        const item = costItems[index];
+        if (!item) return null;
+        const amount = column === 'actual' ? item.actualAmount : item.budgetAmount;
+        if (amount === '') return null;
+        return suggestShareForCostItem(Number(amount) || 0, item.label, allocationKeys, historyCandidatesFor(item, column));
+    }, [costItems, allocationKeys, historyCandidatesFor]);
+
+    // Each icon only touches its own column (Abrechnung vs. Wirtschaftsplan)
+    // — clicking one must never also change the already-reviewed value in
+    // the same row's other column. Always overwrites whatever was there
+    // before in that one field (an explicit per-row click is the landlord
+    // asking for a fresh number); the bulk action below is the "don't
+    // overwrite" one.
+    const applySuggestion = useCallback((index: number, column: 'actual' | 'budget') => {
+        const suggestion = computeSuggestion(index, column);
+        if (!suggestion) return;
+        setCostItems((prev) => prev.map((it, i) => (i === index
+            ? { ...it, ...(column === 'actual' ? { actualShareOverride: String(suggestion.value) } : { budgetShareOverride: String(suggestion.value) }) }
+            : it)));
+    }, [computeSuggestion]);
+
+    // Bulk version — fills in every row's Anteil Wohnung at once, but
+    // (unlike the per-row buttons) only where it's still empty, and only
+    // where a suggestion actually exists; a row with neither an explicit
+    // key nor a usable prior-period ratio is left empty rather than
+    // fabricating a number.
     const suggestAllShares = useCallback(() => {
-        if (!periodStart || !periodEnd || suggestShareRatio == null) return;
-        const tenancyStart = tenancy?.tenancyStartDate ? new Date(tenancy.tenancyStartDate) : null;
-        const tenancyEnd = tenancy?.tenancyEndDate ? new Date(tenancy.tenancyEndDate) : null;
-        const actualFraction = occupancyFraction(periodStart, periodEnd, tenancyStart, tenancyEnd);
-        const nextYearStart = new Date(settlementYear + 1, 0, 1);
-        const nextYearEnd = new Date(settlementYear + 1, 11, 31);
-        const budgetFraction = occupancyFraction(nextYearStart, nextYearEnd, tenancyStart, tenancyEnd);
-        setCostItems((prev) => prev.map((item) => ({
-            ...item,
-            actualShareOverride: item.actualShareOverride === '' && item.actualAmount !== ''
-                ? String(suggestApartmentShare(Number(item.actualAmount) || 0, suggestShareRatio, actualFraction))
-                : item.actualShareOverride,
-            budgetShareOverride: item.budgetShareOverride === '' && item.budgetAmount !== ''
-                ? String(suggestApartmentShare(Number(item.budgetAmount) || 0, suggestShareRatio, budgetFraction))
-                : item.budgetShareOverride,
-        })));
-    }, [periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate, suggestShareRatio, settlementYear]);
+        setCostItems((prev) => prev.map((item) => {
+            const actualSuggestion = item.actualShareOverride === '' && item.actualAmount !== ''
+                ? suggestShareForCostItem(Number(item.actualAmount) || 0, item.label, allocationKeys, historyCandidatesFor(item, 'actual'))
+                : null;
+            const budgetSuggestion = item.budgetShareOverride === '' && item.budgetAmount !== ''
+                ? suggestShareForCostItem(Number(item.budgetAmount) || 0, item.label, allocationKeys, historyCandidatesFor(item, 'budget'))
+                : null;
+            return {
+                ...item,
+                actualShareOverride: actualSuggestion ? String(actualSuggestion.value) : item.actualShareOverride,
+                budgetShareOverride: budgetSuggestion ? String(budgetSuggestion.value) : item.budgetShareOverride,
+            };
+        }));
+    }, [allocationKeys, historyCandidatesFor]);
+
+    // Persists (creates or updates) an explicit Verteilerschlüssel for one
+    // cost item label on this unit — the landlord setting it once so future
+    // suggestions for that label never again depend on prior-period history
+    // existing at all.
+    const saveAllocationKey = async (label: string, numerator: number, denominator: number, allocationType: string | null): Promise<void> => {
+        const normalizedLabel = label.trim();
+        if (!normalizedLabel || !Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return;
+        const existing = allocationKeys.find((k) => k.label.trim().toLowerCase() === normalizedLabel.toLowerCase());
+        const saved = existing
+            ? await updateAllocationKey(existing.serviceChargeAllocationKeyId, { numerator, denominator, allocationType })
+            : await createAllocationKey({ propertyUnitId: unit.propertyUnitId, propertyId: property.propertyId, label: normalizedLabel, numerator, denominator, allocationType });
+        if (!saved) return;
+        setAllocationKeys((prev) => (existing ? prev.map((k) => (k.serviceChargeAllocationKeyId === saved.serviceChargeAllocationKeyId ? saved : k)) : [...prev, saved]));
+    };
 
     // ── Save ─────────────────────────────────────────────────────────────────
     const handleSave = async () => {
@@ -648,6 +707,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             if (!activeSettlement) {
                 activeSettlement = await createSettlement({
                     propertyId: property.propertyId,
+                    propertyUnitId: unit.propertyUnitId,
                     periodStart: periodStartStr,
                     periodEnd: periodEndStr,
                     sourceDocumentName: null,
@@ -677,10 +737,11 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 // belongs to a settlement for the *new* target period.
                 // Check whether one already exists there first, since
                 // blindly creating could duplicate it.
-                const conflict = await getSettlementByPeriod(property.propertyId, periodStartStr, periodEndStr);
+                const conflict = await getSettlementByPeriod(property.propertyId, unit.propertyUnitId, periodStartStr, periodEndStr);
                 if (conflict) throw new Error('PERIOD_CONFLICT');
                 const created = await createSettlement({
                     propertyId: property.propertyId,
+                    propertyUnitId: unit.propertyUnitId,
                     periodStart: periodStartStr,
                     periodEnd: periodEndStr,
                     sourceDocumentName: null,
@@ -859,6 +920,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         const currentYear = new Date().getFullYear();
         const created = await createSettlement({
             propertyId: property.propertyId,
+            propertyUnitId: unit.propertyUnitId,
             periodStart: periodStart ? format(periodStart, 'yyyy-MM-dd') : format(new Date(currentYear, 0, 1), 'yyyy-MM-dd'),
             periodEnd: periodEnd ? format(periodEnd, 'yyyy-MM-dd') : format(new Date(currentYear, 11, 31), 'yyyy-MM-dd'),
             sourceDocumentName: null,
@@ -1220,7 +1282,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         pendingDeleteDoc, deletingDocId, requestDeleteDoc, cancelDeleteDoc, confirmDeleteDoc,
         pendingDeleteSettlement, isDeletingSettlement, requestDeleteSettlement, cancelDeleteSettlement, confirmDeleteSettlement,
         // computed
-        isEditing, unitShare, totalArea, canSuggestShares,
+        isEditing, unitShare, totalArea, allocationKeys,
         totalActualAllocable, totalBudgetAllocable,
         actualSplit, budgetSplit,
         unitActualShare, unitBudgetShare,
@@ -1232,7 +1294,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         canGeneratePdf, canGenerateAdjustmentDocx, canApplyPrepayment,
         // handlers
         updateCostItemField, addCostItem, removeCostItem,
-        suggestRowShare, suggestAllShares,
+        computeSuggestion, applySuggestion, suggestAllShares, saveAllocationKey,
         handleSave, handleUploadSourceDocument, handleViewSourceDocument, handleRemoveSourceDocument,
         handleGeneratePdf, handlePreview, closePreview,
         handleGenerateAdjustmentDocx, handlePreviewAdjustment, closeAdjustmentPreview,

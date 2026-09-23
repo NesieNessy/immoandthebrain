@@ -726,6 +726,9 @@ export type TenancyAdjustmentHistoryInsert = Omit<TenancyAdjustmentHistoryEntry,
 export interface ServiceChargeSettlement {
   serviceChargeSettlementId: number;
   propertyId: number;
+  /** The apartment this settlement is for — settlements are per unit, not
+   *  shared across every unit of the building. */
+  propertyUnitId: number;
   periodStart: string;
   periodEnd: string;
   sourceDocumentName: string | null;
@@ -735,7 +738,7 @@ export interface ServiceChargeSettlement {
 }
 
 export type ServiceChargeSettlementInsert = Omit<ServiceChargeSettlement, 'serviceChargeSettlementId' | 'createdAt' | 'updatedAt'>;
-export type ServiceChargeSettlementUpdate = Partial<Omit<ServiceChargeSettlement, 'serviceChargeSettlementId' | 'propertyId' | 'createdAt' | 'updatedAt'>>;
+export type ServiceChargeSettlementUpdate = Partial<Omit<ServiceChargeSettlement, 'serviceChargeSettlementId' | 'propertyId' | 'propertyUnitId' | 'createdAt' | 'updatedAt'>>;
 
 export interface ServiceChargeCostItem {
   serviceChargeCostItemId: number;
@@ -762,6 +765,29 @@ export interface ServiceChargeCostItem {
 
 export type ServiceChargeCostItemInsert = Omit<ServiceChargeCostItem, 'serviceChargeCostItemId' | 'createdAt' | 'updatedAt'>;
 export type ServiceChargeCostItemUpdate = Partial<Omit<ServiceChargeCostItem, 'serviceChargeCostItemId' | 'serviceChargeSettlementId' | 'propertyId' | 'createdAt' | 'updatedAt'>>;
+
+/** An explicit, reusable Verteilerschlüssel (e.g. a Miteigentumsanteil of
+ *  80/1000) for one cost item label on one unit — set once, then always the
+ *  best-available basis for "Wert vorschlagen" from then on, ahead of
+ *  deriving a ratio from last period's own figures. Keyed by (propertyUnitId,
+ *  label), not by settlement — it's meant to outlive any one billing period. */
+export interface ServiceChargeAllocationKey {
+  serviceChargeAllocationKeyId: number;
+  propertyUnitId: number;
+  propertyId: number;
+  label: string;
+  numerator: number;
+  denominator: number;
+  /** Free-text description of what the key represents (e.g.
+   *  "Miteigentumsanteil", "Verbrauch") — shown back to the landlord so a
+   *  suggestion can say what it's based on. */
+  allocationType: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ServiceChargeAllocationKeyInsert = Omit<ServiceChargeAllocationKey, 'serviceChargeAllocationKeyId' | 'createdAt' | 'updatedAt'>;
+export type ServiceChargeAllocationKeyUpdate = Partial<Omit<ServiceChargeAllocationKey, 'serviceChargeAllocationKeyId' | 'propertyUnitId' | 'propertyId' | 'createdAt' | 'updatedAt'>>;
 
 // ----------------------------------------------------------------------------
 // Renovation measures (Handwerker / Sanierungsmaßnahmen overview)
