@@ -70,6 +70,7 @@ export function MetricCard({
   detail,
   tone = 'neutral',
   colorValue = false,
+  action,
 }: {
   label: string;
   value: string;
@@ -81,12 +82,21 @@ export function MetricCard({
    *  "+"/"-" prefix on the number. Off by default so every other MetricCard
    *  keeps its plain-colored value. */
   colorValue?: boolean;
+  /** An optional icon button rendered in the card's top-right corner, next
+   *  to the label — for a card whose value the user can act on directly
+   *  (e.g. applying a suggested figure), instead of a separate button
+   *  floating below the whole card grid with no visual tie to which value
+   *  it acts on. Absent by default so every other MetricCard is unaffected. */
+  action?: ReactNode;
 }) {
   return (
     <div className="min-w-0 rounded-md border border-primary/15 bg-card p-4 shadow-sm">
-      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <span>{label}</span>
-        <LockKeyhole size={13} aria-hidden="true" />
+      <div className="flex items-center justify-between gap-1.5">
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <span>{label}</span>
+          <LockKeyhole size={13} aria-hidden="true" />
+        </div>
+        {action}
       </div>
       <output
         className={cn(

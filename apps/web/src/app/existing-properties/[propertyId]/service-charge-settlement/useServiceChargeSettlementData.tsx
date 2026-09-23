@@ -34,6 +34,7 @@ import {
     defaultSettlementPeriod,
     isFullCalendarYear,
     isPeriodTooLong,
+    monthlyRateAsOf,
     occupancyFraction,
     prorateAnnualPrepayment,
     splitByAllocable,
@@ -183,7 +184,14 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 // full standard BetrKV list to fill in, not an empty table.
                 const items = loadedItems.length > 0 ? loadedItems : defaultItems();
                 setCostItems(items);
-                setOriginalSnapshot(loadedItems.length > 0 ? serializeCostItems(items, new Date(currentSettlement.periodStart), new Date(currentSettlement.periodEnd)) : '');
+                // Snapshotting whatever was actually just loaded (including the
+                // default template when there are no saved items yet) — not an
+                // empty string — so isEditing correctly stays false until the
+                // user changes something, instead of an untouched page being
+                // permanently "dirty" (previously: navigating away via the
+                // breadcrumb always showed the discard-confirmation dialog,
+                // even with nothing edited).
+                setOriginalSnapshot(serializeCostItems(items, start, end));
             } else if (explicitPeriod) {
                 // Navigated (via the year picker) to a period that has no
                 // saved settlement yet — start a fresh draft for exactly
@@ -192,8 +200,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 setPeriodStart(explicitPeriod.start);
                 setPeriodEnd(explicitPeriod.end);
                 setPeriodModeState(isFullCalendarYear(explicitPeriod.start, explicitPeriod.end) ? 'year' : 'custom');
-                setCostItems(defaultItems());
-                setOriginalSnapshot('');
+                const items = defaultItems();
+                setCostItems(items);
+                setOriginalSnapshot(serializeCostItems(items, explicitPeriod.start, explicitPeriod.end));
             } else {
                 // Default the period to the tenant's Mietauszug date when
                 // there is one — a settlement for a moved-out tenant almost
@@ -203,8 +212,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 setPeriodStart(start);
                 setPeriodEnd(end);
                 setPeriodModeState(isFullCalendarYear(start, end) ? 'year' : 'custom');
-                setCostItems(defaultItems());
-                setOriginalSnapshot('');
+                const items = defaultItems();
+                setCostItems(items);
+                setOriginalSnapshot(serializeCostItems(items, start, end));
             }
             setDeletedCostItemIds([]);
         } catch {
@@ -243,7 +253,16 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         return () => { cancelled = true; };
     }, [unit.propertyUnitId]);
 
-    const isEditing = !settlement || serializeCostItems(costItems, periodStart, periodEnd) !== originalSnapshot;
+    // Purely a snapshot comparison now — originalSnapshot is always set to
+    // whatever was actually just loaded (a saved settlement's items, or the
+    // default template for a fresh/unsaved period), so this correctly stays
+    // false until the user changes something. It must NOT also force true
+    // whenever `settlement` is null: a fresh, untouched draft period has no
+    // settlement yet by definition, but that alone was making every such
+    // page permanently "dirty" — spuriously popping the discard-confirmation
+    // dialog on every navigation attempt and leaving "Abrechnung speichern"
+    // enabled with nothing to save.
+    const isEditing = serializeCostItems(costItems, periodStart, periodEnd) !== originalSnapshot;
 
     // Any navigation away from an unsaved edit is routed through here so it
     // can be confirmed first (breadcrumb links, the back button, the use-case menu).
@@ -385,6 +404,20 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         return prorateAnnualPrepayment(currentMonthlyPrepayment, history, periodStart, periodEnd, tenancyStart, tenancyEnd);
     }, [currentMonthlyPrepayment, miscRentHistory, periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate]);
 
+    // The monthly rate this settlement was actually billed at — frozen to
+    // periodEnd, so applying a new rate for *next* year (handleApplyPrepayment,
+    // effective the following Jan 1) never pulls this figure along with it.
+    // Shown as "NK-Vorauszahlung bis zur Abrechnung"; unlike currentMonthlyPrepayment
+    // (the live, actionable rate the "übernehmen" button acts on), this one
+    // must never change once a settlement period is loaded.
+    const prepaymentUntilSettlement = useMemo(() => {
+        if (!periodEnd) return currentMonthlyPrepayment;
+        const history = miscRentHistory
+            .filter((entry): entry is TenancyAdjustmentHistoryEntry & { effectiveDate: string; amount: number } => entry.effectiveDate != null && entry.amount != null)
+            .map((entry) => ({ effectiveDate: entry.effectiveDate, amount: entry.amount }));
+        return monthlyRateAsOf(currentMonthlyPrepayment, history, periodEnd);
+    }, [currentMonthlyPrepayment, miscRentHistory, periodEnd]);
+
     // (1) vs (2): shortfall = "Nachzahlung durch Mieter", surplus = "Guthaben des Mieters".
     const settlementCoverage = compareSettlementCoverage(unitActualShare, annualPrepayment);
     const overUnderCoverage = unitActualShare - annualPrepayment;
@@ -399,8 +432,29 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     // Budget plan (3) divided by 12, compared against the current monthly NK-Vorauszahlung.
     const newMonthlyPrepayment = totalBudgetAllocable > 0 ? Math.round((unitBudgetShare / 12) * 100) / 100 : null;
+    // Drives the "übernehmen" button: compared against the LIVE tenancy rate,
+    // since that's the value the button actually writes to (a no-op, and
+    // therefore disabled, once they already match).
     const prepaymentDelta = newMonthlyPrepayment != null ? newMonthlyPrepayment - currentMonthlyPrepayment : null;
+    // Drives the two "Bisherige"/"Neue" cards' own prominent difference
+    // display instead — computed against prepaymentUntilSettlement (the
+    // frozen, as-billed rate those two cards actually show), not against
+    // currentMonthlyPrepayment. The two can differ: if some other change
+    // already took effect between this settlement's periodEnd and today,
+    // prepaymentDelta (vs. live) and this (vs. what's on screen) tell
+    // different, both-correct stories, and the display must match what the
+    // user can actually see and compare, not the button's own live target.
+    const displayedPrepaymentDelta = newMonthlyPrepayment != null ? Math.round((newMonthlyPrepayment - prepaymentUntilSettlement) * 100) / 100 : null;
+    const displayedPrepaymentDeltaPercent = displayedPrepaymentDelta != null && prepaymentUntilSettlement > 0
+        ? Math.round((displayedPrepaymentDelta / prepaymentUntilSettlement) * 1000) / 10
+        : null;
     const newTotalRent = (tenancy?.coldRent ?? 0) + (newMonthlyPrepayment ?? currentMonthlyPrepayment) + (tenancy?.parkingSpaceRent ?? 0);
+    // The new rate takes effect the day after this settlement's own period
+    // ends — not always Jan 1, since a settlement can cover a custom
+    // ("Individueller Zeitraum") period that ends anywhere.
+    const nextPrepaymentEffectiveDate = periodEnd
+        ? new Date(periodEnd.getFullYear(), periodEnd.getMonth(), periodEnd.getDate() + 1)
+        : new Date(new Date().getFullYear() + 1, 0, 1);
 
     const settlementYear = periodEnd ? periodEnd.getFullYear() : new Date().getFullYear();
 
@@ -724,7 +778,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             if (!updatedTenancy) throw new Error('updateTenancy failed');
             setTenancy(updatedTenancy);
 
-            const effectiveDate = format(new Date(settlementYear + 1, 0, 1), 'yyyy-MM-dd');
+            const effectiveDate = format(nextPrepaymentEffectiveDate, 'yyyy-MM-dd');
             const historyEntry = await addAdjustmentHistoryEntry({
                 tenancyId: tenancy.tenancyId,
                 propertyId: property.propertyId,
@@ -1159,7 +1213,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         unitActualShareNonAllocable, unitBudgetShareNonAllocable,
         actualShareForItem, budgetShareForItem,
         annualPrepayment, currentMonthlyPrepayment, overUnderCoverage, settlementCoverage, budgetCoverage, budgetOverUnderCoverage,
-        newMonthlyPrepayment, prepaymentDelta, newTotalRent, settlementYear, tenantLabel,
+        newMonthlyPrepayment, prepaymentDelta, prepaymentUntilSettlement, newTotalRent, settlementYear, tenantLabel,
+        displayedPrepaymentDelta, displayedPrepaymentDeltaPercent, nextPrepaymentEffectiveDate,
         canGeneratePdf, canGenerateAdjustmentDocx, canApplyPrepayment,
         // handlers
         updateCostItemField, addCostItem, removeCostItem,

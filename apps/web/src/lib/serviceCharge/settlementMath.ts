@@ -192,6 +192,38 @@ export function prorateAnnualPrepayment(
     return Math.round(total * 100) / 100;
 }
 
+/**
+ * Reconstructs the monthly NK-Vorauszahlung that was actually in effect as of
+ * `asOfDate` (typically a settlement's periodEnd), by undoing any history
+ * entries whose effective date is *after* it — the same backward-walk this
+ * file already does for prorateAnnualPrepayment, exposed on its own so a
+ * display value can show "the rate this settlement was billed at" without
+ * being pulled along whenever the tenancy's current rate changes for a
+ * future period. A rate change effective after `asOfDate` must never affect
+ * this figure; that's the whole point of freezing it to the settlement.
+ */
+export function monthlyRateAsOf(
+    currentMonthlyValue: number,
+    history: MiscRentAdjustment[],
+    asOfDate: Date,
+): number {
+    const sorted = history
+        .filter((entry) => entry.effectiveDate)
+        .map((entry) => ({ date: stripTime(new Date(entry.effectiveDate)), amount: entry.amount }))
+        .sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    let runningValue = currentMonthlyValue;
+    const target = stripTime(asOfDate);
+    for (const entry of sorted) {
+        if (entry.date > target) {
+            runningValue -= entry.amount;
+        } else {
+            break;
+        }
+    }
+    return Math.round(runningValue * 100) / 100;
+}
+
 export interface UnitSettlementCostItem {
     actualAmount: number | null;
     budgetAmount: number | null;

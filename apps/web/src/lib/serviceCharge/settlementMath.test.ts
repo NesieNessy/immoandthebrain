@@ -6,6 +6,7 @@ import {
     defaultSettlementPeriod,
     isFullCalendarYear,
     isPeriodTooLong,
+    monthlyRateAsOf,
     occupancyFraction,
     prorateAnnualPrepayment,
     splitByAllocable,
@@ -135,6 +136,40 @@ describe('prorateAnnualPrepayment', () => {
         // be allowed to produce some other nonsensical value.
         const result = prorateAnnualPrepayment(100, [], new Date(2025, 0, 1), new Date(2025, 11, 31), new Date(2026, 3, 1), null);
         expect(result).toBe(0);
+    });
+});
+
+describe('monthlyRateAsOf', () => {
+    it('returns the current value when there is no history', () => {
+        expect(monthlyRateAsOf(245, [], new Date(2026, 11, 31))).toBe(245);
+    });
+
+    it('undoes a rate change that took effect after the target date', () => {
+        // Rate increased to 245 on 2027-01-01 — as of 2026-12-31 it was still 210.
+        const history = [{ effectiveDate: '2027-01-01', amount: 35 }];
+        expect(monthlyRateAsOf(245, history, new Date(2026, 11, 31))).toBe(210);
+    });
+
+    it('does not change once frozen, even after a further future rate change is added', () => {
+        const asOf = new Date(2026, 11, 31);
+        const before = monthlyRateAsOf(245, [{ effectiveDate: '2027-01-01', amount: 35 }], asOf);
+        const after = monthlyRateAsOf(280, [{ effectiveDate: '2027-01-01', amount: 35 }, { effectiveDate: '2028-01-01', amount: 35 }], asOf);
+        expect(after).toBe(before);
+    });
+
+    it('keeps a rate change that took effect on or before the target date', () => {
+        // Rate increased to 245 on 2026-06-01 — as of 2026-12-31 it is already 245.
+        const history = [{ effectiveDate: '2026-06-01', amount: 35 }];
+        expect(monthlyRateAsOf(245, history, new Date(2026, 11, 31))).toBe(245);
+    });
+
+    it('walks back through multiple future changes', () => {
+        const history = [
+            { effectiveDate: '2027-01-01', amount: 20 },
+            { effectiveDate: '2028-01-01', amount: 30 },
+        ];
+        // Current (2028+) value is 300 -> undo both future-of-2026 changes -> 250.
+        expect(monthlyRateAsOf(300, history, new Date(2026, 11, 31))).toBe(250);
     });
 });
 
