@@ -41,8 +41,7 @@ export const EMPTY_FORM: SaleListingForm = {
     availableFrom: '', brokerCommissionPercent: '', description: '',
 };
 
-/** Reloads a previously saved listing exactly as it was left — no carry-over
- *  involved, since the owner's own edits already won. */
+/** Reloads a saved listing as-is; no property carry-over, the owner's edits already won. */
 export function formFromListing(listing: PropertySaleListing): SaleListingForm {
     return {
         streetHouseNumber: [listing.street, listing.houseNumber].filter(Boolean).join(' '),
@@ -69,12 +68,9 @@ export function formFromListing(listing: PropertySaleListing): SaleListingForm {
 }
 
 /**
- * First-open carry-over: everything already known about the property is
- * pre-filled (address, size, year, energy rating, room count, and — from
- * the first *rented* tenancy found, if any — the rent/service-charge
- * figures and rented status); sale-only fields (condition, heating type,
- * asking prices, availability, commission, description) stay blank for the
- * owner to fill in themselves.
+ * First-open carry-over: pre-fills what's already known about the property
+ * (address, size, year, energy rating, rooms, plus rent/service-charge from
+ * the first rented tenancy found); sale-only fields stay blank.
  */
 export function initialFormFromProperty(property: Property, tenancies: Tenancy[], parkingSpaces: ParkingSpace[]): SaleListingForm {
     const activeTenancy = tenancies.find((t) => t.isRented) ?? null;
@@ -95,10 +91,9 @@ export function initialFormFromProperty(property: Property, tenancies: Tenancy[]
     };
 }
 
-/** Form → API payload. The combined "Straße & Hausnummer" field is stored
- *  in `street` alone (`houseNumber` stays null), matching the convention
- *  already used for `Property` elsewhere in the app. Empty strings become
- *  `null`, not empty strings, so an unfilled field reads back as unset. */
+/** Form → API payload. The combined "Straße & Hausnummer" field is stored in
+ *  `street` alone (`houseNumber` stays null), matching `Property` elsewhere.
+ *  Empty strings become `null` so an unfilled field reads back as unset. */
 export function formToListingFields(
     form: SaleListingForm,
     status: PropertySaleListing['status'],

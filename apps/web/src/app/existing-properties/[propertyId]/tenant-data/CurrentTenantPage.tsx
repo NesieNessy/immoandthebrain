@@ -20,21 +20,19 @@ interface CurrentTenantPageProps {
     unit: PropertyUnit;
     hasMultipleUnits: boolean;
     /** Set when reached from the tenant history's "Ansehen" action — renders
-     *  this same page for a past tenancy instead of the unit's current one,
-     *  with an "Archiviert" indicator and the move-out date surfaced. */
+     *  this page for a past tenancy instead of the unit's current one, with
+     *  an "Archiviert" indicator and the move-out date surfaced. */
     archivedTenancyId?: number;
 }
 
-/** The current-tenant page: person data, documents, tenant certificate,
- *  deposit. The rental agreement lives entirely on its own independent
- *  page/route now (see ../tenant-agreement/TenantAgreementPage) — the two
- *  are deliberately not sharing chrome (breadcrumb, header actions, sticky
- *  bar) beyond the data layer. */
+/** Current-tenant page: person data, documents, tenant certificate, deposit.
+ *  The rental agreement lives on its own page/route (see
+ *  ../tenant-agreement/TenantAgreementPage), deliberately not sharing chrome
+ *  beyond the data layer. */
 export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits, archivedTenancyId }: CurrentTenantPageProps) {
     const data = useTenantUnitData(propertyId, property, unit, hasMultipleUnits, archivedTenancyId);
-    // Own independent data load (see useMieterbescheinigungGenerator's doc
-    // comment) — lets "Word-Dokument generieren" run right here instead of
-    // navigating to the /certificate review page first.
+    // Own independent data load — lets "Word-Dokument generieren" run right
+    // here instead of navigating to the /certificate review page first.
     const certGen = useMieterbescheinigungGenerator(propertyId, String(unit.propertyUnitId), () => void data.refreshDocuments(), archivedTenancyId);
     const [reactivateModalOpen, setReactivateModalOpen] = useState(false);
     const [isReactivating, setIsReactivating] = useState(false);
@@ -43,11 +41,9 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
     // load resolves — see the isTenancyDataLoaded doc comment in useTenantUnitData.
     if (!data.isTenancyDataLoaded) return <PropertyLoadingPage />;
 
-    // Clears this tenancy's move-out so it becomes the unit's current
-    // tenancy again — same action as Mieterhistorie's "Reaktivieren", just
-    // reachable from the detail view too. If another tenancy is currently
-    // active on this unit, that one is ended (today) first so the unit
-    // doesn't end up with two open-ended tenancies.
+    // Reactivates this tenancy (clears its move-out) — same as Mieterhistorie's
+    // "Reaktivieren", reachable here too. Ends any other currently-active
+    // tenancy on the unit first, so it never ends up with two open-ended ones.
     const handleConfirmReactivate = async () => {
         if (!data.tenancy) return;
         setIsReactivating(true);
@@ -159,7 +155,6 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                         )}
                     </div>
 
-                    {/* Person cards */}
                     <div className="flex flex-col gap-4">
                         {data.persons.map((person, index) => (
                             <div key={index} className="p-4 rounded-lg border border-border bg-card">
@@ -230,7 +225,6 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                         ))}
                     </div>
 
-                    {/* Documents */}
                     <div>
                         <SectionLabel>Unterlagen</SectionLabel>
                         {!data.isArchived && (
@@ -261,7 +255,6 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                         </div>
                     </div>
 
-                    {/* Generatable documents */}
                     <div>
                         <SectionLabel>Generierbare Dokumente</SectionLabel>
                         <div className="mt-3 flex flex-col gap-4">
@@ -315,7 +308,6 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                         </div>
                     </div>
 
-                    {/* Security deposit */}
                     <div>
                         <SectionLabel>Mietkaution</SectionLabel>
                         <div className="mt-3 flex flex-col sm:flex-row items-start sm:items-end gap-3">

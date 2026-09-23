@@ -1,6 +1,5 @@
-// Objektdaten form validation — kept as a plain, JSX-free module (like
-// lib/quickCheck/{kpf,validation,display}.ts) so it's importable from
-// .test.ts files under the project's node-environment vitest config.
+// Plain, JSX-free module (like lib/quickCheck/{kpf,validation,display}.ts) so
+// it's importable from .test.ts files under the node-environment vitest config.
 
 export interface PropertyDataFormFields {
   objektkategorie: string;
@@ -13,10 +12,9 @@ export interface PropertyDataFormFields {
   kaufpreis: string;
 }
 
-/** Mirrors property table's NOT NULL/CHECK constraints for every field this
- *  form can write: street/city/postalCode non-blank, year 1800..currentYear,
- *  square_meters > 0. stellplaetze/kaufpreis are this form's own required
- *  inputs (parking count and purchase price), not separate table columns. */
+/** Mirrors the property table's NOT NULL/CHECK constraints (non-blank
+ *  street/city/postalCode, year 1800..currentYear, square_meters > 0).
+ *  stellplaetze/kaufpreis are this form's own required inputs, not table columns. */
 export function isPropertyDataFormValid(fields: PropertyDataFormFields, currentYear: number): boolean {
   return (
     fields.objektkategorie !== '' &&
@@ -34,9 +32,7 @@ export function isPropertyDataFormValid(fields: PropertyDataFormFields, currentY
   );
 }
 
-/** Anzahl Zimmer is optional, but property.number_of_rooms has
- *  CHECK (number_of_rooms > 0) whenever it's set — 0 (or blank) both mean
- *  "not specified", never a literal 0, which the DB would reject. */
+/** number_of_rooms has CHECK (number_of_rooms > 0) when set, so 0/blank both map to "not specified". */
 export function normalizeNumberOfRooms(value: string): number | null {
   const parsed = Number(value);
   return parsed > 0 ? parsed : null;

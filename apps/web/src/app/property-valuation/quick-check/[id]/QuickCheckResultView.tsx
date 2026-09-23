@@ -59,9 +59,7 @@ export function QuickCheckResultView({ id }: Props) {
   const [isBusy, setIsBusy] = useState(false);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
 
-  // Snapshot of the loaded values (to detect whether the user has changed
-  // anything since the record was fetched) — a pure function of `data`, so
-  // derived rather than duplicated into its own state.
+  // Derived from `data` rather than its own state, so it stays a snapshot of the loaded record.
   const initialForm: EditForm | null = useMemo(() => data && ({
     street:             data.street,
     postalCode:         data.postalCode,
@@ -73,7 +71,6 @@ export function QuickCheckResultView({ id }: Props) {
   }), [data]);
   const initialPortalUrl = data?.portalId ?? '';
 
-  // Pre-fill edit form when record loads
   useEffect(() => {
     if (!initialForm) return;
     setEditForm(initialForm);
@@ -91,8 +88,7 @@ export function QuickCheckResultView({ id }: Props) {
   // Validation
   const editErrors = getQuickCheckFieldErrors(editForm, purchasePrice, coldRent, currentYear);
 
-  // Shared by isEditValid and canShowResult — everything the KPF calculation
-  // itself needs (it never uses street/city).
+  // Shared by isEditValid and canShowResult: everything the KPF calc needs (never street/city).
   const financialsValid =
     /^\d{5}$/.test(editForm.postalCode) &&
     purchasePrice > 0 && coldRent > 0 && condition !== '' &&
@@ -104,13 +100,11 @@ export function QuickCheckResultView({ id }: Props) {
     editForm.street.trim().length <= 120 &&
     editForm.city.trim() !== '' &&
     editForm.city.trim().length <= 120 &&
-    // Older quick checks can still hold plain text here from before links
-    // were validated; the portal section flags it, and saving waits until it
-    // is corrected or removed rather than failing on the server.
+    // Older records can hold plain text here from before links were validated;
+    // block save until it's corrected instead of failing server-side.
     (!portalUrl.trim() || isValidListingUrl(portalUrl));
 
-  // "Verwerfen"/"Übernehmen" also require the user to have actually changed
-  // something compared to the loaded record.
+  // "Verwerfen"/"Übernehmen" also require an actual change vs. the loaded record.
   const hasChanges =
     initialForm !== null &&
     (editForm.street !== initialForm.street ||
@@ -122,8 +116,7 @@ export function QuickCheckResultView({ id }: Props) {
       editForm.yearOfConstruction !== initialForm.yearOfConstruction ||
       portalUrl !== initialPortalUrl);
 
-  // Any navigation away from an unsaved edit is routed through here so it
-  // can be confirmed first (breadcrumb links).
+  // Routes navigation through here so an unsaved edit can be confirmed first.
   const goTo = (href: string) => {
     if (hasChanges) {
       setPendingHref(href);
@@ -137,15 +130,11 @@ export function QuickCheckResultView({ id }: Props) {
     setPendingHref(null);
   };
 
-  // Whether the KPF result panel can be shown — independent of street/city,
-  // since the calculation itself only needs price, rent, postal code,
-  // condition and year. Legacy records can have a missing address.
+  // Independent of street/city so legacy records with a missing address can still show a result.
   const canShowResult = financialsValid;
 
-  // On mobile, jump straight to the result on first load — this view is for
-  // an already-computed record, so there's no reason to make the user
-  // scroll past the form first. Runs once; matches the `lg` breakpoint
-  // where the two-column layout takes over and scrolling is unnecessary.
+  // Auto-scroll to the result on mobile first load, since this view is for an
+  // already-computed record. Skipped at the `lg` breakpoint where both columns are visible.
   const hasAutoScrolled = useRef(false);
   useEffect(() => {
     if (hasAutoScrolled.current || !canShowResult) return;
@@ -158,9 +147,8 @@ export function QuickCheckResultView({ id }: Props) {
   const handleEditField = (f: keyof EditForm, v: string) =>
     setEditForm((p) => ({ ...p, [f]: v }));
 
-  // Saves any pending edits, then accepts the quick-check into the
-  // Portfolio (creates a property from the street/city/postal_code/year
-  // already on the quick_check row) and returns to the overview.
+  // Saves pending edits, then accepts the quick-check into the portfolio
+  // (creates a property from the quick_check row) and returns to the overview.
   const handleTakeOver = async () => {
     if (!user || !isEditValid || !hasChanges) return;
     setIsBusy(true);
@@ -186,8 +174,7 @@ export function QuickCheckResultView({ id }: Props) {
     }
   };
 
-  // Jumps into the wizard. The row only moves into the detail-check overview after the
-  // first detail-check page was saved successfully.
+  // Row moves into the detail-check overview only after its first detail-check page is saved.
   const handleStartDetailCheck = async () => {
     setIsBusy(true);
     try {
@@ -198,9 +185,7 @@ export function QuickCheckResultView({ id }: Props) {
     }
   };
 
-  // Always leaves back to the overview — that's its main job. The actual
-  // DISCARD write only happens when there's something meaningful to record
-  // (record still pending a decision, and the user actually changed something).
+  // Always navigates back; the discard write only fires if the user actually changed something.
   const handleDiscard = async () => {
     if (user && hasChanges) {
       setIsBusy(true);
@@ -215,7 +200,6 @@ export function QuickCheckResultView({ id }: Props) {
     router.push('/property-valuation/quick-check');
   };
 
-  // Guards — loading, error, and not-found each need their own state.
   if (authLoading || isLoading) return <LoadingScreen message="Ergebnis wird geladen…" />;
   if (error) {
     return (

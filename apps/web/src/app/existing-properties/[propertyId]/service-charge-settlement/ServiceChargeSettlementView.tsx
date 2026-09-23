@@ -38,13 +38,10 @@ function settlementPeriodLabel(s: ServiceChargeSettlement): string {
     return isFullCalendarYear(start, end) ? `Abrechnungsjahr ${end.getFullYear()}` : `${formatDeDate(s.periodStart)} – ${formatDeDate(s.periodEnd)}`;
 }
 
-// The suggestion is never written into the field just from opening this —
-// only "Übernehmen" applies it — and it always explains its own basis
-// (an explicit Verteilerschlüssel or a ratio learned from last period),
-// since a bare number with no reasoning is exactly what made the earlier
-// single-ratio-per-unit version impossible to sanity-check by eye. When
-// neither basis exists, this doubles as the one place to set an explicit
-// key for that cost item label so future settlements never need history at all.
+// The suggestion is only applied via "Übernehmen", never on open, and always
+// shows its basis (explicit allocation key or a ratio learned from last
+// period) — a bare number with no reasoning was impossible to sanity-check.
+// Also doubles as the place to set an explicit key when no basis exists yet.
 function SuggestSharePopover({
     suggestion,
     existingKey,
@@ -98,14 +95,11 @@ function SuggestSharePopover({
     );
 }
 
-// The bulk counterpart to SuggestSharePopover's own key form — sets one
-// Verteilerschlüssel for every cost item label that doesn't already have its
-// own (a WEG almost always uses one dominant Miteigentumsanteil for most
-// positions, so typing it once here beats opening each row's popover in
-// turn), then immediately fills every still-empty Anteil Wohnung field from
-// it. Always starts blank — unlike the per-row form, there's no single
-// "existing key" to show here, since it deliberately never overwrites a
-// label that already has its own.
+// Bulk counterpart to SuggestSharePopover's key form — sets one allocation
+// key for every cost item label that doesn't already have its own, then
+// fills their still-empty Anteil Wohnung fields. Always starts blank since
+// there's no single "existing key" to show (it never overwrites a label's
+// own key).
 function OverallAllocationKeyPopover({ onApply }: { onApply: (numerator: number, denominator: number, allocationType: string | null) => Promise<void> }) {
     const [numerator, setNumerator] = useState('');
     const [denominator, setDenominator] = useState('');
@@ -163,10 +157,8 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
     const address = `${property.street} ${property.houseNumber}, ${property.postalCode} ${property.city}`;
     const unitLabel = formatUnitLabel(unit.unitLabel, unit.floor, unit.locationNote);
 
-    // Why "Neue NK-Vorauszahlung übernehmen" is greyed out — an icon-only
-    // button with no visible label has nothing else to explain itself with,
-    // and a disabled control with only a generic title left the landlord
-    // unable to tell "nothing to apply yet" from "something's broken".
+    // Reason shown via title on the icon-only "übernehmen" button, so a
+    // disabled state doesn't read as broken vs. "nothing to apply yet".
     const applyPrepaymentDisabledReason = data.isApplyingPrepayment
         ? 'Wird übernommen …'
         : data.newMonthlyPrepayment == null
@@ -188,9 +180,8 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
             { label: ExistingPropertiesUseCases.ServiceChargeSettlement },
         ];
 
-    // Reopens a previously saved settlement whose period isn't reachable via
-    // the year chevron (a custom range, or simply a year other than the one
-    // currently loaded) — the only browse path for "Individueller Zeitraum".
+    // Only browse path for reopening a saved settlement not reachable via
+    // the year chevron (a custom range, or a different year).
     const savedSettlementMenuItems: MenuItem[] = useMemo(() => data.savedSettlements.map((s) => ({
         label: settlementPeriodLabel(s),
         icon: data.settlement?.serviceChargeSettlementId === s.serviceChargeSettlementId ? <Icons.Check /> : undefined,
@@ -478,9 +469,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                     {data.costItems.map((item, index) => {
                                         const actualShareExceedsTotal = item.actualAmount !== '' && item.actualShareOverride !== '' && Number(item.actualShareOverride) > Number(item.actualAmount);
                                         const budgetShareExceedsTotal = item.budgetAmount !== '' && item.budgetShareOverride !== '' && Number(item.budgetShareOverride) > Number(item.budgetAmount);
-                                        // Gesamtobjekt and Anteil Wohnung are a pair, per column — filling
-                                        // one without the other is always an incomplete entry, never a
-                                        // valid state to save.
+                                        // Gesamtobjekt and Anteil Wohnung must be filled together per column.
                                         const actualPairIncomplete = (item.actualAmount !== '') !== (item.actualShareOverride !== '');
                                         const budgetPairIncomplete = (item.budgetAmount !== '') !== (item.budgetShareOverride !== '');
                                         const actualAmountMissing = actualPairIncomplete && item.actualAmount === '';
@@ -724,19 +713,15 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                         </div>
                     </div>
 
-                    {/* Service charge prepayment adjustment — only meaningful for a
-                        currently rented unit; there is no lease to adjust otherwise. */}
+                    {/* Only meaningful for a currently rented unit. */}
                     <div>
                         <SectionLabel>Anpassung Nebenkostenvorauszahlung</SectionLabel>
                         {data.tenancy ? (
                             <>
                                 <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <MetricCard
-                                        // Frozen to this settlement's period end — never pulled along by
-                                        // applying a new rate for next year (that only takes effect the
-                                        // day after this period ends), so this always reflects what was
-                                        // actually billed for this Abrechnung, not whatever the tenancy's
-                                        // rate happens to be today.
+                                        // Frozen to this settlement's period end so it reflects what was
+                                        // actually billed, not today's live tenancy rate.
                                         label="Bisherige NK-Vorauszahlung"
                                         value={`${euro(data.prepaymentUntilSettlement)}`}
                                         detail="/Monat"
@@ -744,12 +729,9 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                     <MetricCard
                                         label="Neue NK-Vorauszahlung"
                                         value={data.newMonthlyPrepayment != null ? euro(data.newMonthlyPrepayment) : '–'}
-                                        // The old "shortfall/surplus" wording here was computed from the
-                                        // underlying annual comparison alone, so it kept claiming e.g. "Reduzierung
-                                        // wegen Überdeckung" even once bisherige/neu already showed the identical
-                                        // number (nothing left to reduce). Shown only when the two displayed
-                                        // values actually differ — compared against prepaymentUntilSettlement
-                                        // (what's on screen), not the live tenancy rate the button itself acts on.
+                                        // Compared against prepaymentUntilSettlement (what's shown), not the
+                                        // live tenancy rate — otherwise this kept claiming a change even once
+                                        // "bisherige"/"neu" already showed the identical number.
                                         detail={data.displayedPrepaymentDelta == null
                                             ? undefined
                                             : data.displayedPrepaymentDelta === 0

@@ -36,12 +36,11 @@ const INITIAL_STATE: UnitDocumentGeneratorState = {
 };
 
 /** Loads everything the Mieterbescheinigung/Mietvertrag generator pages
- *  need, independent of the (already-loaded) tenant-unit-detail page —
- *  these are their own routes, reached directly via the documents table.
- *  Pass `archivedTenancyId` when reached from the Mieterhistorie detail
- *  view — otherwise this always resolves to the unit's *current* tenancy,
- *  which would show the current tenant's Mieterbescheinigung instead of
- *  the moved-out tenant's own. */
+ *  need, independent of the tenant-unit-detail page (these are their own
+ *  routes). Pass `archivedTenancyId` when reached from the Mieterhistorie
+ *  detail view — otherwise it resolves to the unit's *current* tenancy,
+ *  showing the current tenant's Mieterbescheinigung instead of the moved-out
+ *  tenant's own. */
 export function useUnitDocumentGeneratorData(
     propertyId: string,
     unitId: string,

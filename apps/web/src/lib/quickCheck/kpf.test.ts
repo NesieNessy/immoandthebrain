@@ -3,12 +3,10 @@ import { calcKpf, calcPositionPct, classifyKpf, KPF_SCALE_MAX, KPF_SCALE_MIN } f
 
 describe('calcKpf', () => {
   it('computes purchase price / (cold rent × 12)', () => {
-    // 300.000 € / (1.000 € × 12) = 25.0 exactly.
     expect(calcKpf(300000, 1000)).toBe(25);
   });
 
   it('rounds to 1 decimal place', () => {
-    // 305.000 / 12.000 = 25.41(6) → 25.4.
     expect(calcKpf(305000, 1000)).toBe(25.4);
   });
 

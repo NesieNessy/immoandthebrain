@@ -1,8 +1,5 @@
-// Static category list + rough cost-per-category reference used by the
-// per-measure detail page's "Preisindikation" card. There is no real
-// pricing/AI engine behind this — it's a fixed rule-of-thumb lookup (same
-// idea as DEFAULT_COST_ITEMS for Nebenkosten), clearly framed in the UI as
-// "je nach Region & Qualität" rather than a precise quote.
+// Rough cost reference for the "Preisindikation" card — a fixed rule-of-thumb
+// lookup, not a real pricing engine (same approach as DEFAULT_COST_ITEMS).
 
 export const MEASURE_CATEGORIES = [
     { value: 'Badezimmer', label: 'Badezimmer' },

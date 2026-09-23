@@ -55,9 +55,8 @@ const PARKING_TYPE_OPTIONS = [
     { value: 'Außen unüberdacht', label: 'Außen unüberdacht' },
 ];
 
-// A plain <select> has no <optgroup> support in the shared Dropdown
-// component — grouping is simulated with non-selectable header rows using
-// the option list's existing `disabled` flag instead of touching Dropdown.
+// Dropdown has no <optgroup> support; grouping is faked with non-selectable
+// header rows via the option list's `disabled` flag instead.
 const HEATING_OPTIONS = [
     { value: '', label: 'Bitte wählen...' },
     { value: '__konventionell', label: '— Konventionelle Heizsysteme —', disabled: true },

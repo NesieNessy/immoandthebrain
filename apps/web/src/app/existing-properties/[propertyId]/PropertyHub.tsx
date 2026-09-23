@@ -15,9 +15,8 @@ interface HubCard {
   title: string;
   description: string;
   /**
-   * Navigates to `/existing-properties/{propertyId}/{route}` when scope is
-   * "property", or `/existing-properties/{propertyId}/{route}/{unitId}` when
-   * scope is "unit" — the whole reason PropertyHub is entered per-Einheit.
+   * `/existing-properties/{propertyId}/{route}` when scope is "property",
+   * else `/existing-properties/{propertyId}/{route}/{unitId}`.
    */
   route: string;
   scope: 'property' | 'unit';
@@ -169,10 +168,8 @@ const WEITERE_AKTIONEN: HubCard[] = [
 function HubCardTile({ card, propertyId, unitId, hasMultipleUnits }: { card: HubCard; propertyId: string; unitId: string | null; hasMultipleUnits: boolean }) {
   const router = useRouter();
   const Icon = card.icon;
-  // A property-wide page (scope: 'property') has no unit in its own URL —
-  // on a multi-unit property, the unit the visitor came from is passed as a
-  // query param purely so that page's breadcrumb can keep showing it; the
-  // page's own data stays property-wide regardless.
+  // Property-wide pages have no unit in the URL; on a multi-unit property the
+  // originating unit is passed as a query param solely so the breadcrumb can show it.
   const href = card.scope === 'unit' && unitId
     ? `/existing-properties/${propertyId}/${card.route}/${unitId}`
     : card.scope === 'property' && unitId && hasMultipleUnits
@@ -246,9 +243,8 @@ export default function PropertyHub({ propertyId, unitId }: { propertyId: string
     ? PROPERTY_CATEGORY_LABEL[property.propertyCategory] ?? property.propertyCategory
     : null;
 
-  // Unit-scoped tiles (Mieterdaten, Mietvertrag, Nebenkostenabrechnung, …) only
-  // make sense once a unit is selected — with none yet, only property-wide
-  // setup actions (Objektdaten, Neue Einheit, …) are shown.
+  // Unit-scoped tiles only make sense once a unit is selected; otherwise only
+  // property-wide setup tiles (Objektdaten, Neue Einheit, …) are shown.
   const showUnitSections = unit !== null;
   const addressHref = units.length > 1 ? `/existing-properties/${propertyId}` : undefined;
 

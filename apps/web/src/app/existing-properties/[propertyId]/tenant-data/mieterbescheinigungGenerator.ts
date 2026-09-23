@@ -15,22 +15,15 @@ import { useUnitDocumentGeneratorData } from './useUnitDocumentGeneratorData';
 const WORD_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 /**
- * Everything the Mieterbescheinigung (tenant certificate) generator needs:
- * its own independent data load (same as the /certificate review page) plus
- * the docx-build/upload/download flow and the "Eigentümer der Wohnung"
- * confirmation gate. Shared between the full review page and any "generate
- * now" shortcut button elsewhere, so a shortcut can generate the document
- * without navigating to the review page first — same behavior, same asked
- * questions, just callable directly from wherever the button lives.
+ * Hook for the Mieterbescheinigung (tenant certificate) generator: data load,
+ * docx build/upload/download, and the "Eigentümer der Wohnung" confirmation
+ * gate. Shared by the full review page and any "generate now" shortcut button.
  *
- * `onUploaded` is an optional hook for a caller that keeps its own separate
- * document list (e.g. the tenant-unit page's own `useTenantUnitData`) so it
- * can refresh and show the newly uploaded file without a full page reload.
+ * `onUploaded` lets a caller with its own document list (e.g. useTenantUnitData)
+ * refresh without a full page reload.
  *
- * `archivedTenancyId` scopes everything to a specific past tenancy (the
- * Mieterhistorie detail view) instead of the unit's current one — without
- * it, this would show the *current* tenant's Mieterbescheinigung even while
- * looking at a moved-out tenant's record.
+ * `archivedTenancyId` scopes to a past tenancy (Mieterhistorie view) instead of
+ * the unit's current one, so a moved-out tenant's certificate isn't shown as current.
  */
 export function useMieterbescheinigungGenerator(propertyId: string, unitId: string, onUploaded?: () => void, archivedTenancyId?: number) {
     const { user } = useRequireAuth();
@@ -42,10 +35,8 @@ export function useMieterbescheinigungGenerator(propertyId: string, unitId: stri
     const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
     const [isUploadingSignature, setIsUploadingSignature] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
-    // Not persisted (like the signature) — set per generated document, since
-    // the app's "landlord" (personal data) has no separate ownership field.
-    // null = not yet confirmed — generating always asks first (via the modal
-    // rendered by callers) rather than silently defaulting.
+    // Not persisted; landlord data has no ownership field, so this is asked per document.
+    // null = not yet confirmed; generation always prompts rather than defaulting silently.
     const [isLandlordOwner, setIsLandlordOwner] = useState<boolean | null>(null);
     const [ownerModalOpen, setOwnerModalOpen] = useState(false);
     // Whether confirming the modal should immediately continue to generation
@@ -110,10 +101,7 @@ export function useMieterbescheinigungGenerator(propertyId: string, unitId: stri
         documentNumber,
         signatureDataUrl,
     });
-    // Preview-only fallback — a preview needs some value to render before the
-    // owner question has been answered, but this fallback never reaches the
-    // actually-generated document (runGenerate always gets the confirmed
-    // value explicitly).
+    // Preview-only fallback for before the owner question is answered; runGenerate always uses the confirmed value.
     const content = buildContent(isLandlordOwner ?? true);
 
     const handleUploadSignature = async (file: File) => {
@@ -125,11 +113,8 @@ export function useMieterbescheinigungGenerator(propertyId: string, unitId: stri
         }
     };
 
-    // ── Upload (asked, not automatic) ────────────────────────────────────────
-    // The server upserts by (tenancy, documentType, tenancyPersonId) — a
-    // second upload into an already-occupied slot returns the *same*
-    // tenancy_document_id with fresh contents, not a new row. Replacing by id
-    // (not blindly appending) keeps the box from showing a stale duplicate.
+    // Server upserts by (tenancy, documentType, tenancyPersonId), so a re-upload
+    // returns the same tenancy_document_id; replace by id, don't append, or the box shows a stale duplicate.
     const uploadDoc = async (file: File) => {
         if (!tenancy || !user) return;
         try {
@@ -205,9 +190,7 @@ export function useMieterbescheinigungGenerator(propertyId: string, unitId: stri
         try {
             const blob = await buildCertificateDocxBlob(buildContent(ownerValue));
             const fileName = `${documentNumber}.docx`;
-            // Word blobs aren't browser-renderable, so — unlike a PDF, which
-            // could just be window.open()'d — this has to be saved directly
-            // for the user to open in Word.
+            // Word blobs aren't browser-renderable (unlike a PDF), so save directly instead of opening in a tab.
             downloadBlob(blob, fileName);
             if (tenancy) {
                 setPendingGeneratedFile(new File([blob], fileName, { type: WORD_MIME }));
@@ -218,8 +201,6 @@ export function useMieterbescheinigungGenerator(propertyId: string, unitId: stri
         }
     };
 
-    // Always asks for the Eigentümer answer before generating if it hasn't
-    // been given yet, rather than silently defaulting.
     const handleGenerate = () => {
         if (!canGenerate) return;
         if (isLandlordOwner === null) {
@@ -249,9 +230,8 @@ export function useMieterbescheinigungGenerator(propertyId: string, unitId: stri
         }
     };
 
-    // Asked once per generated file, right after it downloads — "Datei wurde
-    // heruntergeladen. Auch zu den Mieterdokumenten hochladen?" Declining
-    // just closes the prompt; the file the user already has stays local-only.
+    // Shown once per generated file after download ("Datei wurde heruntergeladen.
+    // Auch zu den Mieterdokumenten hochladen?"); declining leaves the file local-only.
     const closeUploadPrompt = () => {
         setUploadPromptOpen(false);
         setPendingGeneratedFile(null);

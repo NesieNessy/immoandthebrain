@@ -20,9 +20,8 @@ export default function TenantCertificatePage({ propertyId, unitId }: { property
 
     const [view, setView] = useState<View>('review');
 
-    // The "Word-Dokument generieren" shortcut on the tenant-unit page can
-    // link here with ?autoGenerate=1 to skip the extra click — waits for the
-    // generator's own data load (canGenerate) before firing, and only once.
+    // ?autoGenerate=1 lets the tenant-unit page's "Word-Dokument generieren" shortcut
+    // skip the extra click; waits for canGenerate and fires only once.
     const didAutoGenerate = useRef(false);
     useEffect(() => {
         if (didAutoGenerate.current) return;

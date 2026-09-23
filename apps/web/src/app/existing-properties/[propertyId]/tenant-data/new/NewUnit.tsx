@@ -170,7 +170,6 @@ export default function NewUnit({ propertyId }: { propertyId: string }) {
                     items={breadcrumbItems}                />
 
                 <div className="space-y-6">
-                    {/* Usage type */}
                     <div>
                         <SectionLabel>Nutzungsart</SectionLabel>
 
@@ -189,7 +188,6 @@ export default function NewUnit({ propertyId }: { propertyId: string }) {
                         </div>
                     </div>
 
-                    {/* Label */}
                     <div>
                         <SectionLabel>Bezeichnung</SectionLabel>
                         <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -216,7 +214,6 @@ export default function NewUnit({ propertyId }: { propertyId: string }) {
                         </div>
                     </div>
 
-                    {/* Area & Details */}
                     <div>
                         <SectionLabel>Fläche & Details</SectionLabel>
                         <div className="mt-3 grid grid-cols-2 gap-3">
@@ -238,7 +235,6 @@ export default function NewUnit({ propertyId }: { propertyId: string }) {
                         </div>
                     </div>
 
-                    {/* Parking spaces — only relevant for units people occupy or run a business out of */}
                     {showParking && (
                         <div>
                             <SectionLabel>Stellplätze</SectionLabel>
@@ -248,7 +244,6 @@ export default function NewUnit({ propertyId }: { propertyId: string }) {
                         </div>
                     )}
 
-                    {/* Summary */}
                     <div>
                         <SectionLabel>Zusammenfassung</SectionLabel>
                         <div className="mt-3 rounded-lg border border-border divide-y divide-border overflow-hidden">

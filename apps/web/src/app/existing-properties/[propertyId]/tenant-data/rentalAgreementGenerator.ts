@@ -18,19 +18,13 @@ function euro(value: number | null | undefined): string {
 }
 
 /**
- * Everything the Mietvertrag generator needs: its own independent data load
- * (same as the /rental-agreement review page) plus the clause fields, the
- * signature upload, and the save-then-build-then-download flow. Shared
- * between the full review page and the "PDF generieren" shortcut buttons
- * elsewhere, so a shortcut can generate a specific tenant's (or the unit's
- * default) contract without navigating to the review page first.
+ * Hook for the Mietvertrag generator: data load, clause fields, signature
+ * upload, and save-then-build-then-download flow. Shared by the review page
+ * and the "PDF generieren" shortcut buttons.
  *
- * `generateFor(personId)` is a standalone entry point (not tied to the one
- * `personId` this hook instance was opened for) because the shortcut list on
- * the tenant-agreement page renders one button per tenant — each needs to
- * generate for a *different* person from a single hook instance, which a
- * fixed-personId API couldn't do without calling this hook once per row
- * (not allowed inside a .map()).
+ * `generateFor(personId)` takes its own personId rather than the hook's own,
+ * since the shortcut list needs one hook instance to generate for a different
+ * tenant per button (hooks can't be called per-row inside .map()).
  */
 export function useRentalAgreementGenerator(propertyId: string, unitId: string, personId: number | null = null) {
     const { user } = useRequireAuth();
@@ -39,9 +33,8 @@ export function useRentalAgreementGenerator(propertyId: string, unitId: string, 
 
     const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
     const [isUploadingSignature, setIsUploadingSignature] = useState(false);
-    // 'all' generates for every tenant on the unit (no personId filter); a
-    // number tracks which single tenant's contract is currently generating,
-    // so each shortcut button can show its own loading state independently.
+    // 'all' = generating for every tenant (no personId filter); a number tracks a
+    // single tenant's contract, so each shortcut button can show its own loading state.
     const [generatingKey, setGeneratingKey] = useState<number | 'all' | null>(null);
     const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -55,10 +48,8 @@ export function useRentalAgreementGenerator(propertyId: string, unitId: string, 
     const [additionalTerms, setAdditionalTerms] = useState('');
     const seededTenancyId = useRef<number | null>(null);
 
-    // Gate for the quick "PDF generieren" shortcuts (not the review page,
-    // which already shows these fields inline): when the Anpassungsregelungen
-    // haven't been explicitly decided yet, ask via a modal instead of
-    // silently generating a contract with "Nicht geregelt" everywhere.
+    // Gate for the "PDF generieren" shortcuts only (review page shows these fields inline):
+    // prompts via modal instead of silently generating with "Nicht geregelt" when unset.
     const [clauseModalOpen, setClauseModalOpen] = useState(false);
     const pendingGenerateTarget = useRef<{ personId: number | null } | null>(null);
     const hasIncompleteClauses = renovationAdjustmentPlanned === '' || petsAllowed === '' || redecorationClause === '' || subletAllowed === '';
@@ -193,10 +184,8 @@ export function useRentalAgreementGenerator(propertyId: string, unitId: string, 
     const isGenerating = generatingKey !== null;
     const isGeneratingFor = (targetPersonId: number | null) => generatingKey === (targetPersonId ?? 'all');
 
-    // Entry point for the quick-generate shortcuts: asks for the missing
-    // Anpassungsregelungen via a modal first if they haven't been decided
-    // yet, then generates — same "always ask rather than silently default"
-    // approach as the Mieterbescheinigung's Eigentümer question.
+    // Entry point for quick-generate shortcuts: prompts for missing Anpassungsregelungen via
+    // modal first, same "ask, don't default" approach as the Mieterbescheinigung's Eigentümer question.
     const requestGenerate = (targetPersonId: number | null) => {
         if (!canGenerateFor(targetPersonId)) return;
         if (hasIncompleteClauses) {

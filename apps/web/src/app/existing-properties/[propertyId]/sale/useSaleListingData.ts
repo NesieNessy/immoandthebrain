@@ -125,8 +125,6 @@ export function useSaleListingData(propertyId: string) {
         }
     };
 
-    // Every document is independent — as many as the owner likes, each
-    // under a name they chose themselves at upload time.
     const addDocument = async (name: string, file: File) => {
         if (!user || !property) return;
         const uploaded = await uploadPropertyDocument(user.id, file, property.propertyId, name);

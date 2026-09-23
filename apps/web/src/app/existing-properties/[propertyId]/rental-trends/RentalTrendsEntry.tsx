@@ -9,10 +9,9 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 /**
- * Reached without a unit in the URL (e.g. the use-case switcher menu, which
- * doesn't carry unit context) — Objektentwicklung proposals are always
- * computed against one unit's tenancy, so this hands off to it: straight
- * through with exactly one unit, a picker with several, a hint with none.
+ * Reached without a unit in the URL — proposals are always computed per
+ * unit's tenancy, so this routes straight through with one unit, shows a
+ * picker with several, or a hint with none.
  */
 export default function RentalTrendsEntry({ propertyId }: { propertyId: string }) {
     const router = useRouter();

@@ -75,9 +75,7 @@ describe('summarizeMeasures', () => {
     });
 
     it('treats a quoted measure with no estimate as fully "over budget" by its whole quotedCost', () => {
-        // Documents current, intentional-but-worth-knowing behavior: a
-        // missing baseline is NOT excluded from the deviation sum, it's
-        // treated as an estimatedCost of 0.
+        // Intentional: missing baseline is treated as estimatedCost 0, not excluded.
         const result = summarizeMeasures([measure({ estimatedCost: null, quotedCost: 5000 })]);
         expect(result.deviation).toBe(5000);
     });
