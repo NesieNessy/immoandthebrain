@@ -10,7 +10,7 @@ import { getAggregatedSettlementData } from '@/lib/supabase/settlementAggregate.
 import { getCurrentTenancyByUnit } from '@/lib/supabase/tenancy.supabase';
 import { getAdjustmentHistoryByTenancy } from '@/lib/supabase/tenancy_adjustment_history.supabase';
 import { computeUnitSettlementSummary, type CoverageDirection } from '@/lib/serviceCharge/settlementMath';
-import type { Property, PropertyUnit, ServiceChargeCostItem, ServiceChargeSettlement as ServiceChargeSettlementRow } from '@immoandthebrain/types';
+import type { Property, PropertyUnit } from '@immoandthebrain/types';
 import { useRouter } from 'next/navigation';
 
 import { euro } from '../tenant-data/useTenantUnitData';
@@ -18,19 +18,20 @@ import { ServiceChargeSettlementView } from './ServiceChargeSettlementView';
 
 interface UnitRow {
     unit: PropertyUnit;
-    /** null = no settlement recorded yet for the property, or this unit has
-     *  no current tenancy to compare a prepayment against. */
+    /** null = no settlement recorded yet for this unit, or it has no current
+     *  tenancy to compare a prepayment against. */
     annualPrepayment: number | null;
     overUnderCoverage: number | null;
     settlementCoverage: CoverageDirection | null;
 }
 
-async function loadUnitRow(
-    unit: PropertyUnit,
-    totalLivingAreaM2: number,
-    settlement: ServiceChargeSettlementRow | null,
-    costItems: ServiceChargeCostItem[],
-): Promise<UnitRow> {
+// Settlements are per unit, not shared across a building — each row loads
+// its own settlement + cost items instead of every unit reusing the same
+// property-wide fetch (the old behavior, which meant every unit's Anteil
+// Wohnung/coverage figures here were actually just whichever unit the
+// shared cost items happened to have been entered for).
+async function loadUnitRow(propertyId: number, unit: PropertyUnit): Promise<UnitRow> {
+    const { settlement, costItems } = await getAggregatedSettlementData(propertyId, unit.propertyUnitId);
     if (!settlement) return { unit, annualPrepayment: null, overUnderCoverage: null, settlementCoverage: null };
 
     const tenancy = await getCurrentTenancyByUnit(unit.propertyUnitId);
@@ -51,11 +52,13 @@ async function loadUnitRow(
             budgetShareOverride: item.budgetShareOverride,
         })),
         unitLivingAreaM2: unit.livingAreaM2,
-        totalLivingAreaM2,
+        totalLivingAreaM2: unit.livingAreaM2 ?? 0,
         currentMonthlyPrepayment: tenancy.miscRent ?? 0,
         miscRentHistory,
         periodStart: new Date(settlement.periodStart),
         periodEnd: new Date(settlement.periodEnd),
+        tenancyStart: tenancy.tenancyStartDate ? new Date(tenancy.tenancyStartDate) : null,
+        tenancyEnd: tenancy.tenancyEndDate ? new Date(tenancy.tenancyEndDate) : null,
     });
 
     return {
@@ -83,13 +86,7 @@ export default function ServiceChargeSettlement({ propertyId }: { propertyId: st
         setUnits(foundUnits);
 
         if (foundUnits.length > 1) {
-            // The Nebenkostenabrechnung (settlement + its cost items) is
-            // property-wide, not per-unit — see ServiceChargeSettlementView —
-            // so it's fetched once here and split per unit by living-area
-            // share, the same way the detail page splits it for one unit.
-            const { settlement, costItems } = await getAggregatedSettlementData(id);
-            const totalLivingAreaM2 = foundUnits.reduce((sum, u) => sum + (u.livingAreaM2 ?? 0), 0);
-            const rows = await Promise.all(foundUnits.map((unit) => loadUnitRow(unit, totalLivingAreaM2, settlement, costItems)));
+            const rows = await Promise.all(foundUnits.map((unit) => loadUnitRow(id, unit)));
             setUnitRows(rows);
         }
         setIsLoading(false);

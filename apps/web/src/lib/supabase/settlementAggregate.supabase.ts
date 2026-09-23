@@ -33,6 +33,7 @@ function toSettlement(row: Record<string, unknown>): ServiceChargeSettlement {
   return {
     serviceChargeSettlementId: row.service_charge_settlement_id as number,
     propertyId: row.property_id as number,
+    propertyUnitId: row.property_unit_id as number,
     periodStart: row.period_start as string,
     periodEnd: row.period_end as string,
     sourceDocumentName: row.source_document_name as string | null,
@@ -57,6 +58,7 @@ function toTenancy(row: Record<string, unknown>): Tenancy {
     tenancyUnitsPrice: row.tenancy_units_price as number | null,
     parkingSpaceRent: row.parking_space_rent as number | null,
     miscRent: row.misc_rent as number | null,
+    houseMoney: row.house_money == null ? null : Number(row.house_money),
     warmRent: row.warm_rent as number | null,
     coldRent: row.cold_rent as number | null,
     createdAt: row.created_at as string,

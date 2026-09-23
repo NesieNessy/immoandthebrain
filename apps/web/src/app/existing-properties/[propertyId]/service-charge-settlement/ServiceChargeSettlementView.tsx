@@ -6,6 +6,7 @@ import {
     Button,
     CalendarField,
     ConfirmDeleteModal,
+    DetailFieldLegend,
     Header,
     Icons,
     LoadingScreen,
@@ -20,13 +21,13 @@ import {
     type BreadcrumbItem,
     type MenuItem,
 } from '@/components/ui';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
-import { isFullCalendarYear } from '@/lib/serviceCharge/settlementMath';
-import { formatDeDate } from '@/lib/utils';
-import type { Property, PropertyUnit, ServiceChargeSettlement } from '@immoandthebrain/types';
-import { useRouter } from 'next/navigation';
-import { useMemo, useRef } from 'react';
+import { isFullCalendarYear, type SuggestedShare } from '@/lib/serviceCharge/settlementMath';
+import { cn, formatDeDate } from '@/lib/utils';
+import type { Property, PropertyUnit, ServiceChargeAllocationKey, ServiceChargeSettlement } from '@immoandthebrain/types';
+import { useMemo, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 
 import { euro, useServiceChargeSettlementData } from './useServiceChargeSettlementData';
@@ -35,6 +36,117 @@ function settlementPeriodLabel(s: ServiceChargeSettlement): string {
     const start = new Date(s.periodStart);
     const end = new Date(s.periodEnd);
     return isFullCalendarYear(start, end) ? `Abrechnungsjahr ${end.getFullYear()}` : `${formatDeDate(s.periodStart)} – ${formatDeDate(s.periodEnd)}`;
+}
+
+// The suggestion is never written into the field just from opening this —
+// only "Übernehmen" applies it — and it always explains its own basis
+// (an explicit Verteilerschlüssel or a ratio learned from last period),
+// since a bare number with no reasoning is exactly what made the earlier
+// single-ratio-per-unit version impossible to sanity-check by eye. When
+// neither basis exists, this doubles as the one place to set an explicit
+// key for that cost item label so future settlements never need history at all.
+function SuggestSharePopover({
+    suggestion,
+    existingKey,
+    onApply,
+    onSaveKey,
+}: {
+    suggestion: SuggestedShare | null;
+    existingKey: ServiceChargeAllocationKey | undefined;
+    onApply: () => void;
+    onSaveKey: (numerator: number, denominator: number, allocationType: string | null) => void;
+}) {
+    const [numerator, setNumerator] = useState(existingKey ? String(existingKey.numerator) : '');
+    const [denominator, setDenominator] = useState(existingKey ? String(existingKey.denominator) : '');
+    const [allocationType, setAllocationType] = useState(existingKey?.allocationType ?? '');
+    const [saved, setSaved] = useState(false);
+
+    const canSaveKey = numerator.trim() !== '' && denominator.trim() !== '' && Number(denominator) !== 0;
+
+    return (
+        <div className="space-y-3 text-sm">
+            {suggestion ? (
+                <div>
+                    <p className="font-semibold text-foreground">Vorschlag: {euro(suggestion.value)}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{suggestion.explanation}</p>
+                    <Button label={`${euro(suggestion.value)} übernehmen`} size="sm" className="mt-2 w-full" onClick={onApply} />
+                </div>
+            ) : (
+                <p className="text-xs text-muted-foreground">
+                    Kein Vorschlag verfügbar — für diese Position liegt weder ein Verteilerschlüssel noch eine Vorjahres-Abrechnung vor.
+                </p>
+            )}
+            <div className="border-t border-border pt-3">
+                <p className="text-xs font-medium text-foreground">{existingKey ? 'Verteilerschlüssel bearbeiten' : 'Verteilerschlüssel festlegen'}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Einmal festgelegt, gilt er für diese Position auch in künftigen Abrechnungen.</p>
+                <div className="mt-2 flex items-center gap-1.5">
+                    <NumberField aria-label="Zähler" placeholder="80" value={numerator} onChange={(e) => { setNumerator(e.target.value); setSaved(false); }} min={0} hideStepper className="w-20" />
+                    <span className="text-muted-foreground">/</span>
+                    <NumberField aria-label="Nenner" placeholder="1000" value={denominator} onChange={(e) => { setDenominator(e.target.value); setSaved(false); }} min={0} hideStepper className="w-20" />
+                </div>
+                <TextField aria-label="Art" placeholder="Miteigentumsanteil" value={allocationType} onChange={(e) => { setAllocationType(e.target.value); setSaved(false); }} className="mt-1.5 w-full" />
+                <Button
+                    label={saved ? 'Gespeichert' : 'Speichern'}
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-full"
+                    disabled={!canSaveKey}
+                    onClick={() => { onSaveKey(Number(numerator), Number(denominator), allocationType.trim() || null); setSaved(true); }}
+                />
+            </div>
+        </div>
+    );
+}
+
+// The bulk counterpart to SuggestSharePopover's own key form — sets one
+// Verteilerschlüssel for every cost item label that doesn't already have its
+// own (a WEG almost always uses one dominant Miteigentumsanteil for most
+// positions, so typing it once here beats opening each row's popover in
+// turn), then immediately fills every still-empty Anteil Wohnung field from
+// it. Always starts blank — unlike the per-row form, there's no single
+// "existing key" to show here, since it deliberately never overwrites a
+// label that already has its own.
+function OverallAllocationKeyPopover({ onApply }: { onApply: (numerator: number, denominator: number, allocationType: string | null) => Promise<void> }) {
+    const [numerator, setNumerator] = useState('');
+    const [denominator, setDenominator] = useState('');
+    const [allocationType, setAllocationType] = useState('');
+    const [isApplying, setIsApplying] = useState(false);
+
+    const canApply = numerator.trim() !== '' && denominator.trim() !== '' && Number(denominator) !== 0;
+
+    return (
+        <div className="space-y-3 text-sm">
+            <div>
+                <p className="text-xs font-medium text-foreground">Verteilerschlüssel für alle Positionen festlegen</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                    Gilt für jede Kostenposition, die noch keinen eigenen Verteilerschlüssel hat, und füllt anschließend deren leere Anteil-Wohnung-Felder.
+                </p>
+            </div>
+            <div className="flex items-center gap-1.5">
+                <NumberField aria-label="Zähler" placeholder="80" value={numerator} onChange={(e) => setNumerator(e.target.value)} min={0} hideStepper className="w-20" />
+                <span className="text-muted-foreground">/</span>
+                <NumberField aria-label="Nenner" placeholder="1000" value={denominator} onChange={(e) => setDenominator(e.target.value)} min={0} hideStepper className="w-20" />
+            </div>
+            <TextField aria-label="Art" placeholder="Miteigentumsanteil" value={allocationType} onChange={(e) => setAllocationType(e.target.value)} className="w-full" />
+            <Button
+                label="Festlegen & anwenden"
+                size="sm"
+                className="w-full"
+                disabled={!canApply || isApplying}
+                onClick={async () => {
+                    setIsApplying(true);
+                    try {
+                        await onApply(Number(numerator), Number(denominator), allocationType.trim() || null);
+                        setNumerator('');
+                        setDenominator('');
+                        setAllocationType('');
+                    } finally {
+                        setIsApplying(false);
+                    }
+                }}
+            />
+        </div>
+    );
 }
 
 interface ServiceChargeSettlementViewProps {
@@ -46,22 +158,33 @@ interface ServiceChargeSettlementViewProps {
 
 export function ServiceChargeSettlementView({ propertyId, property, unit, hasMultipleUnits }: ServiceChargeSettlementViewProps) {
     const data = useServiceChargeSettlementData(propertyId, property, unit, hasMultipleUnits);
-    const router = useRouter();
     const uploadInputRef = useRef<HTMLInputElement>(null);
 
     const address = `${property.street} ${property.houseNumber}, ${property.postalCode} ${property.city}`;
     const unitLabel = formatUnitLabel(unit.unitLabel, unit.floor, unit.locationNote);
 
+    // Why "Neue NK-Vorauszahlung übernehmen" is greyed out — an icon-only
+    // button with no visible label has nothing else to explain itself with,
+    // and a disabled control with only a generic title left the landlord
+    // unable to tell "nothing to apply yet" from "something's broken".
+    const applyPrepaymentDisabledReason = data.isApplyingPrepayment
+        ? 'Wird übernommen …'
+        : data.newMonthlyPrepayment == null
+            ? 'Für das Wirtschaftsplan-Jahr sind noch keine umlagefähigen Kosten erfasst.'
+            : data.prepaymentDelta === 0
+                ? 'Die aktuelle Vorauszahlung entspricht bereits dem Wirtschaftsplan — nichts zu übernehmen.'
+                : null;
+
     const breadcrumbItems: BreadcrumbItem[] = hasMultipleUnits
         ? [
-            { label: 'Bestandsobjekte', href: '/existing-properties' },
-            { label: address, href: `/existing-properties/${propertyId}` },
-            { label: unitLabel, href: `/existing-properties/${propertyId}/${unit.propertyUnitId}` },
+            { label: 'Bestandsobjekte', href: '/existing-properties', onClick: (e) => { if (data.isEditing) { e.preventDefault(); data.goTo('/existing-properties'); } } },
+            { label: address, href: `/existing-properties/${propertyId}`, onClick: (e) => { if (data.isEditing) { e.preventDefault(); data.goTo(`/existing-properties/${propertyId}`); } } },
+            { label: unitLabel, href: `/existing-properties/${propertyId}/${unit.propertyUnitId}`, onClick: (e) => { if (data.isEditing) { e.preventDefault(); data.goTo(`/existing-properties/${propertyId}/${unit.propertyUnitId}`); } } },
             { label: ExistingPropertiesUseCases.ServiceChargeSettlement },
         ]
         : [
-            { label: 'Bestandsobjekte', href: '/existing-properties' },
-            { label: address, href: `/existing-properties/${propertyId}` },
+            { label: 'Bestandsobjekte', href: '/existing-properties', onClick: (e) => { if (data.isEditing) { e.preventDefault(); data.goTo('/existing-properties'); } } },
+            { label: address, href: `/existing-properties/${propertyId}`, onClick: (e) => { if (data.isEditing) { e.preventDefault(); data.goTo(`/existing-properties/${propertyId}`); } } },
             { label: ExistingPropertiesUseCases.ServiceChargeSettlement },
         ];
 
@@ -99,15 +222,27 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                 checked={data.periodMode === 'custom'}
                                 onCheckedChange={(checked) => data.setPeriodMode(checked ? 'custom' : 'year')}
                             />
-                            {savedSettlementMenuItems.length > 0 && (
-                                <Button
-                                    label="Gespeicherte Abrechnungen"
-                                    icon={<Icons.History className="w-4 h-4" />}
-                                    variant="outline"
-                                    size="sm"
-                                    menuItems={savedSettlementMenuItems}
-                                />
-                            )}
+                            <div className="flex items-center gap-2">
+                                {savedSettlementMenuItems.length > 0 && (
+                                    <Button
+                                        label="Gespeicherte Abrechnungen"
+                                        icon={<Icons.History className="w-4 h-4" />}
+                                        variant="outline"
+                                        size="sm"
+                                        menuItems={savedSettlementMenuItems}
+                                    />
+                                )}
+                                {data.settlement && (
+                                    <Button
+                                        label="Abrechnung löschen"
+                                        icon={<Icons.Trash2 className="w-4 h-4" />}
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-destructive/40 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                                        onClick={data.requestDeleteSettlement}
+                                    />
+                                )}
+                            </div>
                         </div>
                         {data.periodMode === 'year' ? (
                             <div className="mt-3 flex items-center gap-2">
@@ -140,6 +275,40 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                 <div className="w-40">
                                     <CalendarField label="Bis" value={data.periodEnd} onChange={data.setPeriodEnd} />
                                 </div>
+                                {data.tenancyPeriodSuggestions.length > 0 && (
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <button
+                                                type="button"
+                                                aria-label="Mietzeitraum übernehmen"
+                                                title="Mietzeitraum eines Mieters übernehmen"
+                                                className="h-[42px] w-[42px] flex items-center justify-center rounded-md border border-primary/30 text-primary hover:bg-primary/10 transition-colors cursor-pointer shrink-0"
+                                            >
+                                                <Icons.User className="w-4 h-4" />
+                                            </button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-64 p-2" align="end">
+                                            <p className="px-2 pt-1 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                                Mietzeitraum übernehmen
+                                            </p>
+                                            <div className="flex flex-col gap-1">
+                                                {data.tenancyPeriodSuggestions.map((suggestion) => (
+                                                    <button
+                                                        key={suggestion.tenancyId}
+                                                        type="button"
+                                                        onClick={() => data.applyTenancyPeriodSuggestion(suggestion)}
+                                                        className="flex flex-col items-start gap-0.5 px-3 py-2 text-sm rounded-md text-left cursor-pointer hover:bg-muted focus:bg-muted focus:outline-none transition-colors"
+                                                    >
+                                                        <span className="font-medium text-foreground">{suggestion.label}</span>
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {formatDeDate(suggestion.startDateStr)} – {formatDeDate(suggestion.endDateStr)}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </PopoverContent>
+                                    </Popover>
+                                )}
                             </div>
                         )}
                     </div>
@@ -147,20 +316,26 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                     {/* Stat cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <MetricCard
-                            label="Gesamtkosten Objekt"
-                            value={euro(data.totalActualCostsAll)}
-                            detail={`Abrechnungsjahr ${data.settlementYear}`}
+                            label="Kosten Objekt (umlagefähig)"
+                            value={euro(data.totalActualAllocable)}
+                            detail={`zzgl. ${euro(data.actualSplit.nonAllocable)} nicht umlagefähig`}
                         />
                         <MetricCard
                             label={`Anteil ${unitLabel}`}
                             value={euro(data.unitActualShare)}
-                            detail={`Vorauszahlung: ${euro(data.annualPrepayment)}`}
+                            detail={data.tenancy ? `Vorauszahlung: ${euro(data.annualPrepayment)}` : 'Kein Mieter zu diesem Zeitraum'}
                         />
                         <MetricCard
                             label="Über-/Unterdeckung"
-                            value={`${data.overUnderCoverage < 0 ? '-' : '+'}${euro(Math.abs(data.overUnderCoverage))}`}
-                            detail={data.settlementCoverage === 'shortfall' ? 'Nachzahlung durch Mieter' : 'Guthaben des Mieters'}
-                            tone={data.settlementCoverage === 'shortfall' ? 'warning' : 'positive'}
+                            value={!data.tenancy ? '–' : euro(Math.abs(data.overUnderCoverage))}
+                            detail={
+                                !data.tenancy ? 'Nachzahlung/Guthaben ohne Mieter nicht anwendbar'
+                                    : data.settlementCoverage === 'shortfall' ? 'Nachzahlung durch Mieter'
+                                        : data.settlementCoverage === 'surplus' ? 'Guthaben des Mieters'
+                                            : 'Ausgeglichen'
+                            }
+                            tone={!data.tenancy ? 'neutral' : data.settlementCoverage === 'shortfall' ? 'warning' : data.settlementCoverage === 'surplus' ? 'positive' : 'neutral'}
+                            colorValue
                         />
                     </div>
 
@@ -245,11 +420,35 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
 
                     {/* Info banner */}
                     <div className="px-4 py-3 rounded-lg bg-primary/5 border border-primary/20 text-sm text-foreground">
-                        Erfasse alle Kostenpositionen des Abrechnungsjahres. Die Wohnungsanteile und der Wirtschaftsplan werden automatisch berechnet, können bei Bedarf pro Position aber manuell angepasst werden. Fehlende Werte im Wirtschaftsplan kannst du manuell ergänzen.
+                        Erfasse alle Kostenpositionen des Abrechnungsjahres sowie den jeweiligen Wohnungsanteil pro Position — der Gesamtbetrag des Objekts entspricht nicht automatisch dem Anteil der Wohnung und muss separat erfasst werden. Über „Wert vorschlagen&quot; kannst du dir pro Position einen Vorschlag anzeigen lassen — auf Basis eines hinterlegten Verteilerschlüssels oder, falls keiner besteht, des Verhältnisses aus der letzten Abrechnung dieser Position. Ohne beide Grundlagen wird kein Wert vorgeschlagen.
                     </div>
 
                     {/* Cost item table */}
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            label="Alle Werte vorschlagen"
+                            icon={<Icons.Calculator className="w-4 h-4" />}
+                            variant="outline"
+                            size="sm"
+                            disabled={!data.costItems.some((item) => item.actualAmount !== '' || item.budgetAmount !== '')}
+                            onClick={() => data.suggestAllShares()}
+                            title="Füllt Anteil Wohnung für jede Position mit Gesamtbetrag, für die ein Verteilerschlüssel oder eine Vorjahres-Abrechnung vorliegt und die noch leer ist — bereits erfasste Werte bleiben unverändert, Positionen ohne Grundlage bleiben leer."
+                        />
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <button
+                                    type="button"
+                                    className="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-primary bg-transparent px-3 py-1.5 text-sm text-primary transition-all duration-200 cursor-pointer hover:bg-primary hover:text-primary-foreground"
+                                    title="Legt einen Verteilerschlüssel für alle Kostenpositionen ohne eigenen fest und füllt anschließend deren leere Anteil-Wohnung-Felder."
+                                >
+                                    <Icons.PieChart className="w-4 h-4" />
+                                    Verteilerschlüssel
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent align="end" className="w-80">
+                                <OverallAllocationKeyPopover onApply={data.setOverallAllocationKey} />
+                            </PopoverContent>
+                        </Popover>
                         <Button
                             label="Kostenposition hinzufügen"
                             icon={<Icons.Plus className="w-4 h-4" />}
@@ -276,9 +475,29 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
-                                    {data.costItems.map((item, index) => (
+                                    {data.costItems.map((item, index) => {
+                                        const actualShareExceedsTotal = item.actualAmount !== '' && item.actualShareOverride !== '' && Number(item.actualShareOverride) > Number(item.actualAmount);
+                                        const budgetShareExceedsTotal = item.budgetAmount !== '' && item.budgetShareOverride !== '' && Number(item.budgetShareOverride) > Number(item.budgetAmount);
+                                        // Gesamtobjekt and Anteil Wohnung are a pair, per column — filling
+                                        // one without the other is always an incomplete entry, never a
+                                        // valid state to save.
+                                        const actualPairIncomplete = (item.actualAmount !== '') !== (item.actualShareOverride !== '');
+                                        const budgetPairIncomplete = (item.budgetAmount !== '') !== (item.budgetShareOverride !== '');
+                                        const actualAmountMissing = actualPairIncomplete && item.actualAmount === '';
+                                        const budgetAmountMissing = budgetPairIncomplete && item.budgetAmount === '';
+                                        const actualShareIssue = actualShareExceedsTotal
+                                            ? 'Anteil Wohnung ist höher als Gesamtobjekt'
+                                            : actualPairIncomplete && item.actualShareOverride === ''
+                                                ? 'Anteil Wohnung fehlt'
+                                                : null;
+                                        const budgetShareIssue = budgetShareExceedsTotal
+                                            ? 'Anteil Wohnung ist höher als Gesamtobjekt'
+                                            : budgetPairIncomplete && item.budgetShareOverride === ''
+                                                ? 'Anteil Wohnung fehlt'
+                                                : null;
+                                        return (
                                         <tr key={item.id ?? `new-${index}`}>
-                                            <td className="px-3 py-2 min-w-[220px]">
+                                            <td className="px-3 py-2 min-w-[220px] align-top">
                                                 <TextField
                                                     value={item.label}
                                                     placeholder="Bezeichnung"
@@ -293,63 +512,133 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     umlagefähig
                                                 </label>
                                             </td>
-                                            <td className="px-3 py-2 border-l border-border w-36">
-                                                <NumberField
-                                                    unit="€"
-                                                    placeholder="–"
-                                                    value={item.actualAmount}
-                                                    onChange={(e) => data.updateCostItemField(index, { actualAmount: e.target.value })}
-                                                    min={0}
-                                                />
+                                            <td className="px-3 py-2 border-l border-border w-36 align-top">
+                                                <div className="relative">
+                                                    <NumberField
+                                                        placeholder="–"
+                                                        value={item.actualAmount}
+                                                        onChange={(e) => data.updateCostItemField(index, { actualAmount: e.target.value })}
+                                                        min={0}
+                                                        hideStepper
+                                                        className={cn('pr-11', actualAmountMissing && 'border-destructive focus:ring-destructive/50')}
+                                                        aria-invalid={actualAmountMissing}
+                                                        title={actualAmountMissing ? 'Gesamtobjekt-Betrag fehlt' : undefined}
+                                                    />
+                                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                                                        <span className="w-4 text-center text-muted-foreground text-xs">€</span>
+                                                        <span className="inline-block w-[22px] h-[22px]" />
+                                                    </div>
+                                                </div>
                                             </td>
-                                            <td className="px-3 py-2 w-36">
-                                                <NumberField
-                                                    unit="€"
-                                                    placeholder="–"
-                                                    value={item.actualShareOverride !== '' ? item.actualShareOverride : (data.actualShareForItem(item) != null ? String(data.actualShareForItem(item)) : '')}
-                                                    onChange={(e) => data.updateCostItemField(index, { actualShareOverride: e.target.value })}
-                                                    disabled={!item.allocable || item.actualAmount === ''}
-                                                    min={0}
-                                                />
-                                                {item.actualShareOverride !== '' && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => data.updateCostItemField(index, { actualShareOverride: '' })}
-                                                        className="mt-1 text-xs text-primary hover:underline cursor-pointer"
-                                                    >
-                                                        Automatisch berechnen
-                                                    </button>
-                                                )}
+                                            <td className="px-3 py-2 w-36 align-top">
+                                                <div className="relative">
+                                                    <NumberField
+                                                        placeholder="–"
+                                                        value={item.actualShareOverride}
+                                                        onChange={(e) => data.updateCostItemField(index, { actualShareOverride: e.target.value })}
+                                                        min={0}
+                                                        hideStepper
+                                                        className={cn('pr-11', actualShareIssue && 'border-destructive focus:ring-destructive/50')}
+                                                        aria-invalid={!!actualShareIssue}
+                                                    />
+                                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                                                        {actualShareIssue ? (
+                                                            <span className="w-4 flex justify-center" title={actualShareIssue}>
+                                                                <Icons.AlertTriangle className="w-3.5 h-3.5 text-destructive" aria-label={actualShareIssue} />
+                                                            </span>
+                                                        ) : (
+                                                            <span className="w-4 text-center text-muted-foreground text-xs">€</span>
+                                                        )}
+                                                        <span className="inline-flex items-center justify-center w-[22px] h-[22px]">
+                                                            <Popover>
+                                                                <PopoverTrigger asChild>
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={item.actualAmount === ''}
+                                                                        aria-label="Wert vorschlagen"
+                                                                        title="Wert vorschlagen (nur dieses Feld)"
+                                                                        className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                                    >
+                                                                        <Icons.Calculator className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                </PopoverTrigger>
+                                                                <PopoverContent align="end" className="w-80">
+                                                                    <SuggestSharePopover
+                                                                        suggestion={data.computeSuggestion(index, 'actual')}
+                                                                        existingKey={data.allocationKeys.find((k) => k.label.trim().toLowerCase() === item.label.trim().toLowerCase())}
+                                                                        onApply={() => data.applySuggestion(index, 'actual')}
+                                                                        onSaveKey={(numerator, denominator, allocationType) => void data.saveAllocationKey(item.label, numerator, denominator, allocationType)}
+                                                                    />
+                                                                </PopoverContent>
+                                                            </Popover>
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </td>
-                                            <td className="px-3 py-2 border-l border-border w-36">
-                                                <NumberField
-                                                    unit="€"
-                                                    placeholder="–"
-                                                    value={item.budgetAmount}
-                                                    onChange={(e) => data.updateCostItemField(index, { budgetAmount: e.target.value })}
-                                                    min={0}
-                                                />
+                                            <td className="px-3 py-2 border-l border-border w-36 align-top">
+                                                <div className="relative">
+                                                    <NumberField
+                                                        placeholder="–"
+                                                        value={item.budgetAmount}
+                                                        onChange={(e) => data.updateCostItemField(index, { budgetAmount: e.target.value })}
+                                                        min={0}
+                                                        hideStepper
+                                                        className={cn('pr-11', budgetAmountMissing && 'border-destructive focus:ring-destructive/50')}
+                                                        aria-invalid={budgetAmountMissing}
+                                                        title={budgetAmountMissing ? 'Gesamtobjekt-Betrag fehlt' : undefined}
+                                                    />
+                                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                                                        <span className="w-4 text-center text-muted-foreground text-xs">€</span>
+                                                        <span className="inline-block w-[22px] h-[22px]" />
+                                                    </div>
+                                                </div>
                                             </td>
-                                            <td className="px-3 py-2 w-36">
-                                                <NumberField
-                                                    unit="€"
-                                                    placeholder="–"
-                                                    value={item.budgetShareOverride !== '' ? item.budgetShareOverride : (data.budgetShareForItem(item) != null ? String(data.budgetShareForItem(item)) : '')}
-                                                    onChange={(e) => data.updateCostItemField(index, { budgetShareOverride: e.target.value })}
-                                                    disabled={!item.allocable || item.budgetAmount === ''}
-                                                    min={0}
-                                                />
-                                                {item.budgetShareOverride !== '' && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => data.updateCostItemField(index, { budgetShareOverride: '' })}
-                                                        className="mt-1 text-xs text-primary hover:underline cursor-pointer"
-                                                    >
-                                                        Automatisch berechnen
-                                                    </button>
-                                                )}
+                                            <td className="px-3 py-2 w-36 align-top">
+                                                <div className="relative">
+                                                    <NumberField
+                                                        placeholder="–"
+                                                        value={item.budgetShareOverride}
+                                                        onChange={(e) => data.updateCostItemField(index, { budgetShareOverride: e.target.value })}
+                                                        min={0}
+                                                        hideStepper
+                                                        className={cn('pr-11', budgetShareIssue && 'border-destructive focus:ring-destructive/50')}
+                                                        aria-invalid={!!budgetShareIssue}
+                                                    />
+                                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                                                        {budgetShareIssue ? (
+                                                            <span className="w-4 flex justify-center" title={budgetShareIssue}>
+                                                                <Icons.AlertTriangle className="w-3.5 h-3.5 text-destructive" aria-label={budgetShareIssue} />
+                                                            </span>
+                                                        ) : (
+                                                            <span className="w-4 text-center text-muted-foreground text-xs">€</span>
+                                                        )}
+                                                        <span className="inline-flex items-center justify-center w-[22px] h-[22px]">
+                                                            <Popover>
+                                                                <PopoverTrigger asChild>
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={item.budgetAmount === ''}
+                                                                        aria-label="Wert vorschlagen"
+                                                                        title="Wert vorschlagen (nur dieses Feld)"
+                                                                        className="p-0.5 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                                    >
+                                                                        <Icons.Calculator className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                </PopoverTrigger>
+                                                                <PopoverContent align="end" className="w-80">
+                                                                    <SuggestSharePopover
+                                                                        suggestion={data.computeSuggestion(index, 'budget')}
+                                                                        existingKey={data.allocationKeys.find((k) => k.label.trim().toLowerCase() === item.label.trim().toLowerCase())}
+                                                                        onApply={() => data.applySuggestion(index, 'budget')}
+                                                                        onSaveKey={(numerator, denominator, allocationType) => void data.saveAllocationKey(item.label, numerator, denominator, allocationType)}
+                                                                    />
+                                                                </PopoverContent>
+                                                            </Popover>
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </td>
-                                            <td className="px-2 py-2">
+                                            <td className="px-2 py-2 align-top">
                                                 <button
                                                     type="button"
                                                     onClick={() => data.removeCostItem(index)}
@@ -360,15 +649,24 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                 </button>
                                             </td>
                                         </tr>
-                                    ))}
+                                        );
+                                    })}
                                 </tbody>
                                 <tfoot>
                                     <tr className="border-t-2 border-border font-semibold">
-                                        <td className="px-3 py-2">Summe</td>
-                                        <td className="px-3 py-2 text-right border-l border-border whitespace-nowrap">{euro(data.totalActualCostsAll)}</td>
+                                        <td className="px-3 py-2">Summe umlagefähig</td>
+                                        <td className="px-3 py-2 text-right border-l border-border whitespace-nowrap">{euro(data.totalActualAllocable)}</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">{euro(data.unitActualShare)}</td>
-                                        <td className="px-3 py-2 text-right border-l border-border whitespace-nowrap">{euro(data.totalBudgetCostsAll)}</td>
+                                        <td className="px-3 py-2 text-right border-l border-border whitespace-nowrap">{euro(data.totalBudgetAllocable)}</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">{euro(data.unitBudgetShare)}</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr className="text-muted-foreground">
+                                        <td className="px-3 py-2">Summe nicht umlagefähig</td>
+                                        <td className="px-3 py-2 text-right border-l border-border whitespace-nowrap">{euro(data.actualSplit.nonAllocable)}</td>
+                                        <td className="px-3 py-2 text-right whitespace-nowrap">{euro(data.unitActualShareNonAllocable)}</td>
+                                        <td className="px-3 py-2 text-right border-l border-border whitespace-nowrap">{euro(data.budgetSplit.nonAllocable)}</td>
+                                        <td className="px-3 py-2 text-right whitespace-nowrap">{euro(data.unitBudgetShareNonAllocable)}</td>
                                         <td></td>
                                     </tr>
                                     <tr className="text-primary">
@@ -379,27 +677,33 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                         <td className="px-3 py-2 text-right whitespace-nowrap">{euro(data.annualPrepayment)}</td>
                                         <td></td>
                                     </tr>
-                                    <tr className={data.settlementCoverage === 'shortfall' ? 'text-destructive' : 'text-success'}>
+                                    <tr className={!data.tenancy ? 'text-muted-foreground' : data.settlementCoverage === 'shortfall' ? 'text-destructive' : data.settlementCoverage === 'surplus' ? 'text-success' : 'text-muted-foreground'}>
                                         <td className="px-3 py-2 font-medium">
-                                            {data.settlementCoverage === 'shortfall' ? 'Nachzahlung durch Mieter' : 'Guthaben durch Mieter'}
+                                            {!data.tenancy ? 'Kein Mieter'
+                                                : data.settlementCoverage === 'shortfall' ? 'Nachzahlung durch Mieter'
+                                                    : data.settlementCoverage === 'surplus' ? 'Guthaben durch Mieter'
+                                                        : 'Ausgeglichen'}
                                         </td>
                                         <td className="px-3 py-2 border-l border-border">–</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">
-                                            {data.overUnderCoverage < 0 ? '-' : '+'}{euro(Math.abs(data.overUnderCoverage))}
+                                            {!data.tenancy ? '–' : data.settlementCoverage === 'balanced' ? euro(0) : `${data.overUnderCoverage < 0 ? '-' : '+'}${euro(Math.abs(data.overUnderCoverage))}`}
                                         </td>
                                         <td className="px-3 py-2 border-l border-border">–</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">–</td>
                                         <td></td>
                                     </tr>
-                                    <tr className={data.budgetCoverage === 'shortfall' ? 'text-destructive' : 'text-success'}>
+                                    <tr className={!data.tenancy ? 'text-muted-foreground' : data.budgetCoverage === 'shortfall' ? 'text-destructive' : data.budgetCoverage === 'surplus' ? 'text-success' : 'text-muted-foreground'}>
                                         <td className="px-3 py-2 font-medium">
-                                            {data.budgetCoverage === 'shortfall' ? 'Voraussichtliche Nachzahlung' : 'Voraussichtliches Guthaben'}
+                                            {!data.tenancy ? 'Kein Mieter'
+                                                : data.budgetCoverage === 'shortfall' ? 'Voraussichtliche Nachzahlung'
+                                                    : data.budgetCoverage === 'surplus' ? 'Voraussichtliches Guthaben'
+                                                        : 'Voraussichtlich ausgeglichen'}
                                         </td>
                                         <td className="px-3 py-2 border-l border-border">–</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">–</td>
                                         <td className="px-3 py-2 border-l border-border">–</td>
                                         <td className="px-3 py-2 text-right whitespace-nowrap">
-                                            {data.budgetOverUnderCoverage < 0 ? '-' : '+'}{euro(Math.abs(data.budgetOverUnderCoverage))}
+                                            {!data.tenancy ? '–' : data.budgetCoverage === 'balanced' ? euro(0) : `${data.budgetOverUnderCoverage < 0 ? '-' : '+'}${euro(Math.abs(data.budgetOverUnderCoverage))}`}
                                         </td>
                                         <td></td>
                                     </tr>
@@ -420,36 +724,66 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                         </div>
                     </div>
 
-                    {/* Service charge prepayment adjustment */}
+                    {/* Service charge prepayment adjustment — only meaningful for a
+                        currently rented unit; there is no lease to adjust otherwise. */}
                     <div>
                         <SectionLabel>Anpassung Nebenkostenvorauszahlung</SectionLabel>
-                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <MetricCard
-                                label="NK-Vorauszahlung aktuell"
-                                value={`${euro(data.currentMonthlyPrepayment)}`}
-                                detail="/Monat"
-                            />
-                            <MetricCard
-                                label="NK-Vorauszahlung neu"
-                                value={data.newMonthlyPrepayment != null ? euro(data.newMonthlyPrepayment) : '–'}
-                                detail={data.budgetCoverage === 'shortfall' ? 'Erhöhung wegen Unterdeckung' : data.budgetCoverage === 'surplus' ? 'Reduzierung wegen Überdeckung' : `aus Wirtschaftsplan ${data.settlementYear + 1}`}
-                                tone={data.budgetCoverage === 'shortfall' ? 'warning' : 'positive'}
-                            />
-                            <MetricCard
-                                label="Neue Gesamtmiete"
-                                value={euro(data.newTotalRent)}
-                                detail={`inkl. ${euro(data.tenancy?.coldRent)} Nettomiete`}
-                            />
-                        </div>
-                        <div className="mt-3 flex justify-end">
-                            <Button
-                                label="Neue NK-Vorauszahlung übernehmen"
-                                icon={<Icons.RefreshCw className="w-4 h-4" />}
-                                variant="outline"
-                                disabled={!data.canApplyPrepayment || data.isApplyingPrepayment}
-                                onClick={() => void data.handleApplyPrepayment()}
-                            />
-                        </div>
+                        {data.tenancy ? (
+                            <>
+                                <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <MetricCard
+                                        // Frozen to this settlement's period end — never pulled along by
+                                        // applying a new rate for next year (that only takes effect the
+                                        // day after this period ends), so this always reflects what was
+                                        // actually billed for this Abrechnung, not whatever the tenancy's
+                                        // rate happens to be today.
+                                        label="Bisherige NK-Vorauszahlung"
+                                        value={`${euro(data.prepaymentUntilSettlement)}`}
+                                        detail="/Monat"
+                                    />
+                                    <MetricCard
+                                        label="Neue NK-Vorauszahlung"
+                                        value={data.newMonthlyPrepayment != null ? euro(data.newMonthlyPrepayment) : '–'}
+                                        // The old "shortfall/surplus" wording here was computed from the
+                                        // underlying annual comparison alone, so it kept claiming e.g. "Reduzierung
+                                        // wegen Überdeckung" even once bisherige/neu already showed the identical
+                                        // number (nothing left to reduce). Shown only when the two displayed
+                                        // values actually differ — compared against prepaymentUntilSettlement
+                                        // (what's on screen), not the live tenancy rate the button itself acts on.
+                                        detail={data.displayedPrepaymentDelta == null
+                                            ? undefined
+                                            : data.displayedPrepaymentDelta === 0
+                                                ? 'entspricht der aktuellen Vorauszahlung'
+                                                : `${data.displayedPrepaymentDelta > 0 ? '+' : '−'}${euro(Math.abs(data.displayedPrepaymentDelta))}${data.displayedPrepaymentDeltaPercent != null ? ` (${data.displayedPrepaymentDeltaPercent > 0 ? '+' : '−'}${Math.abs(data.displayedPrepaymentDeltaPercent).toFixed(1).replace('.', ',')} %)` : ''}`}
+                                        tone={data.displayedPrepaymentDelta == null || data.displayedPrepaymentDelta === 0
+                                            ? 'neutral'
+                                            : data.displayedPrepaymentDelta > 0 ? 'warning' : 'positive'}
+                                        action={
+                                            <button
+                                                type="button"
+                                                onClick={() => void data.handleApplyPrepayment()}
+                                                disabled={applyPrepaymentDisabledReason != null}
+                                                aria-label="Neue NK-Vorauszahlung übernehmen"
+                                                title={applyPrepaymentDisabledReason ?? 'Neue NK-Vorauszahlung übernehmen'}
+                                                className="p-1 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                            >
+                                                <Icons.RefreshCw className="w-4 h-4" />
+                                            </button>
+                                        }
+                                    />
+                                    <MetricCard
+                                        label="Neue monatliche Gesamtmiete"
+                                        value={euro(data.newTotalRent)}
+                                        detail={`${euro(data.tenancy?.coldRent)} Nettomiete + ${euro(data.newMonthlyPrepayment ?? data.currentMonthlyPrepayment)} NK-Vorauszahlung`}
+                                        footnote={`Gültig ab: ${formatDeDate(data.nextPrepaymentEffectiveDate.toISOString())}`}
+                                    />
+                                </div>
+                            </>
+                        ) : (
+                            <div className="mt-3 px-4 py-3 rounded-lg bg-muted/30 border border-border text-sm text-muted-foreground">
+                                {unitLabel} hat aktuell keinen Mieter — eine Anpassung der Nebenkostenvorauszahlung ist erst nach Vermietung möglich.
+                            </div>
+                        )}
                     </div>
 
                     {/* Generatable documents */}
@@ -472,7 +806,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                 icon={<Icons.Eye className="w-4 h-4" />}
                                                 variant="outline"
                                                 disabled={!data.canGeneratePdf}
-                                                onClick={() => router.push(`/existing-properties/${propertyId}/service-charge-settlement/${unit.propertyUnitId}/statement`)}
+                                                onClick={() => data.goTo(`/existing-properties/${propertyId}/service-charge-settlement/${unit.propertyUnitId}/statement`)}
                                             />
                                         </span>
                                         <span title={!data.canGeneratePdf ? 'Bitte zuerst Mieterdaten und Abrechnungszeitraum hinterlegen' : undefined}>
@@ -518,7 +852,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                 icon={<Icons.Eye className="w-4 h-4" />}
                                                 variant="outline"
                                                 disabled={!data.canGenerateAdjustmentDocx}
-                                                onClick={() => router.push(`/existing-properties/${propertyId}/service-charge-settlement/${unit.propertyUnitId}/adjustment`)}
+                                                onClick={() => data.goTo(`/existing-properties/${propertyId}/service-charge-settlement/${unit.propertyUnitId}/adjustment`)}
                                             />
                                         </span>
                                         <span title={!data.canGenerateAdjustmentDocx ? 'Bitte zuerst Mieterdaten und Abrechnungszeitraum hinterlegen' : undefined}>
@@ -577,22 +911,40 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                     Möchtest du <span className="font-medium text-foreground">{data.pendingDeleteDoc?.fileName}</span> wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
                 </p>
             </ConfirmDeleteModal>
+            <ConfirmDeleteModal
+                open={data.pendingDeleteSettlement}
+                onCancel={data.cancelDeleteSettlement}
+                onConfirm={() => void data.confirmDeleteSettlement()}
+                title="Abrechnung löschen?"
+                confirmDisabled={data.isDeletingSettlement}
+            >
+                <p className="text-sm text-muted-foreground">
+                    Möchtest du die {data.settlement && settlementPeriodLabel(data.settlement)} wirklich löschen? Alle Kostenpositionen dieser Abrechnung werden mitgelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
+                </p>
+            </ConfirmDeleteModal>
 
             <StickyActionBar
                 show={true}
-                onGhost={() => router.push(data.backHref)}
+                onGhost={() => data.goTo(data.backHref)}
                 onPrimary={() => void data.handleSave()}
                 ghostLabel={BUTTON_DETAILS.Back.label}
                 ghostIcon={<BUTTON_DETAILS.Back.icon />}
                 primaryLabel="Abrechnung speichern"
                 primaryIcon={<BUTTON_DETAILS.Save.icon />}
                 primaryDisabled={!data.isEditing || data.isSaving}
+                leftContent={<DetailFieldLegend />}
             />
 
             <UnsavedChangesModal
                 open={data.pendingPeriod !== null}
                 onCancel={data.cancelPeriodSwitch}
                 onDiscard={data.confirmPeriodSwitch}
+                context="an der Nebenkostenabrechnung"
+            />
+            <UnsavedChangesModal
+                open={data.pendingHref !== null}
+                onCancel={data.cancelDiscard}
+                onDiscard={data.confirmDiscard}
                 context="an der Nebenkostenabrechnung"
             />
         </div>

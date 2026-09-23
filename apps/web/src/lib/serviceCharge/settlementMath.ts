@@ -10,6 +10,18 @@ export function isFullCalendarYear(start: Date, end: Date): boolean {
 }
 
 /**
+ * A Nebenkostenabrechnung's Abrechnungszeitraum must never exceed 12 months
+ * (§ 556 Abs. 3 BGB) — a period longer than that isn't a valid settlement
+ * period at all, regardless of what the underlying proration math would
+ * otherwise happily compute for an arbitrarily long span (e.g. mistakenly
+ * covering a tenant's entire multi-year tenancy instead of one year of it).
+ */
+export function isPeriodTooLong(start: Date, end: Date): boolean {
+    const maxEnd = new Date(start.getFullYear() + 1, start.getMonth(), start.getDate() - 1);
+    return end > maxEnd;
+}
+
+/**
  * Default Abrechnungszeitraum for a brand-new settlement: Jan 1 – Dec 31 of
  * `currentYear`, unless the tenant has a move-out date, in which case the
  * period instead runs Jan 1 – the move-out date of *that* date's year (a
@@ -73,6 +85,129 @@ function dayDiff(from: Date, to: Date): number {
 const DAYS_PER_YEAR = 365;
 
 /**
+ * Fraction of `periodStart..periodEnd` during which a tenancy actually
+ * occupied the unit — the same period ∩ tenancy overlap
+ * `prorateAnnualPrepayment` applies to the advance-payment side, exposed
+ * separately so a cost-side suggestion (Anteil Wohnung) can apply the
+ * identical clipping instead of assuming the apartment share applies to the
+ * whole billing period regardless of how much of it the tenant occupied.
+ * 0 when there's no overlap at all (or `periodEnd` is not after
+ * `periodStart`); 1 for an unbounded (or fully covering) tenancy.
+ */
+export function occupancyFraction(
+    periodStart: Date,
+    periodEnd: Date,
+    tenancyStart?: Date | null,
+    tenancyEnd?: Date | null,
+): number {
+    const totalDays = dayDiff(periodStart, periodEnd) + 1;
+    if (totalDays <= 0) return 0;
+    const effectiveStart = tenancyStart && tenancyStart > periodStart ? tenancyStart : periodStart;
+    const effectiveEnd = tenancyEnd && tenancyEnd < periodEnd ? tenancyEnd : periodEnd;
+    const occupiedDays = dayDiff(effectiveStart, effectiveEnd) + 1;
+    if (occupiedDays <= 0) return 0;
+    return occupiedDays / totalDays;
+}
+
+
+// ── Per-cost-item allocation ratio ("Wert vorschlagen", tiered) ────────────
+//
+// A single ratio for the whole unit (NK-Vorauszahlung ÷ WEG, tried earlier)
+// is wrong whenever different cost items use different Verteilerschlüssel
+// (by ownership share, by consumption, by unit count, ...) — Grundsteuer and
+// Aufzugskosten on the same apartment can legitimately have different
+// factors. The ratio has to be derived per cost item, with a clear priority
+// and no invented fallback when neither source is available:
+//   1. An explicit, landlord-entered allocation key for this cost item
+//      label (service_charge_allocation_key) — the most reliable source,
+//      since it doesn't depend on any past data existing at all.
+//   2. The ratio implied by this SAME unit's own previous settlement for
+//      the same-labeled cost item (its Anteil Wohnung ÷ its Gesamt Objekt,
+//      from the Abrechnung side — the actually-incurred cost, not a budget
+//      guess).
+//   3. Neither exists: no suggestion. Never invent a number the landlord
+//      never actually confirmed.
+// "Allocable" never enters this decision — a non-allocable cost item can
+// still have a real, explainable apartment share; allocable only decides
+// whether that share is later charged to the tenant.
+
+export interface AllocationKeyInput {
+    label: string;
+    numerator: number;
+    denominator: number;
+    allocationType: string | null;
+}
+
+export interface PreviousCostItemInput {
+    label: string;
+    /** The prior settlement's Abrechnung-side Gesamt Objekt amount for this
+     *  label — the ratio's denominator. */
+    actualAmount: number | null;
+    /** The prior settlement's Abrechnung-side Anteil Wohnung for this label
+     *  — the ratio's numerator. */
+    actualShareOverride: number | null;
+}
+
+export interface SuggestedShare {
+    /** The suggested Anteil Wohnung, already rounded to cents. */
+    value: number;
+    /** 0–1, e.g. 0.08 for an 8% share. */
+    rate: number;
+    source: 'explicit' | 'history';
+    /** Human-readable explanation of where `rate` came from, for the
+     *  suggestion tooltip (e.g. "Miteigentumsanteil 80/1000" or "Verteilerschlüssel
+     *  aus letzter Abrechnung: 8,0%"). */
+    explanation: string;
+}
+
+function formatPercent(rate: number): string {
+    return `${(rate * 100).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
+
+/**
+ * Suggests a cost item's Anteil Wohnung from `amount` (that row's Gesamt
+ * Objekt, whichever column is being suggested) using the tiered ratio
+ * above — matched by label (case-insensitively, since a landlord retyping
+ * "Grundsteuer" vs "grundsteuer" across years shouldn't break the lookup).
+ * Returns null when neither an explicit key nor a usable prior-period ratio
+ * exists — the caller must leave the field empty rather than fabricate a
+ * value, exactly like "no suggestion available" in the spec this implements.
+ */
+export function suggestShareForCostItem(
+    amount: number,
+    label: string,
+    allocationKeys: readonly AllocationKeyInput[],
+    previousCostItems: readonly PreviousCostItemInput[],
+): SuggestedShare | null {
+    const normalizedLabel = label.trim().toLowerCase();
+    if (!normalizedLabel) return null;
+
+    const explicitKey = allocationKeys.find((k) => k.label.trim().toLowerCase() === normalizedLabel);
+    if (explicitKey && explicitKey.denominator !== 0) {
+        const rate = explicitKey.numerator / explicitKey.denominator;
+        return {
+            value: Math.round(amount * rate * 100) / 100,
+            rate,
+            source: 'explicit',
+            explanation: `${explicitKey.allocationType?.trim() || 'Verteilerschlüssel'}: ${explicitKey.numerator}/${explicitKey.denominator} (${formatPercent(rate)})`,
+        };
+    }
+
+    const previous = previousCostItems.find((p) => p.label.trim().toLowerCase() === normalizedLabel);
+    if (previous && previous.actualAmount != null && previous.actualAmount !== 0 && previous.actualShareOverride != null) {
+        const rate = previous.actualShareOverride / previous.actualAmount;
+        return {
+            value: Math.round(amount * rate * 100) / 100,
+            rate,
+            source: 'history',
+            explanation: `Verteilerschlüssel aus letzter Abrechnung: ${formatPercent(rate)}`,
+        };
+    }
+
+    return null;
+}
+
+/**
  * Prorates the annual NK-Vorauszahlung total for a settlement period, taking
  * into account any miscRent changes that took effect during the period, AND
  * the period's own length relative to a full year — a settlement period
@@ -80,14 +215,28 @@ const DAYS_PER_YEAR = 365;
  * less than a full year's worth of prepayment, not `monthly * 12` outright.
  * History entries store a delta (not an absolute value), so past monthly
  * values are reconstructed by walking backwards from the current value.
+ *
+ * The prepayment can only cover the days the tenant actually occupied the
+ * unit — `tenancyStart`/`tenancyEnd` (null = unbounded) clip the settlement
+ * period down to its overlap with the tenancy before any proration happens.
+ * Without this, a tenant who moved in mid-period (or a settlement period
+ * that predates the tenancy entirely) would be charged/credited prepayment
+ * for months they never rented the unit — with no overlap at all, the
+ * history walk-back below would run against a period the tenancy has no
+ * relation to and can produce a nonsensical (even negative) result.
  */
 export function prorateAnnualPrepayment(
     currentMonthlyValue: number,
     history: MiscRentAdjustment[],
     periodStart: Date,
     periodEnd: Date,
+    tenancyStart?: Date | null,
+    tenancyEnd?: Date | null,
 ): number {
-    const totalDays = dayDiff(periodStart, periodEnd) + 1;
+    const effectivePeriodStart = tenancyStart && tenancyStart > periodStart ? tenancyStart : periodStart;
+    const effectivePeriodEnd = tenancyEnd && tenancyEnd < periodEnd ? tenancyEnd : periodEnd;
+
+    const totalDays = dayDiff(effectivePeriodStart, effectivePeriodEnd) + 1;
     if (totalDays <= 0) return 0;
 
     const sorted = history
@@ -99,7 +248,7 @@ export function prorateAnnualPrepayment(
 
     const segments: { from: Date; to: Date; value: number }[] = [];
     let runningValue = currentMonthlyValue;
-    let segmentEnd = stripTime(periodEnd);
+    let segmentEnd = stripTime(effectivePeriodEnd);
 
     for (const entry of sorted) {
         if (entry.date > segmentEnd) {
@@ -116,8 +265,8 @@ export function prorateAnnualPrepayment(
     }
     segments.push({ from: new Date(-8640000000000000), to: segmentEnd, value: runningValue });
 
-    const start = stripTime(periodStart);
-    const end = stripTime(periodEnd);
+    const start = stripTime(effectivePeriodStart);
+    const end = stripTime(effectivePeriodEnd);
     let total = 0;
     for (const segment of segments) {
         const overlapStart = segment.from > start ? segment.from : start;
@@ -127,6 +276,38 @@ export function prorateAnnualPrepayment(
         total += segment.value * 12 * (overlapDays / DAYS_PER_YEAR);
     }
     return Math.round(total * 100) / 100;
+}
+
+/**
+ * Reconstructs the monthly NK-Vorauszahlung that was actually in effect as of
+ * `asOfDate` (typically a settlement's periodEnd), by undoing any history
+ * entries whose effective date is *after* it — the same backward-walk this
+ * file already does for prorateAnnualPrepayment, exposed on its own so a
+ * display value can show "the rate this settlement was billed at" without
+ * being pulled along whenever the tenancy's current rate changes for a
+ * future period. A rate change effective after `asOfDate` must never affect
+ * this figure; that's the whole point of freezing it to the settlement.
+ */
+export function monthlyRateAsOf(
+    currentMonthlyValue: number,
+    history: MiscRentAdjustment[],
+    asOfDate: Date,
+): number {
+    const sorted = history
+        .filter((entry) => entry.effectiveDate)
+        .map((entry) => ({ date: stripTime(new Date(entry.effectiveDate)), amount: entry.amount }))
+        .sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    let runningValue = currentMonthlyValue;
+    const target = stripTime(asOfDate);
+    for (const entry of sorted) {
+        if (entry.date > target) {
+            runningValue -= entry.amount;
+        } else {
+            break;
+        }
+    }
+    return Math.round(runningValue * 100) / 100;
 }
 
 export interface UnitSettlementCostItem {
@@ -174,21 +355,27 @@ export function computeUnitSettlementSummary(params: {
     miscRentHistory: MiscRentAdjustment[];
     periodStart: Date;
     periodEnd: Date;
+    tenancyStart?: Date | null;
+    tenancyEnd?: Date | null;
 }): UnitSettlementSummary {
-    const { costItems, unitLivingAreaM2, totalLivingAreaM2, currentMonthlyPrepayment, miscRentHistory, periodStart, periodEnd } = params;
+    const { costItems, unitLivingAreaM2, totalLivingAreaM2, currentMonthlyPrepayment, miscRentHistory, periodStart, periodEnd, tenancyStart, tenancyEnd } = params;
     const unitShare = unitLivingAreaM2 && totalLivingAreaM2 > 0 ? unitLivingAreaM2 / totalLivingAreaM2 : 0;
 
+    // Anteil Wohnung is always a manual, independent entry per cost item —
+    // never derived from amount * unitShare (the whole building's cost never
+    // automatically corresponds to a specific apartment's share of it). Kept
+    // in lockstep with the Nebenkostenabrechnung detail page's own
+    // actualShareForItem/budgetShareForItem (see useServiceChargeSettlementData.tsx).
     const shareForAmount = (amount: number | null, override: number | null, allocable: boolean): number => {
-        if (!allocable || amount == null) return 0;
-        if (override != null) return override;
-        return Math.round(amount * unitShare * 100) / 100;
+        if (!allocable || amount == null || override == null) return 0;
+        return override;
     };
 
     const unitActualShare = costItems.reduce((sum, item) => sum + shareForAmount(item.actualAmount, item.actualShareOverride, item.allocable), 0);
     const unitBudgetShare = costItems.reduce((sum, item) => sum + shareForAmount(item.budgetAmount, item.budgetShareOverride, item.allocable), 0);
     const totalBudgetAllocable = splitByAllocable(costItems.map((item) => ({ amount: item.budgetAmount ?? 0, allocable: item.allocable }))).allocable;
 
-    const annualPrepayment = prorateAnnualPrepayment(currentMonthlyPrepayment, miscRentHistory, periodStart, periodEnd);
+    const annualPrepayment = prorateAnnualPrepayment(currentMonthlyPrepayment, miscRentHistory, periodStart, periodEnd, tenancyStart, tenancyEnd);
     const overUnderCoverage = unitActualShare - annualPrepayment;
     const budgetOverUnderCoverage = unitBudgetShare - annualPrepayment;
     const newMonthlyPrepayment = totalBudgetAllocable > 0 ? Math.round((unitBudgetShare / 12) * 100) / 100 : null;

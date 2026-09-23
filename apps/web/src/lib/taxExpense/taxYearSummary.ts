@@ -34,12 +34,14 @@ export interface TaxYearBreakdown {
     status: TaxCompletionStatus;
 }
 
-/** Every calendar year with at least one receipt among `documents`, plus the
- *  current year (so the result is never empty for a first-time property),
- *  descending. */
+/** Every calendar year with at least one receipt among `documents`,
+ *  descending. Does NOT force in the current year — a caller that wants
+ *  "never empty for a first-time property" applies that fallback itself
+ *  (see useTaxDocumentsData's `availableYears`), because doing it here meant
+ *  the current year's card could never actually be deleted: every render
+ *  re-added it regardless of what the user just removed. */
 export function availableTaxYears(documents: TaxExpenseDocument[]): number[] {
     const years = new Set(documents.map((d) => new Date(d.createdAt).getFullYear()));
-    years.add(new Date().getFullYear());
     return Array.from(years).sort((a, b) => b - a);
 }
 

@@ -58,7 +58,8 @@ export function CalendarField({
       return;
     }
 
-    // Try to parse various date formats
+    // Try to parse various date formats — while still typing, only the
+    // unambiguous ones (see parseFlexibleDate's `finalize` parameter).
     const parsedDate = parseFlexibleDate(newValue);
     if (parsedDate) {
       onChange?.(parsedDate);
@@ -66,6 +67,13 @@ export function CalendarField({
   };
 
   const handleBlur = () => {
+    // Typing has stopped, so the more permissive formats (short year,
+    // free-form) can be tried too — commit them if they parse.
+    const parsedDate = parseFlexibleDate(inputValue, { finalize: true });
+    if (parsedDate) {
+      onChange?.(parsedDate);
+      return;
+    }
     // If input is invalid, reset to the current value — including clearing
     // unparseable text when there never was a valid value to fall back to
     // (previously left stuck in the field forever).
@@ -75,7 +83,7 @@ export function CalendarField({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      const parsedDate = parseFlexibleDate(inputValue);
+      const parsedDate = parseFlexibleDate(inputValue, { finalize: true });
       if (parsedDate) {
         onChange?.(parsedDate);
         setOpen(false);
@@ -159,14 +167,24 @@ export function CalendarField({
   );
 }
 
-// Helper function to parse flexible date formats
-function parseFlexibleDate(input: string): Date | null {
+// Helper function to parse flexible date formats. `finalize` distinguishes
+// "the user is done typing" (blur/Enter) from "still typing" (every
+// keystroke): the DD.MM.YY short-year form and the free-form fallback are
+// only tried when finalize is true, because mid-keystroke they're
+// indistinguishable from a truncated prefix of a longer date the user is
+// still in the middle of typing — e.g. "01.02.20" is exactly what the input
+// looks like 8 characters into typing "01.02.2026". Matching it live used to
+// commit the wrong year immediately, which then snapped the input's
+// displayed text back to that wrong value (via the `value` prop round-trip)
+// and corrupted every keystroke typed after it.
+function parseFlexibleDate(input: string, options: { finalize?: boolean } = {}): Date | null {
   if (!input) return null;
+  const { finalize = false } = options;
 
   // Try various date formats
   const formats = [
-    // DD.MM.YY or D.M.YY (primary format)
-    { regex: /^(\d{1,2})\.(\d{1,2})\.(\d{2})$/, order: 'dmy2' },
+    // DD.MM.YY or D.M.YY — only once typing has stopped, see above.
+    ...(finalize ? [{ regex: /^(\d{1,2})\.(\d{1,2})\.(\d{2})$/, order: 'dmy2' }] : []),
     // DD.MM.YYYY or D.M.YYYY
     { regex: /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/, order: 'dmy4' },
     // MM/DD/YYYY or M/D/YYYY
@@ -224,10 +242,15 @@ function parseFlexibleDate(input: string): Date | null {
     }
   }
 
-  // Try natural language parsing (e.g., "January 15, 2024")
-  const naturalDate = new Date(input);
-  if (!isNaN(naturalDate.getTime())) {
-    return naturalDate;
+  // Try natural language parsing (e.g., "January 15, 2024") — only once
+  // typing has stopped (see the function comment above): plenty of partial,
+  // still-being-typed strings also happen to parse as *some* date under the
+  // native Date constructor's lenient rules.
+  if (finalize) {
+    const naturalDate = new Date(input);
+    if (!isNaN(naturalDate.getTime())) {
+      return naturalDate;
+    }
   }
 
   return null;

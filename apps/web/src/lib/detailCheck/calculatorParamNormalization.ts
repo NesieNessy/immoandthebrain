@@ -90,6 +90,8 @@ export type CalculatorOverrides = {
   modernizationPlacements: Record<string, string>;
   modernizationCostOverrides: Record<string, number>;
   renovationTimingOverrides: Record<string, RenovationTiming>;
+  /** Optional so existing object literals in the calculator page stay valid. */
+  excludedModernizationIds?: string[];
   rentIncreaseOverrides: Record<string, { effectiveYyyymm?: string; monthlyDelta?: number }>;
   financingInterestRateOverride: number | null;
   interestRateOverride: number | null;
@@ -110,6 +112,7 @@ export function overridesFromParams(params: CalculatorParams): CalculatorOverrid
     modernizationPlacements: params.modernizationPlacements ?? {},
     modernizationCostOverrides: params.modernizationCostOverrides ?? {},
     renovationTimingOverrides: params.renovationTimingOverrides ?? {},
+    excludedModernizationIds: params.excludedModernizationIds ?? [],
     rentIncreaseOverrides: params.rentIncreaseOverrides ?? {},
     financingInterestRateOverride: params.financingInterestRateOverride ?? null,
     interestRateOverride: params.interestRateOverride ?? null,
@@ -226,6 +229,7 @@ export function buildEffectiveCalculatorParams(
     modernizationPlacements: overrides.modernizationPlacements,
     modernizationCostOverrides: overrides.modernizationCostOverrides,
     renovationTimingOverrides: overrides.renovationTimingOverrides,
+    excludedModernizationIds: overrides.excludedModernizationIds ?? [],
     rentIncreasePlan: options.resetRentIncreasePlan ? undefined : options.storedRentIncreasePlan,
     rentIncreaseOverrides: options.resetRentIncreasePlan ? undefined : overrides.rentIncreaseOverrides,
     mode: fields.mode,

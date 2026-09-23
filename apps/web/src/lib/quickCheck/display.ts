@@ -9,6 +9,7 @@
 // ---------------------------------------------------------------------------
 
 import type { TagVariant } from '@/components/ui';
+import { listingLinkHref } from '@/lib/listingUrl';
 import type { QuickCheckOverview } from '@/lib/supabase/quick_check.supabase';
 import { isValidConstructionYear } from './validation';
 import { PropertyCondition } from '@immoandthebrain/types';
@@ -99,8 +100,9 @@ export const CONDITION_PILL_LABEL: Record<PropertyCondition, string> = {
 //     "ImmoScout 428") -> no real link was entered, so send the user to that
 //     portal's real homepage instead of a fabricated one.
 //  4. No known portal recognized -> no link at all, same as a manual entry.
-const DOMAIN_LIKE = /^(www\.)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i;
-
+//
+// Steps 1 and 2 are the shared listing-reference rule (lib/listingUrl.ts),
+// the same one the Detailbewertung uses for its Inserats-URL.
 const KNOWN_PORTAL_DOMAINS: { pattern: RegExp; url: string }[] = [
   { pattern: /immobilienscout|immoscout/i, url: 'https://www.immobilienscout24.de' },
   { pattern: /immowelt/i, url: 'https://www.immowelt.de' },
@@ -111,9 +113,9 @@ const KNOWN_PORTAL_DOMAINS: { pattern: RegExp; url: string }[] = [
 export function getPlaceholderPortalUrl(row: QuickCheckEntry): string | null {
   if (row.portalId === MANUAL_ENTRY_LABEL || row.status === 'inaktiv') return null;
 
+  const link = listingLinkHref(row.portalId);
+  if (link) return link;
   const value = row.portalId.trim();
-  if (/^https?:\/\//i.test(value)) return value;
-  if (DOMAIN_LIKE.test(value)) return `https://${value}`;
   return KNOWN_PORTAL_DOMAINS.find((p) => p.pattern.test(value))?.url ?? null;
 }
 

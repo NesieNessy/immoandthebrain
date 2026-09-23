@@ -62,11 +62,18 @@ export async function POST(request: Request) {
 
   const storagePath = `${userId}/${propertyId}/${categoryId}/beleg-${crypto.randomUUID()}-${file.name}`;
   const buffer = Buffer.from(await file.arrayBuffer());
-  const uploadResponse = await fetch(`${storageBaseUrl()}/object/${BUCKET}/${storagePath}`, {
-    method: 'POST',
-    headers: storageHeaders({ 'Content-Type': file.type || 'application/octet-stream' }),
-    body: buffer,
-  });
+  let uploadResponse: Response;
+  try {
+    uploadResponse = await fetch(`${storageBaseUrl()}/object/${BUCKET}/${storagePath}`, {
+      method: 'POST',
+      headers: storageHeaders({ 'Content-Type': file.type || 'application/octet-stream' }),
+      body: buffer,
+    });
+  } catch (err) {
+    const detail = err instanceof Response ? `Response(${err.status}): ${await err.text().catch(() => '')}` : err instanceof Error ? err.message : String(err);
+    console.error('tax-expense-documents upload request threw:', detail);
+    return NextResponse.json({ error: `Datei konnte nicht hochgeladen werden: ${detail}` }, { status: 500 });
+  }
   if (!uploadResponse.ok) {
     console.error('tax-expense-documents upload failed:', uploadResponse.status, await uploadResponse.text());
     return NextResponse.json({ error: 'Datei konnte nicht hochgeladen werden.' }, { status: 500 });

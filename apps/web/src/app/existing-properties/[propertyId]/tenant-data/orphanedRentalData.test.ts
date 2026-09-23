@@ -16,6 +16,11 @@ const empty: RentalDataGuardInput = {
     parkingSpaceRent: '',
     houseMoney: '',
     tenancyEndDate: undefined,
+    nextRentAdjustmentDate: undefined,
+    nextRentAdjustmentAmount: '',
+    renovationAdjustmentStartDate: undefined,
+    renovationAdjustmentEndDate: undefined,
+    renovationAdjustmentAmount: '',
     persons: [{ moveInDate: undefined, taxId: '' }],
 };
 
@@ -33,6 +38,17 @@ describe('hasOrphanedRentalData', () => {
 
     it('is true once a move-out date is set', () => {
         expect(hasOrphanedRentalData({ ...empty, tenancyEndDate: new Date(2027, 0, 1) })).toBe(true);
+    });
+
+    it('is true once a Mietanpassung field is filled in on its own', () => {
+        expect(hasOrphanedRentalData({ ...empty, nextRentAdjustmentDate: new Date(2027, 0, 1) })).toBe(true);
+        expect(hasOrphanedRentalData({ ...empty, nextRentAdjustmentAmount: '50' })).toBe(true);
+    });
+
+    it('is true once a Sanierungsanpassung field is filled in on its own', () => {
+        expect(hasOrphanedRentalData({ ...empty, renovationAdjustmentStartDate: new Date(2027, 0, 1) })).toBe(true);
+        expect(hasOrphanedRentalData({ ...empty, renovationAdjustmentEndDate: new Date(2027, 5, 1) })).toBe(true);
+        expect(hasOrphanedRentalData({ ...empty, renovationAdjustmentAmount: '2500' })).toBe(true);
     });
 
     it('is true once any person has a move-in date, even with no name', () => {

@@ -44,6 +44,8 @@ type RenovationResponse = {
   };
   context: {
     postalCode: string;
+    /** Resolved server-side from the renovation_region_factor table. */
+    regionFactor: number;
     livingAreaM2: number;
   };
 };
@@ -259,7 +261,7 @@ function RenovationContent() {
         zeitpunkt: 'SOFORT',
         publish_order: false,
       }],
-      postalCode: context?.postalCode,
+      regionFactor: context?.regionFactor,
       livingAreaM2: context?.livingAreaM2,
     }));
     setCases((prev) => [...prev, evaluated]);

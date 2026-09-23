@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addMonths, runRentCalculator } from './rentCalculator';
+import { addMonths, preProjection558, runRentCalculator } from './rentCalculator';
 import { calculatorParams, monthIndex, renovationCase } from './testFixtures';
 
 /**
@@ -124,5 +124,54 @@ describe('Übergreifend: Konsistenz der Zeitreihe', () => {
     const a = runRentCalculator(params, cases);
     const b = runRentCalculator(params, cases);
     expect(a).toEqual(b);
+  });
+});
+
+describe('§558 Abs. 3 — increase before the purchase counts in the window', () => {
+  // 1.000 € → 1.200 € in 2024-11, fourteen months before the 2026-01 start.
+  // Non-dense market (Musterstadt), so the cap is 20 %.
+  const params = calculatorParams({ monthlyRentStart: 1200, last558Date: '2024-11', last558RentBefore: 1000 });
+
+  it('waits until the pre-purchase increase has left the three-year window', () => {
+    const [first] = runRentCalculator(params, []).increases558WithRentIndex;
+    expect([first.effectiveYyyymm, first.monthlyDelta]).toEqual(['2027-11', 240]);
+  });
+
+  it('applies the same window to a manually moved increase', () => {
+    const moved = { ...params, rentIncreaseOverrides: { '558-1': { effectiveYyyymm: '2026-06', monthlyDelta: 240 } } };
+    const [first] = runRentCalculator(moved, []).increases558WithRentIndex;
+    expect([first.effectiveYyyymm, first.monthlyDelta]).toEqual(['2027-11', 240]);
+  });
+
+  it('keeps today\'s behaviour when the rent before the increase is unknown', () => {
+    const unknown = calculatorParams({ monthlyRentStart: 1200, last558Date: '2024-11' });
+    const [first] = runRentCalculator(unknown, []).increases558WithRentIndex;
+    expect([first.effectiveYyyymm, first.monthlyDelta]).toEqual(['2026-02', 240]);
+  });
+});
+
+describe('preProjection558', () => {
+  it('is the difference between the current rent and the rent before the increase', () => {
+    expect(preProjection558(calculatorParams({ monthlyRentStart: 1200, last558Date: '2024-11', last558RentBefore: 1000 })))
+      .toEqual({ effectiveYyyymm: '2024-11', monthlyDelta: 200 });
+  });
+
+  it('excludes a §559 increase that took effect after it, since §559 is outside the Kappungsgrenze', () => {
+    expect(preProjection558(calculatorParams({
+      monthlyRentStart: 1300, last558Date: '2024-11', last558RentBefore: 1000,
+      last559Date: '2025-06', last559MonthlyDelta: 100,
+    }))).toEqual({ effectiveYyyymm: '2024-11', monthlyDelta: 200 });
+  });
+
+  it('is null without a date, without the previous rent, or without an actual increase', () => {
+    expect(preProjection558(calculatorParams({ last558RentBefore: 900 }))).toBeNull();
+    expect(preProjection558(calculatorParams({ last558Date: '2024-11' }))).toBeNull();
+    expect(preProjection558(calculatorParams({ monthlyRentStart: 1000, last558Date: '2024-11', last558RentBefore: 1000 }))).toBeNull();
+  });
+
+  it('is null when the increase takes effect after the projection start, since monthlyRentStart does not include it yet', () => {
+    // startYyyymm defaults to 2026-01; an increase effective 2026-06 lies after it.
+    expect(preProjection558(calculatorParams({ monthlyRentStart: 1200, last558Date: '2026-06', last558RentBefore: 1000 })))
+      .toBeNull();
   });
 });

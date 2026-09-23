@@ -9,6 +9,7 @@ import {
 import { computeFinancing, computeIndividualAdditionalCosts, type InterestPeriodYears } from '@/lib/detailCheck/financing';
 import { requireUserId, workflowIdFor } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
+import { loadRenovationRegionFactor } from '@/lib/server/renovationRegionFactor';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -54,10 +55,12 @@ async function loadContext(userId: string, workflowId: string, quickCheckId: str
   const quickCheck = quickCheckRows.rows[0];
   const property = propertyRows.rows[0];
   const acquisition = acquisitionRows.rows[0];
+  const postalCode: string = property?.postal_code ?? quickCheck?.postal_code ?? '';
 
   return {
     quickCheck,
-    postalCode: property?.postal_code ?? quickCheck?.postal_code ?? '',
+    postalCode,
+    regionFactor: await loadRenovationRegionFactor(postalCode),
     livingAreaM2: toNumber(property?.living_area_m2 ?? 0),
     yearOfConstruction: toNumber(property?.year_of_construction ?? quickCheck?.year_of_construction ?? 0),
     propertyCategory: property?.property_category ?? 'EIGENTUMSWOHNUNG',
@@ -151,7 +154,7 @@ function buildResponse(saved: Record<string, unknown> | undefined, context: Awai
   const evaluatedCases = savedCases.length
     ? withDefaultSelectedCosts(evaluateRenovationCases({
         cases: savedCases,
-        postalCode: context.postalCode,
+        regionFactor: context.regionFactor,
         livingAreaM2: context.livingAreaM2,
       }))
     : [];
@@ -170,6 +173,9 @@ function buildResponse(saved: Record<string, unknown> | undefined, context: Awai
     quickCheckId: context.quickCheck?.quick_check_id ?? null,
     context: {
       postalCode: context.postalCode,
+      // The browser prices a newly added measure itself (see the renovation
+      // page) and cannot read the factor table, so it gets the resolved value.
+      regionFactor: context.regionFactor,
       livingAreaM2: context.livingAreaM2,
       yearOfConstruction: context.yearOfConstruction,
       propertyCategory: context.propertyCategory,
@@ -213,7 +219,7 @@ export async function POST(request: Request) {
   const previousFinancedAmount = toNumber(previousRows.rows[0]?.financed_amount ?? 0);
   const evaluatedCases = evaluateRenovationCases({
     cases: safeCases(input.cases),
-    postalCode: context.postalCode,
+    regionFactor: context.regionFactor,
     livingAreaM2: context.livingAreaM2,
   });
   const aggregate = aggregateRenovationPricing(evaluatedCases);
