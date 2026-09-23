@@ -33,6 +33,7 @@ function toSettlement(row: Record<string, unknown>): ServiceChargeSettlement {
   return {
     serviceChargeSettlementId: row.service_charge_settlement_id as number,
     propertyId: row.property_id as number,
+    propertyUnitId: row.property_unit_id as number,
     periodStart: row.period_start as string,
     periodEnd: row.period_end as string,
     sourceDocumentName: row.source_document_name as string | null,

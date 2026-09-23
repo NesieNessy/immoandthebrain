@@ -26,15 +26,21 @@ export async function GET(request: Request) {
     values,
   );
 
-  const settlementPromise = periodStart && periodEnd
-    ? db.query(
-        `SELECT r.* FROM service_charge_settlement r WHERE EXISTS (SELECT 1 FROM property p WHERE p.property_id = r.property_id AND p.user_id = $1) AND r.property_id = $2 AND r.period_start = $3 AND r.period_end = $4 LIMIT 1`,
-        [...values, periodStart, periodEnd],
-      )
-    : db.query(
-        `SELECT r.* FROM service_charge_settlement r WHERE EXISTS (SELECT 1 FROM property p WHERE p.property_id = r.property_id AND p.user_id = $1) AND r.property_id = $2 ORDER BY period_end DESC LIMIT 1`,
-        values,
-      );
+  // Settlements are per unit, not shared across a building (see the
+  // per-unit migration) — without a unit, "the settlement" isn't a
+  // well-defined thing to look up any more, so this returns none rather
+  // than arbitrarily picking whichever unit's row happens to sort first.
+  const settlementPromise = !propertyUnitId
+    ? Promise.resolve({ rows: [] } as { rows: unknown[] })
+    : periodStart && periodEnd
+      ? db.query(
+          `SELECT r.* FROM service_charge_settlement r WHERE EXISTS (SELECT 1 FROM property p WHERE p.property_id = r.property_id AND p.user_id = $1) AND r.property_id = $2 AND r.property_unit_id = $3 AND r.period_start = $4 AND r.period_end = $5 LIMIT 1`,
+          [...values, Number(propertyUnitId), periodStart, periodEnd],
+        )
+      : db.query(
+          `SELECT r.* FROM service_charge_settlement r WHERE EXISTS (SELECT 1 FROM property p WHERE p.property_id = r.property_id AND p.user_id = $1) AND r.property_id = $2 AND r.property_unit_id = $3 ORDER BY period_end DESC LIMIT 1`,
+          [...values, Number(propertyUnitId)],
+        );
 
   // house_money (WEG/Hausgeld) lives on the tenancy's linked maintenance_costs
   // row, not on tenancy itself — joined in here so the Nebenkostenabrechnung

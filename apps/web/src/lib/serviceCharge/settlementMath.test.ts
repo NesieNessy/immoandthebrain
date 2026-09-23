@@ -10,7 +10,7 @@ import {
     occupancyFraction,
     prorateAnnualPrepayment,
     splitByAllocable,
-    suggestApartmentShare,
+    suggestShareForCostItem,
 } from './settlementMath';
 
 describe('compareSettlementCoverage', () => {
@@ -173,6 +173,71 @@ describe('monthlyRateAsOf', () => {
     });
 });
 
+describe('suggestShareForCostItem', () => {
+    it('prefers an explicit allocation key over history', () => {
+        const result = suggestShareForCostItem(
+            4500,
+            'Grundsteuer',
+            [{ label: 'Grundsteuer', numerator: 80, denominator: 1000, allocationType: 'Miteigentumsanteil' }],
+            [{ label: 'Grundsteuer', actualAmount: 4000, actualShareOverride: 320 }],
+        );
+        expect(result?.source).toBe('explicit');
+        expect(result?.rate).toBeCloseTo(0.08, 5);
+        expect(result?.value).toBe(360);
+        expect(result?.explanation).toContain('80/1000');
+    });
+
+    it('falls back to the ratio implied by the previous period when there is no explicit key', () => {
+        // Property tax: 320 / 4,000 = 8% -> 4,500 * 8% = 360 (the spec's own worked example).
+        const result = suggestShareForCostItem(
+            4500,
+            'Grundsteuer',
+            [],
+            [{ label: 'Grundsteuer', actualAmount: 4000, actualShareOverride: 320 }],
+        );
+        expect(result?.source).toBe('history');
+        expect(result?.value).toBe(360);
+    });
+
+    it('matches labels case-insensitively and with surrounding whitespace', () => {
+        const result = suggestShareForCostItem(2100, ' versicherung ', [], [{ label: 'Versicherung', actualAmount: 2000, actualShareOverride: 160 }]);
+        expect(result?.value).toBe(168);
+    });
+
+    it('returns null (no invented value) when neither an explicit key nor prior-period history exists', () => {
+        expect(suggestShareForCostItem(4500, 'Neue Kostenposition', [], [])).toBeNull();
+    });
+
+    it('returns null when the previous period has an amount but no recorded share', () => {
+        const result = suggestShareForCostItem(4500, 'Grundsteuer', [], [{ label: 'Grundsteuer', actualAmount: 4000, actualShareOverride: null }]);
+        expect(result).toBeNull();
+    });
+
+    it('returns null when the previous period exists but its amount was 0 (division by zero)', () => {
+        const result = suggestShareForCostItem(4500, 'Grundsteuer', [], [{ label: 'Grundsteuer', actualAmount: 0, actualShareOverride: 0 }]);
+        expect(result).toBeNull();
+    });
+
+    it('ignores a same-property explicit key for a different cost item label', () => {
+        const result = suggestShareForCostItem(
+            2100,
+            'Versicherung',
+            [{ label: 'Grundsteuer', numerator: 80, denominator: 1000, allocationType: null }],
+            [],
+        );
+        expect(result).toBeNull();
+    });
+
+    it('two different cost items can carry two different implied ratios from history', () => {
+        const previous = [
+            { label: 'Grundsteuer', actualAmount: 4000, actualShareOverride: 320 },
+            { label: 'Aufzug', actualAmount: 1000, actualShareOverride: 250 },
+        ];
+        expect(suggestShareForCostItem(4500, 'Grundsteuer', [], previous)?.rate).toBeCloseTo(0.08, 5);
+        expect(suggestShareForCostItem(1200, 'Aufzug', [], previous)?.rate).toBeCloseTo(0.25, 5);
+    });
+});
+
 describe('occupancyFraction', () => {
     it('is 1 for a tenancy with no start/end bounds', () => {
         expect(occupancyFraction(new Date(2026, 0, 1), new Date(2026, 11, 31), null, null)).toBe(1);
@@ -192,15 +257,6 @@ describe('occupancyFraction', () => {
     });
 });
 
-describe('suggestApartmentShare', () => {
-    it('multiplies the property cost by the living-area share and the occupancy fraction', () => {
-        expect(suggestApartmentShare(1200, 0.1, 0.5)).toBe(60);
-    });
-
-    it('rounds to cents', () => {
-        expect(suggestApartmentShare(1000, 1 / 3, 1)).toBe(333.33);
-    });
-});
 
 describe('computeUnitSettlementSummary', () => {
     const costItems = [

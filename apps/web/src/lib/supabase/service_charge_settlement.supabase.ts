@@ -12,6 +12,7 @@ function toSettlement(row: Record<string, unknown>): ServiceChargeSettlement {
     return {
         serviceChargeSettlementId: row.service_charge_settlement_id as number,
         propertyId: row.property_id as number,
+        propertyUnitId: row.property_unit_id as number,
         periodStart: row.period_start as string,
         periodEnd: row.period_end as string,
         sourceDocumentName: row.source_document_name as string | null,
@@ -25,15 +26,19 @@ function toSettlement(row: Record<string, unknown>): ServiceChargeSettlement {
 // Queries
 // ----------------------------------------------------------------------------
 
-export async function getSettlementsByProperty(propertyId: number): Promise<ServiceChargeSettlement[]> {
-    const data = await propertyResourceRequest<Record<string, unknown>[]>('service-charge-settlements', {}, { propertyId });
+/** Every settlement for one unit — settlements are per unit, not shared
+ *  across a building, so this is scoped by propertyUnitId, not just
+ *  propertyId (matches "Gespeicherte Abrechnungen", which must only ever
+ *  list this unit's own settlement history). */
+export async function getSettlementsByUnit(propertyId: number, propertyUnitId: number): Promise<ServiceChargeSettlement[]> {
+    const data = await propertyResourceRequest<Record<string, unknown>[]>('service-charge-settlements', {}, { propertyId, propertyUnitId });
     return data?.map(toSettlement) ?? [];
 }
 
 /** The most recent settlement (by settlement-period end date) for a
- *  property — null means no service charge settlement has been started yet. */
-export async function getCurrentSettlementByProperty(propertyId: number): Promise<ServiceChargeSettlement | null> {
-    const data = await propertyResourceRequest<Record<string, unknown>>('service-charge-settlements', {}, { propertyId, current: true, single: true });
+ *  unit — null means no service charge settlement has been started yet. */
+export async function getCurrentSettlementByUnit(propertyId: number, propertyUnitId: number): Promise<ServiceChargeSettlement | null> {
+    const data = await propertyResourceRequest<Record<string, unknown>>('service-charge-settlements', {}, { propertyId, propertyUnitId, current: true, single: true });
     if (!data) return null;
     return toSettlement(data);
 }
@@ -42,10 +47,23 @@ export async function getCurrentSettlementByProperty(propertyId: number): Promis
  *  saved for that period yet. Used to tell "editing the settlement that's
  *  already loaded" apart from "navigating to a different period", and to
  *  avoid creating a duplicate settlement for a period that already has one. */
-export async function getSettlementByPeriod(propertyId: number, periodStart: string, periodEnd: string): Promise<ServiceChargeSettlement | null> {
-    const data = await propertyResourceRequest<Record<string, unknown>>('service-charge-settlements', {}, { propertyId, periodStart, periodEnd, single: true });
+export async function getSettlementByPeriod(propertyId: number, propertyUnitId: number, periodStart: string, periodEnd: string): Promise<ServiceChargeSettlement | null> {
+    const data = await propertyResourceRequest<Record<string, unknown>>('service-charge-settlements', {}, { propertyId, propertyUnitId, periodStart, periodEnd, single: true });
     if (!data) return null;
     return toSettlement(data);
+}
+
+/** The most recent settlement *before* the given period end, for the same
+ *  unit — the "previous period" a Wert-vorschlagen ratio can be learned
+ *  from. Reuses the plain per-unit list rather than a dedicated query
+ *  param, since the list is already small (one row per year at most) and
+ *  this is only ever called once a settlement page is already loaded. */
+export async function getPreviousSettlementForUnit(propertyId: number, propertyUnitId: number, beforePeriodEnd: string): Promise<ServiceChargeSettlement | null> {
+    const all = await getSettlementsByUnit(propertyId, propertyUnitId);
+    const prior = all
+        .filter((s) => s.periodEnd < beforePeriodEnd)
+        .sort((a, b) => b.periodEnd.localeCompare(a.periodEnd));
+    return prior[0] ?? null;
 }
 
 // ----------------------------------------------------------------------------
@@ -55,6 +73,7 @@ export async function getSettlementByPeriod(propertyId: number, periodStart: str
 export async function createSettlement(payload: ServiceChargeSettlementInsert): Promise<ServiceChargeSettlement | null> {
     const data = await propertyResourceRequest<Record<string, unknown>>('service-charge-settlements', jsonRequest('POST', { values: {
         property_id: payload.propertyId,
+        property_unit_id: payload.propertyUnitId,
         period_start: payload.periodStart,
         period_end: payload.periodEnd,
         source_document_name: payload.sourceDocumentName,

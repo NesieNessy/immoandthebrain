@@ -116,7 +116,7 @@ const RESOURCES: Record<string, ResourceConfig> = {
   'service-charge-settlements': {
     table: 'service_charge_settlement',
     primaryKey: 'service_charge_settlement_id',
-    columns: ['property_id', 'period_start', 'period_end', 'source_document_name', 'source_document_path'],
+    columns: ['property_id', 'property_unit_id', 'period_start', 'period_end', 'source_document_name', 'source_document_path'],
     orderBy: 'period_start DESC',
   },
   'service-charge-cost-items': {
@@ -124,6 +124,12 @@ const RESOURCES: Record<string, ResourceConfig> = {
     primaryKey: 'service_charge_cost_item_id',
     columns: ['service_charge_settlement_id', 'property_id', 'sort_order', 'label', 'allocable', 'actual_amount', 'budget_amount', 'actual_share_override', 'budget_share_override'],
     orderBy: 'sort_order, service_charge_cost_item_id',
+  },
+  'service-charge-allocation-keys': {
+    table: 'service_charge_allocation_key',
+    primaryKey: 'service_charge_allocation_key_id',
+    columns: ['property_unit_id', 'property_id', 'label', 'numerator', 'denominator', 'allocation_type'],
+    orderBy: 'label',
   },
   'renovation-measures': {
     table: 'renovation_measure',
@@ -229,7 +235,7 @@ export async function GET(request: Request, context: RouteContext) {
     values.push(Number(propertyId));
     filters.push(`r.property_id = $${values.length}`);
   }
-  if (propertyUnitId && config.table === 'tenancy') {
+  if (propertyUnitId && (config.table === 'tenancy' || config.table === 'service_charge_settlement' || config.table === 'service_charge_allocation_key')) {
     values.push(Number(propertyUnitId));
     filters.push(`r.property_unit_id = $${values.length}`);
   }

@@ -109,16 +109,102 @@ export function occupancyFraction(
     return occupiedDays / totalDays;
 }
 
+
+// ── Per-cost-item allocation ratio ("Wert vorschlagen", tiered) ────────────
+//
+// A single ratio for the whole unit (NK-Vorauszahlung ÷ WEG, tried earlier)
+// is wrong whenever different cost items use different Verteilerschlüssel
+// (by ownership share, by consumption, by unit count, ...) — Grundsteuer and
+// Aufzugskosten on the same apartment can legitimately have different
+// factors. The ratio has to be derived per cost item, with a clear priority
+// and no invented fallback when neither source is available:
+//   1. An explicit, landlord-entered allocation key for this cost item
+//      label (service_charge_allocation_key) — the most reliable source,
+//      since it doesn't depend on any past data existing at all.
+//   2. The ratio implied by this SAME unit's own previous settlement for
+//      the same-labeled cost item (its Anteil Wohnung ÷ its Gesamt Objekt,
+//      from the Abrechnung side — the actually-incurred cost, not a budget
+//      guess).
+//   3. Neither exists: no suggestion. Never invent a number the landlord
+//      never actually confirmed.
+// "Allocable" never enters this decision — a non-allocable cost item can
+// still have a real, explainable apartment share; allocable only decides
+// whether that share is later charged to the tenant.
+
+export interface AllocationKeyInput {
+    label: string;
+    numerator: number;
+    denominator: number;
+    allocationType: string | null;
+}
+
+export interface PreviousCostItemInput {
+    label: string;
+    /** The prior settlement's Abrechnung-side Gesamt Objekt amount for this
+     *  label — the ratio's denominator. */
+    actualAmount: number | null;
+    /** The prior settlement's Abrechnung-side Anteil Wohnung for this label
+     *  — the ratio's numerator. */
+    actualShareOverride: number | null;
+}
+
+export interface SuggestedShare {
+    /** The suggested Anteil Wohnung, already rounded to cents. */
+    value: number;
+    /** 0–1, e.g. 0.08 for an 8% share. */
+    rate: number;
+    source: 'explicit' | 'history';
+    /** Human-readable explanation of where `rate` came from, for the
+     *  suggestion tooltip (e.g. "Miteigentumsanteil 80/1000" or "Verteilerschlüssel
+     *  aus letzter Abrechnung: 8,0%"). */
+    explanation: string;
+}
+
+function formatPercent(rate: number): string {
+    return `${(rate * 100).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
+
 /**
- * A one-shot *suggestion* for a cost item's Anteil Wohnung — property cost ×
- * living-area allocation key × occupancy fraction — for the opt-in
- * "Wert vorschlagen" action. This is intentionally never called
- * automatically: Anteil Wohnung is a manual, independent field (see
- * CostItemForm), and this only fills it when the landlord explicitly asks
- * for a starting point, which they can then edit or ignore.
+ * Suggests a cost item's Anteil Wohnung from `amount` (that row's Gesamt
+ * Objekt, whichever column is being suggested) using the tiered ratio
+ * above — matched by label (case-insensitively, since a landlord retyping
+ * "Grundsteuer" vs "grundsteuer" across years shouldn't break the lookup).
+ * Returns null when neither an explicit key nor a usable prior-period ratio
+ * exists — the caller must leave the field empty rather than fabricate a
+ * value, exactly like "no suggestion available" in the spec this implements.
  */
-export function suggestApartmentShare(amount: number, unitShare: number, fraction: number): number {
-    return Math.round(amount * unitShare * fraction * 100) / 100;
+export function suggestShareForCostItem(
+    amount: number,
+    label: string,
+    allocationKeys: readonly AllocationKeyInput[],
+    previousCostItems: readonly PreviousCostItemInput[],
+): SuggestedShare | null {
+    const normalizedLabel = label.trim().toLowerCase();
+    if (!normalizedLabel) return null;
+
+    const explicitKey = allocationKeys.find((k) => k.label.trim().toLowerCase() === normalizedLabel);
+    if (explicitKey && explicitKey.denominator !== 0) {
+        const rate = explicitKey.numerator / explicitKey.denominator;
+        return {
+            value: Math.round(amount * rate * 100) / 100,
+            rate,
+            source: 'explicit',
+            explanation: `${explicitKey.allocationType?.trim() || 'Verteilerschlüssel'}: ${explicitKey.numerator}/${explicitKey.denominator} (${formatPercent(rate)})`,
+        };
+    }
+
+    const previous = previousCostItems.find((p) => p.label.trim().toLowerCase() === normalizedLabel);
+    if (previous && previous.actualAmount != null && previous.actualAmount !== 0 && previous.actualShareOverride != null) {
+        const rate = previous.actualShareOverride / previous.actualAmount;
+        return {
+            value: Math.round(amount * rate * 100) / 100,
+            rate,
+            source: 'history',
+            explanation: `Verteilerschlüssel aus letzter Abrechnung: ${formatPercent(rate)}`,
+        };
+    }
+
+    return null;
 }
 
 /**
