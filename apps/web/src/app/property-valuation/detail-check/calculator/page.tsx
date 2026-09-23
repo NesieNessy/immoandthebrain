@@ -12,6 +12,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
+import { AnalysisPanel } from './AnalysisPanel';
 
 /**
  * Renders a modal straight into `document.body`, bypassing every ancestor —
@@ -2269,7 +2270,17 @@ function CalculatorContent() {
               )}
             </section>
 
-            <section className="order-3 space-y-4">
+            {presented && effectiveParams && localResult && (
+              <AnalysisPanel
+                result={localResult}
+                params={effectiveParams}
+                cases={data.renovationCases}
+                viewPeriodYears={viewPeriodYears}
+                onViewPeriodYearsChange={setViewPeriodYears}
+              />
+            )}
+
+            <section className="order-4 space-y-4">
               <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-lg font-medium text-foreground">Detailtabellen</h2>
                 <span className="text-sm text-muted-foreground">Standardmäßig eingeklappt</span>
