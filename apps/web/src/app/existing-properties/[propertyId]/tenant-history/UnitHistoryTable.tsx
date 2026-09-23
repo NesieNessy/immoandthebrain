@@ -6,6 +6,7 @@ import { Button, ConfirmDeleteModal, Header, Icons, Modal, PAGE_CONTAINER_CLASS,
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { getAdjustmentHistoryByTenancy } from '@/lib/supabase/tenancy_adjustment_history.supabase';
 import { deleteTenancy, getCurrentTenancyByUnit, getTenanciesByUnit, updateTenancy } from '@/lib/supabase/tenancy.supabase';
+import { findOverlappingTenancy } from '@/lib/tenancy/tenancyOverlap';
 import { deleteTenancyDocument, getTenancyDocumentsByTenancy, getTenancyDocumentUrl } from '@/lib/supabase/tenancy_document.supabase';
 import { getTenancyPersonsByTenancy } from '@/lib/supabase/tenancy_person.supabase';
 import { formatDeDate } from '@/lib/utils';
@@ -149,13 +150,38 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
     // again — undoes an accidental tenant change/tenant move-out. If another
     // tenancy is currently active on this unit, that one is ended (today)
     // first so the unit doesn't end up with two open-ended tenancies.
+    //
+    // That truncation alone isn't enough in general, though: reactivating
+    // gives this tenancy no end date at all, and a tenancy with a past start
+    // date and no end date overlaps *any* other tenancy whose own start date
+    // falls after it — including ones that aren't "current" (e.g. an older,
+    // already-ended tenancy that started after this one). Simulating the
+    // truncation and checking every other tenancy for a genuine overlap
+    // before writing anything catches that case instead of silently leaving
+    // two tenants on record for the same period.
     const handleConfirmReactivate = async () => {
         if (!reactivateRow) return;
         setIsReactivating(true);
         try {
+            const allTenancies = await getTenanciesByUnit(unit.propertyUnitId);
             const current = await getCurrentTenancyByUnit(unit.propertyUnitId);
-            if (current && current.tenancyId !== reactivateRow.tenancy.tenancyId) {
-                const endedCurrent = await updateTenancy(current.tenancyId, { tenancyEndDate: format(new Date(), 'yyyy-MM-dd') });
+            const willEndCurrentToday = current != null && current.tenancyId !== reactivateRow.tenancy.tenancyId;
+            const todayStr = format(new Date(), 'yyyy-MM-dd');
+
+            const candidateTenancies = allTenancies
+                .filter((t): t is Tenancy & { tenancyStartDate: string } => t.tenancyStartDate != null)
+                .map((t) => (willEndCurrentToday && t.tenancyId === current!.tenancyId ? { ...t, tenancyEndDate: todayStr } : t));
+            const reactivateStart = reactivateRow.tenancy.tenancyStartDate;
+            if (!reactivateStart) throw new Error('Dieses Mietverhältnis hat kein Einzugsdatum und kann nicht reaktiviert werden.');
+            const overlap = findOverlappingTenancy(candidateTenancies, reactivateStart, null, reactivateRow.tenancy.tenancyId);
+            if (overlap) {
+                const overlapLabel = `${overlap.tenantFirstName ?? ''} ${overlap.tenantLastName ?? ''}`.trim() || 'ein anderes Mietverhältnis';
+                const overlapEndLabel = overlap.tenancyEndDate ? formatDeDate(overlap.tenancyEndDate) : 'laufend';
+                throw new Error(`Reaktivieren würde sich mit „${overlapLabel}" (${formatDeDate(overlap.tenancyStartDate)} – ${overlapEndLabel}) überschneiden. Bitte zuerst dessen Zeitraum anpassen.`);
+            }
+
+            if (willEndCurrentToday) {
+                const endedCurrent = await updateTenancy(current!.tenancyId, { tenancyEndDate: todayStr });
                 if (!endedCurrent) throw new Error('updateTenancy failed');
             }
             const reactivated = await updateTenancy(reactivateRow.tenancy.tenancyId, { tenancyEndDate: null, isRented: true });
@@ -163,8 +189,9 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
             setReactivateRow(null);
             await load();
             showToast('Mietverhältnis reaktiviert.', 'success');
-        } catch {
-            showToast('Mietverhältnis konnte nicht reaktiviert werden.', 'error');
+        } catch (err) {
+            const message = err instanceof Error && err.message && err.message !== 'updateTenancy failed' ? err.message : 'Mietverhältnis konnte nicht reaktiviert werden.';
+            showToast(message, 'error');
         } finally {
             setIsReactivating(false);
         }

@@ -4,7 +4,8 @@ import { formatUnitLabel } from '@/components/features/PropertyDisplay';
 import { Button, Icons, useToast, type SortDirection, type TableColumn } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
-import { createTenancy, getCurrentTenancyByUnit, getTenancyById, updateTenancy } from '@/lib/supabase/tenancy.supabase';
+import { createTenancy, getCurrentTenancyByUnit, getTenanciesByUnit, getTenancyById, updateTenancy } from '@/lib/supabase/tenancy.supabase';
+import { findOverlappingTenancy } from '@/lib/tenancy/tenancyOverlap';
 import { getPersonalData } from '@/lib/supabase/personal_data.supabase';
 import { createMaintenanceCosts, getMaintenanceCostsById, updateMaintenanceCosts } from '@/lib/supabase/maintenance_costs.supabase';
 import { addAdjustmentHistoryEntry, getAdjustmentHistoryByTenancy } from '@/lib/supabase/tenancy_adjustment_history.supabase';
@@ -638,7 +639,29 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                 renovationAdjustmentPlanned: (rentalForm.renovationAdjustmentStartDate || rentalForm.renovationAdjustmentEndDate || rentalForm.renovationAdjustmentAmount !== '') ? true : undefined,
             };
 
+            // A unit can only have one tenant at a time — any two tenancies on
+            // it whose date ranges genuinely overlap are always a data error
+            // (see the Mieterhistorie reactivation flow, which has the same
+            // check). Validated up front, before any write, so a rejected
+            // save never leaves the current tenancy half-ended.
+            const assertNoOverlap = async (excludeTenancyId: number | null) => {
+                const existingTenancies = await getTenanciesByUnit(unit.propertyUnitId);
+                // tenancyStartDate is only nullable in the type to cover rows
+                // that can't legitimately reach here (a tenancy always has one
+                // in practice) — filtered out rather than widening the check's
+                // own date type to also handle "no start date at all".
+                const candidateTenancies = existingTenancies.filter(
+                    (t): t is Tenancy & { tenancyStartDate: string } => t.tenancyStartDate != null,
+                );
+                const overlap = findOverlappingTenancy(candidateTenancies, startDateValue, endDateValue, excludeTenancyId);
+                if (!overlap) return;
+                const overlapLabel = `${overlap.tenantFirstName ?? ''} ${overlap.tenantLastName ?? ''}`.trim() || 'ein anderes Mietverhältnis';
+                const overlapEndLabel = overlap.tenancyEndDate ? formatDeDate(overlap.tenancyEndDate) : 'laufend';
+                throw new Error(`Der Mietzeitraum überschneidet sich mit „${overlapLabel}" (${formatDeDate(overlap.tenancyStartDate)} – ${overlapEndLabel}). Bitte zuerst dessen Zeitraum in der Mieterhistorie anpassen.`);
+            };
+
             if (startFreshTenancy) {
+                if (hasAnyPersonData) await assertNoOverlap(tenancy?.tenancyId ?? null);
                 if (tenancy) {
                     await updateTenancy(tenancy.tenancyId, {
                         tenancyEndDate: format(new Date(), 'yyyy-MM-dd'),
@@ -671,6 +694,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                     activeTenancyId = null;
                 }
             } else if (!tenancy && hasAnyPersonData) {
+                await assertNoOverlap(null);
                 const created = await createTenancy({
                     propertyId: property.propertyId,
                     propertyUnitId: unit.propertyUnitId,
@@ -694,6 +718,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                 if (!created) throw new Error('createTenancy failed');
                 activeTenancyId = created.tenancyId;
             } else if (tenancy) {
+                await assertNoOverlap(tenancy.tenancyId);
                 const updated = await updateTenancy(tenancy.tenancyId, {
                     deposit: depositValue,
                     tenancyStartDate: startDateValue,
