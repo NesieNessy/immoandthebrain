@@ -16,6 +16,10 @@ describe('analysis cards', () => {
       .toEqual(['break-even', 'wirtschaftlichkeit:a']);
   });
 
+  it('produces no cards for optimierung use cases — those come from the optimization panel', () => {
+    expect(build(['optimaler-zeitpunkt', 'mieterhoehungsstrategie', 'cashflow-optimierung'])).toEqual([]);
+  });
+
   it('break-even card: in-range break-even yields a success verdict with a literal marker', () => {
     const [card] = build(['break-even'], 10);
     expect(card.series?.values).toHaveLength(viewEndIndex(10) + 1);

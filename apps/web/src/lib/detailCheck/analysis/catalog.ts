@@ -1,3 +1,5 @@
+import type { ObjectiveId } from './objectives';
+
 /** Die zwölf Analyse-Use-Cases aus SCRUM-96; `availableFromSlice` steuert, ab welchem Schnitt ein Chip aktiv ist. */
 export type UseCaseGroup = 'auswertung' | 'simulation' | 'optimierung';
 export type UseCaseId =
@@ -7,7 +9,8 @@ export type UseCaseId =
   | 'modernisierungsstrategie' | 'kapitalrendite' | 'empfehlung';
 export type UseCase = { id: UseCaseId; label: string; question: string; group: UseCaseGroup; availableFromSlice: 1 | 2 | 3 | 4 };
 
-export const CURRENT_SLICE = 1;
+/** Schnitte, deren Use Cases bereits implementiert sind. */
+export const IMPLEMENTED_SLICES: ReadonlySet<number> = new Set([1, 3]);
 
 export const USE_CASE_GROUP_LABELS: Record<UseCaseGroup, string> = {
   auswertung: 'Auswertungen',
@@ -31,5 +34,12 @@ export const USE_CASES: UseCase[] = [
 ];
 
 export function isAvailable(useCase: UseCase): boolean {
-  return useCase.availableFromSlice <= CURRENT_SLICE;
+  return IMPLEMENTED_SLICES.has(useCase.availableFromSlice);
 }
+
+/** Zielgröße je Optimierungs-Use-Case für `runOptimization` (SCRUM-96, Schnitt 3). */
+export const OPTIMIZATION_OBJECTIVE: Partial<Record<UseCaseId, ObjectiveId>> = {
+  'optimaler-zeitpunkt': 'EARLIEST_BREAK_EVEN',
+  'mieterhoehungsstrategie': 'MAX_RENT_IN_VIEW',
+  'cashflow-optimierung': 'FASTEST_POSITIVE_CASHFLOW',
+};

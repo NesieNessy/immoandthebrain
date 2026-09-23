@@ -58,7 +58,7 @@ export function buildAnalysisCards(input: {
   const cards: AnalysisCard[] = [];
 
   for (const useCase of USE_CASES) {
-    if (!selected.includes(useCase.id) || !isAvailable(useCase)) continue;
+    if (!selected.includes(useCase.id) || !isAvailable(useCase) || useCase.group === 'optimierung') continue;
 
     if (useCase.id === 'break-even') {
       const facts = breakEvenFacts(result);
