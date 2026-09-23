@@ -18,7 +18,9 @@ function formatMonth(month: string | null): string {
 }
 
 function formatPoint(point: MonthPoint): string {
-  return point.month ? `${formatMonth(point.month)} (${decimal.format(point.years ?? 0)} Jahre)` : 'nicht erreicht';
+  if (!point.month) return 'nicht erreicht';
+  const years = decimal.format(point.years ?? 0);
+  return `${formatMonth(point.month)} (${years} ${years === '1' ? 'Jahr' : 'Jahre'})`;
 }
 
 function withinView(point: MonthPoint, viewPeriodYears: number): boolean {

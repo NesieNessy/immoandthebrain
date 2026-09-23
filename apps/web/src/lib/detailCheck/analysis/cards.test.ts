@@ -16,12 +16,19 @@ describe('analysis cards', () => {
       .toEqual(['break-even', 'wirtschaftlichkeit:a']);
   });
 
-  it('break-even card: series is the cumulative cashflow up to B, marker at break-even', () => {
+  it('break-even card: in-range break-even yields a success verdict with a literal marker', () => {
     const [card] = build(['break-even'], 10);
     expect(card.series?.values).toHaveLength(viewEndIndex(10) + 1);
-    const index = result.timeline.findIndex((row) => row.yyyymm === result.breakEven);
-    expect(card.series?.markerIndex).toBe(index >= 0 && index <= viewEndIndex(10) ? index : null);
-    expect(card.verdict.tone).toBe(index >= 0 && index <= viewEndIndex(10) ? 'success' : 'warning');
+    expect(card.series?.markerIndex).toBe(0);
+    expect(card.verdict).toEqual({ label: 'Im Betrachtungszeitraum', tone: 'success' });
+  });
+
+  it('break-even card: break-even after B yields a warning verdict with no marker', () => {
+    const warnParams = calculatorParams({ equityIncluded: true, equityAmount: 5000000, monthlyDebtService: 900 });
+    const warnResult = runRentCalculator(warnParams, []);
+    const [card] = buildAnalysisCards({ selected: ['break-even'], result: warnResult, params: warnParams, cases: [], viewPeriodYears: 5 });
+    expect(card.series?.markerIndex).toBeNull();
+    expect(card.verdict).toEqual({ label: 'Nicht im Betrachtungszeitraum', tone: 'warning' });
   });
 
   it('amortisation card has an equity row and a total row', () => {
@@ -29,10 +36,39 @@ describe('analysis cards', () => {
     expect(card.rows.map((row) => row.label)).toEqual(expect.arrayContaining(['Eigenkapital zurück', 'Gesamtinvestition zurück']));
   });
 
-  it('one wirtschaftlichkeit card per planned measure with verdict lohnt sich / lohnt sich nicht', () => {
+  it('wirtschaftlichkeit card: not-worth-it measure gets literal danger verdict and rows', () => {
     const cards = build(['wirtschaftlichkeit']);
     expect(cards).toHaveLength(result.modernizationPlan.length);
-    for (const card of cards) expect(['Lohnt sich', 'Lohnt sich nicht']).toContain(card.verdict.label);
+    const [card] = cards;
+    expect(card.verdict).toEqual({ label: 'Lohnt sich nicht', tone: 'danger' });
+    expect(card.rows).toEqual([
+      { label: 'Kosten', value: '10.000 €' },
+      { label: '§559-Mehrmiete', value: '67 € / Monat' },
+      { label: 'Deckel ausgeschöpft', value: '22,2 %' },
+      { label: 'Vorteil nach 15 Jahren', value: '-9.156 €' },
+      { label: 'Amortisiert', value: 'nicht erreicht' },
+    ]);
+  });
+
+  it('wirtschaftlichkeit card: worth-it measure gets literal success verdict and rows', () => {
+    const worthItParams = calculatorParams({ monthlyRentStart: 500, livingAreaM2: 100, rentIncreaseUtilizationPercent: 0 });
+    const worthItCases = [renovationCase('a', 3000)];
+    const worthItResult = runRentCalculator(worthItParams, worthItCases);
+    const [card] = buildAnalysisCards({
+      selected: ['wirtschaftlichkeit'],
+      result: worthItResult,
+      params: worthItParams,
+      cases: worthItCases,
+      viewPeriodYears: 30,
+    });
+    expect(card.verdict).toEqual({ label: 'Lohnt sich', tone: 'success' });
+    expect(card.rows).toEqual([
+      { label: 'Kosten', value: '3.000 €' },
+      { label: '§559-Mehrmiete', value: '20 € / Monat' },
+      { label: 'Deckel ausgeschöpft', value: '10 %' },
+      { label: 'Vorteil nach 30 Jahren', value: '1.106 €' },
+      { label: 'Amortisiert', value: '01/2048' },
+    ]);
   });
 
   it('wirtschaftlichkeit without planned measures yields one muted hint card', () => {
