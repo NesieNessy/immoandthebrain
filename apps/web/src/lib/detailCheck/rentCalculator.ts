@@ -83,6 +83,11 @@ export type CalculatorParams = {
   modernizationPlacements?: Record<string, string>;
   modernizationCostOverrides?: Record<string, number>;
   renovationTimingOverrides?: Record<string, RenovationTiming>;
+  /**
+   * Measures left out of this plan without deselecting them in the Sanierung
+   * step — how a selection proposal (SCRUM-96) is shown before it is applied.
+   */
+  excludedModernizationIds?: string[];
   rentIncreasePlan?: RentIncreasePlanRow[];
   rentIncreaseOverrides?: Record<string, { effectiveYyyymm?: string; monthlyDelta?: number }>;
   mode: CalculatorMode;
@@ -197,6 +202,11 @@ function capRoomAt(params: CalculatorParams, planned: ModernizationPlanRow[], ef
   return roundCurrency(Math.max(0, capAbs - used));
 }
 
+/** Whether a renovation case takes part in the plan: selected, priced, and not excluded by a proposal. */
+function isPlannedCase(params: CalculatorParams, item: RenovationCase): boolean {
+  return item.selected && Boolean(item.ai) && !(params.excludedModernizationIds ?? []).includes(item.id);
+}
+
 function buildPlanFromPlacements(
   params: CalculatorParams,
   renovationCases: RenovationCase[],
@@ -206,7 +216,7 @@ function buildPlanFromPlacements(
 ): ModernizationPlanRow[] {
   const relevant = renovationCases
     .map((item, index) => ({ item, index }))
-    .filter(({ item }) => item.selected && item.ai)
+    .filter(({ item }) => isPlannedCase(params, item))
     .sort((a, b) => (placements[a.index] ?? 0) - (placements[b.index] ?? 0) || a.index - b.index);
   const plan: ModernizationPlanRow[] = [];
 
@@ -710,7 +720,7 @@ function optimizeKnownModernizations(
   conservativeRentIndexPerM2: number,
   marketRentIndexPerM2: number,
 ) {
-  const relevant = renovationCases.filter((item) => item.selected && item.ai);
+  const relevant = renovationCases.filter((item) => isPlannedCase(params, item));
   if (relevant.length === 0) return [];
 
   type Candidate = { placements: number[]; plan: ModernizationPlanRow[]; breakEvenOffset: number; endingCashflow: number };
