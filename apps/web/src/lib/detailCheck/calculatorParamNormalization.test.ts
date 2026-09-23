@@ -201,7 +201,7 @@ describe('buildEffectiveCalculatorParams — parity with a real server response'
     // `undefined` both make every per-id lookup inside it resolve to
     // `undefined` — which the next test proves by comparing actual computed
     // output rather than raw param shape.
-    expect(rebuilt).toEqual({ ...fixtureParams, rentIncreaseOverrides: {} });
+    expect(rebuilt).toEqual({ ...fixtureParams, rentIncreaseOverrides: {}, excludedModernizationIds: [] });
   });
 
   it('produces a result identical to what the server computed for its own saved state', () => {
@@ -353,6 +353,19 @@ describe('buildEffectiveCalculatorParams — parity with a real server response'
 
     expect(result.rentIndexSource).toBe('AUTOMATIC');
     expect(result.rentIndexPerM2).not.toBeCloseTo(9.5, 2);
+  });
+});
+
+describe('excludedModernizationIds round-trip', () => {
+  it('survives params → overrides → effective params', () => {
+    const params = { ...(fixture.params as unknown as CalculatorParams), excludedModernizationIds: ['x'] };
+    const overrides = overridesFromParams(params);
+    expect(overrides.excludedModernizationIds).toEqual(['x']);
+    const rebuilt = buildEffectiveCalculatorParams(params, fieldsFromParams(params), overrides, {
+      resetRentIncreasePlan: false,
+      storedRentIncreasePlan: params.rentIncreasePlan,
+    });
+    expect(rebuilt.excludedModernizationIds).toEqual(['x']);
   });
 });
 

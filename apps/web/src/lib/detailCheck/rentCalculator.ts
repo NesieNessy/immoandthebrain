@@ -1,4 +1,5 @@
 import { roundCurrency } from './acquisitionCosts';
+import { compareScores, EARLIEST_BREAK_EVEN, type OptimizationObjective, type ScoredPlan } from './analysis/objectives';
 import { costForCase, type RenovationCase, type RenovationTiming } from './renovation';
 
 export type CalculatorMode = 'KNOWN' | 'POTENTIAL';
@@ -20,6 +21,20 @@ export type RentIncreasePlanRow = {
 export const CALCULATION_HORIZON_YEARS = 50;
 export const CALCULATION_HORIZON_MONTHS = CALCULATION_HORIZON_YEARS * 12;
 
+/** The rent-index growth that used to be hard-wired; kept as the default so results do not move. */
+export const DEFAULT_RENT_INDEX_GROWTH_PERCENT = 2;
+
+/**
+ * Growth factor of the rent index `offset` months into the projection. Stepped
+ * yearly (Math.floor), exactly like the former hard-wired Math.pow(1.02, …):
+ * with the default 2 %, `1 + 2 / 100` is bit-identical to 1.02.
+ */
+function rentIndexGrowthFactor(params: CalculatorParams, offset: number): number {
+  const growth = params.rentIndexGrowthPercent;
+  const percent = growth != null && Number.isFinite(growth) ? growth : DEFAULT_RENT_INDEX_GROWTH_PERCENT;
+  return Math.pow(1 + percent / 100, Math.floor(offset / 12));
+}
+
 export type CalculatorParams = {
   startYyyymm: string;
   rentStartYyyymm: string;
@@ -31,10 +46,24 @@ export type CalculatorParams = {
   last558Date: string | null;
   last559Date: string | null;
   last559MonthlyDelta: number;
+  /**
+   * Monthly rent before the last §558 increase (the one at last558Date).
+   * Needed because §558 Abs. 3 measures the cap against the rent at the start
+   * of the rolling three-year window — an increase shortly before purchase
+   * uses up part of that window. Omitted = unknown, window counts only
+   * increases inside the projection (the former behaviour).
+   */
+  last558RentBefore?: number | null;
   rentIncreaseIntervalMonths: number;
   rentIncreaseUtilizationPercent: number;
   rentIndexPerM2: number | null;
   rentIndexSource: RentIndexSource;
+  /**
+   * Annual growth of the ortsübliche Vergleichsmiete in percent, stepped once
+   * per year. Omitted = DEFAULT_RENT_INDEX_GROWTH_PERCENT, the value that used
+   * to be hard-wired.
+   */
+  rentIndexGrowthPercent?: number;
   monthlyDebtService: number;
   loanAmount: number;
   interestRate: number;
@@ -55,6 +84,11 @@ export type CalculatorParams = {
   modernizationPlacements?: Record<string, string>;
   modernizationCostOverrides?: Record<string, number>;
   renovationTimingOverrides?: Record<string, RenovationTiming>;
+  /**
+   * Measures left out of this plan without deselecting them in the Sanierung
+   * step — how a selection proposal (SCRUM-96) is shown before it is applied.
+   */
+  excludedModernizationIds?: string[];
   rentIncreasePlan?: RentIncreasePlanRow[];
   rentIncreaseOverrides?: Record<string, { effectiveYyyymm?: string; monthlyDelta?: number }>;
   mode: CalculatorMode;
@@ -169,6 +203,11 @@ function capRoomAt(params: CalculatorParams, planned: ModernizationPlanRow[], ef
   return roundCurrency(Math.max(0, capAbs - used));
 }
 
+/** Whether a renovation case takes part in the plan: selected, priced, and not excluded by a proposal. */
+function isPlannedCase(params: CalculatorParams, item: RenovationCase): boolean {
+  return item.selected && Boolean(item.ai) && !(params.excludedModernizationIds ?? []).includes(item.id);
+}
+
 function buildPlanFromPlacements(
   params: CalculatorParams,
   renovationCases: RenovationCase[],
@@ -178,7 +217,7 @@ function buildPlanFromPlacements(
 ): ModernizationPlanRow[] {
   const relevant = renovationCases
     .map((item, index) => ({ item, index }))
-    .filter(({ item }) => item.selected && item.ai)
+    .filter(({ item }) => isPlannedCase(params, item))
     .sort((a, b) => (placements[a.index] ?? 0) - (placements[b.index] ?? 0) || a.index - b.index);
   const plan: ModernizationPlanRow[] = [];
 
@@ -271,6 +310,37 @@ function placePotentialModernizations(params: CalculatorParams, capAbs: number) 
   return plan;
 }
 
+/**
+ * The §558 increase that took effect before the projection starts, when the
+ * rent before it is known. A §559 increase after it is subtracted, because
+ * monthlyRentStart contains it but §558 Abs. 3 excludes §559 from the cap.
+ */
+export function preProjection558(params: CalculatorParams): { effectiveYyyymm: string; monthlyDelta: number } | null {
+  if (!params.last558Date || params.last558RentBefore == null) return null;
+  const effectiveYyyymm = normalizeYyyymm(params.last558Date, params.startYyyymm);
+  if (compareMonth(effectiveYyyymm, params.startYyyymm) > 0) return null;
+  const later559 = params.last559Date
+    && compareMonth(params.last559Date, effectiveYyyymm) > 0
+    && compareMonth(params.last559Date, params.startYyyymm) <= 0
+    ? Math.max(0, params.last559MonthlyDelta)
+    : 0;
+  const monthlyDelta = roundCurrency(Math.max(0, params.monthlyRentStart - params.last558RentBefore - later559));
+  return monthlyDelta > 0 ? { effectiveYyyymm, monthlyDelta } : null;
+}
+
+/** The pre-projection increase's share of the window [windowStart, month], or 0. */
+function preProjectionUsedInWindow(
+  prior: { effectiveYyyymm: string; monthlyDelta: number } | null,
+  windowStart: string,
+  month: string,
+): number {
+  return prior
+    && compareMonth(prior.effectiveYyyymm, windowStart) >= 0
+    && compareMonth(prior.effectiveYyyymm, month) <= 0
+    ? prior.monthlyDelta
+    : 0;
+}
+
 function plan558(
   params: CalculatorParams,
   capPercent: number,
@@ -289,6 +359,7 @@ function plan558(
   let active559 = 0;
   const intervalMonths = Math.round(clamp(params.rentIncreaseIntervalMonths, 15, 60));
   const utilization = clamp(params.rentIncreaseUtilizationPercent, 0, 100) / 100;
+  const prior = preProjection558(params);
 
   for (let offset = 0; offset < CALCULATION_HORIZON_MONTHS; offset += 1) {
     const month = addMonths(params.startYyyymm, offset);
@@ -305,14 +376,14 @@ function plan558(
     // modernization keeps the month; the rent-index increase waits.
     if (sortedModernizations.some((item) => item.effectiveYyyymm === month)) continue;
 
-    const target = roundCurrency(targetPerM2 * Math.pow(1.02, Math.floor(offset / 12)) * params.livingAreaM2);
+    const target = roundCurrency(targetPerM2 * rentIndexGrowthFactor(params, offset) * params.livingAreaM2);
     const windowStart = addMonths(month, -35);
     const usedInWindow = steps.reduce((sum, step) => {
       if (compareMonth(step.effectiveYyyymm, windowStart) >= 0 && compareMonth(step.effectiveYyyymm, month) <= 0) {
         return sum + step.monthlyDelta;
       }
       return sum;
-    }, 0);
+    }, 0) + preProjectionUsedInWindow(prior, windowStart, month);
     // §558 Abs. 3: the 20 % / 15 % ceiling is measured against the rent at the
     // start of the rolling three-year window, not against the rent at the very
     // beginning of the projection. `current558Base` is the rent before this
@@ -381,6 +452,7 @@ function applyRentIncreaseOverrides(
   let previous = params.last558Date ? normalizeYyyymm(params.last558Date) : params.rentStartYyyymm;
   let current558Base = params.monthlyRentStart;
   const accepted: RentIncrease558Row[] = [];
+  const prior = preProjection558(params);
 
   /** §558 and §559 must not take effect in the same month. */
   const collidesWith559 = (effectiveYyyymm: string) =>
@@ -388,14 +460,15 @@ function applyRentIncreaseOverrides(
 
   const legalMaximumAt = (effectiveYyyymm: string) => {
     const offset = Math.max(0, monthDiff(params.startYyyymm, effectiveYyyymm));
-    const target = roundCurrency(targetPerM2 * Math.pow(1.02, Math.floor(offset / 12)) * params.livingAreaM2);
+    const target = roundCurrency(targetPerM2 * rentIndexGrowthFactor(params, offset) * params.livingAreaM2);
     const active559 = modernizations
       .filter((item) => compareMonth(item.effectiveYyyymm, effectiveYyyymm) <= 0)
       .reduce((sum, item) => sum + item.monthlyDelta, 0);
     const windowStart = addMonths(effectiveYyyymm, -35);
     const usedInWindow = accepted
       .filter((item) => compareMonth(item.effectiveYyyymm, windowStart) >= 0)
-      .reduce((sum, item) => sum + item.monthlyDelta, 0);
+      .reduce((sum, item) => sum + item.monthlyDelta, 0)
+      + preProjectionUsedInWindow(prior, windowStart, effectiveYyyymm);
     // Same rolling-window base as plan558 — see the comment there.
     const rentAtWindowStart = Math.max(0, current558Base - usedInWindow);
     const capRoom = Math.max(0, rentAtWindowStart * capPercent - usedInWindow);
@@ -489,7 +562,7 @@ function calculateTaxes(
   };
 }
 
-function buildTimeline(
+export function buildTimeline(
   params: CalculatorParams,
   increases558: RentIncrease558Row[],
   increases558WithRentIndex: RentIncrease558Row[],
@@ -509,6 +582,10 @@ function buildTimeline(
   let breakEvenWithRentIndex: string | null = null;
   let rentTotal = roundCurrency(params.monthlyRentStart);
   let rentTotalWithRentIndex = roundCurrency(params.monthlyRentStart);
+  // Last month with a negative after-tax cashflow, tracked in this same pass so
+  // the optimizer (includeTimeline = false) gets it without materializing
+  // 600 rows per candidate.
+  let lastNegativeCashflowOffset = -1;
   const timeline: RentTimelineRow[] = [];
   const delta558ByMonth = totalsByMonth(increases558, (item) => item.effectiveYyyymm, (item) => item.monthlyDelta);
   const indexedDelta558ByMonth = totalsByMonth(increases558WithRentIndex, (item) => item.effectiveYyyymm, (item) => item.monthlyDelta);
@@ -553,6 +630,7 @@ function buildTimeline(
     const expenses = roundCurrency(debtService + nonAllocableCosts + renovationPayment);
     const monthlyDelta = roundCurrency(income - expenses);
     const afterTaxCashflow = roundCurrency(monthlyDelta - taxes);
+    if (afterTaxCashflow < 0) lastNegativeCashflowOffset = offset;
     cumulativeIncome = roundCurrency(cumulativeIncome + income);
     cumulativeExpenses = roundCurrency(cumulativeExpenses + expenses + taxes);
     cumulativeTaxes = roundCurrency(cumulativeTaxes + taxes);
@@ -605,6 +683,8 @@ function buildTimeline(
     breakEvenWithRentIndex,
     endingCashflow: cumulativeCashflow,
     endingCashflowWithRentIndex: runningWithRentIndex,
+    /** First month from which the monthly after-tax cashflow never turns negative again; CALCULATION_HORIZON_MONTHS = never. */
+    sustainablyPositiveOffset: lastNegativeCashflowOffset + 1,
   };
 }
 
@@ -641,12 +721,20 @@ function optimizeKnownModernizations(
   capPercent: number,
   conservativeRentIndexPerM2: number,
   marketRentIndexPerM2: number,
+  objective: OptimizationObjective = EARLIEST_BREAK_EVEN,
 ) {
-  const relevant = renovationCases.filter((item) => item.selected && item.ai);
+  const relevant = renovationCases.filter((item) => isPlannedCase(params, item));
   if (relevant.length === 0) return [];
 
-  type Candidate = { placements: number[]; plan: ModernizationPlanRow[]; breakEvenOffset: number; endingCashflow: number };
-  let candidates: Candidate[] = [{ placements: [], plan: [], breakEvenOffset: 9999, endingCashflow: -Infinity }];
+  type Candidate = { placements: number[]; plan: ModernizationPlanRow[]; score: number[] };
+  const scoreOf = (scored: ScoredPlan) => objective.score(scored);
+  // The seed stands for "nothing placed yet" and must lose against any real
+  // candidate: 9999 months to break-even and an infinitely poor cashflow.
+  let candidates: Candidate[] = [{
+    placements: [],
+    plan: [],
+    score: scoreOf({ breakEvenOffset: 9999, endingCashflow: -Infinity, sustainablyPositiveOffset: 9999 }),
+  }];
   const possibleOffsets = Array.from(
     { length: Math.floor((CALCULATION_HORIZON_MONTHS - 4) / 12) + 1 },
     (_, index) => 3 + index * 12,
@@ -658,11 +746,11 @@ function optimizeKnownModernizations(
       for (const offset of possibleOffsets) {
         const placements = [...candidate.placements, offset];
         const plan = buildPlanFromPlacements(params, relevant.slice(0, index + 1), placements, capAbs);
-        const score = placementScore(params, plan, capPercent, conservativeRentIndexPerM2, marketRentIndexPerM2);
-        next.push({ placements, plan, breakEvenOffset: score.breakEvenOffset, endingCashflow: score.endingCashflow });
+        const scored = placementScore(params, plan, capPercent, conservativeRentIndexPerM2, marketRentIndexPerM2);
+        next.push({ placements, plan, score: scoreOf(scored) });
       }
     }
-    next.sort((a, b) => a.breakEvenOffset - b.breakEvenOffset || b.endingCashflow - a.endingCashflow);
+    next.sort((a, b) => compareScores(a.score, b.score));
     candidates = next.slice(0, 8);
   }
 
@@ -676,13 +764,9 @@ function optimizeKnownModernizations(
     for (const offset of nearbyOffsets) {
       const placements = best.placements.map((value, placementIndex) => placementIndex === index ? offset : value);
       const plan = buildPlanFromPlacements(params, relevant, placements, capAbs);
-      const score = placementScore(params, plan, capPercent, conservativeRentIndexPerM2, marketRentIndexPerM2);
-      if (
-        score.breakEvenOffset < best.breakEvenOffset
-        || (score.breakEvenOffset === best.breakEvenOffset && score.endingCashflow > best.endingCashflow)
-      ) {
-        best = { placements, plan, breakEvenOffset: score.breakEvenOffset, endingCashflow: score.endingCashflow };
-      }
+      const score = scoreOf(placementScore(params, plan, capPercent, conservativeRentIndexPerM2, marketRentIndexPerM2));
+      // Strictly better only, like before: ties keep the incumbent.
+      if (compareScores(score, best.score) < 0) best = { placements, plan, score };
     }
   }
 
@@ -762,6 +846,10 @@ export function runRentCalculator(params: CalculatorParams, renovationCases: Ren
     increases558WithRentIndex,
     breakEven: scenario.breakEven,
     breakEvenWithRentIndex: scenario.breakEvenWithRentIndex,
+    // Top level, not in `metrics`: the golden snapshot compares `metrics` whole.
+    sustainablyPositiveFrom: scenario.sustainablyPositiveOffset < CALCULATION_HORIZON_MONTHS
+      ? addMonths(params.startYyyymm, scenario.sustainablyPositiveOffset)
+      : null,
     placementMode: params.placementMode,
     metrics,
   };
