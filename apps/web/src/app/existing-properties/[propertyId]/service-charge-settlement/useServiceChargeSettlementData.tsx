@@ -192,13 +192,11 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             const defaultItems = () => DEFAULT_COST_ITEMS.map((item) => ({ id: null, label: item.label, allocable: item.allocable, actualAmount: '', budgetAmount: '', actualShareOverride: '', budgetShareOverride: '' }));
 
             let resolvedStart: Date;
-            let resolvedEnd: Date;
 
             if (currentSettlement) {
                 const start = new Date(currentSettlement.periodStart);
                 const end = new Date(currentSettlement.periodEnd);
                 resolvedStart = start;
-                resolvedEnd = end;
                 setPeriodStart(start);
                 setPeriodEnd(end);
                 setPeriodModeState(isFullCalendarYear(start, end) ? 'year' : 'custom');
@@ -223,7 +221,6 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 // that period rather than falling back to the "brand new
                 // settlement" defaulting logic below.
                 resolvedStart = explicitPeriod.start;
-                resolvedEnd = explicitPeriod.end;
                 setPeriodStart(explicitPeriod.start);
                 setPeriodEnd(explicitPeriod.end);
                 setPeriodModeState(isFullCalendarYear(explicitPeriod.start, explicitPeriod.end) ? 'year' : 'custom');
@@ -237,7 +234,6 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 const moveOutDate = currentTenancy?.tenancyEndDate ? new Date(currentTenancy.tenancyEndDate) : null;
                 const { start, end } = defaultSettlementPeriod(moveOutDate, new Date().getFullYear());
                 resolvedStart = start;
-                resolvedEnd = end;
                 setPeriodStart(start);
                 setPeriodEnd(end);
                 setPeriodModeState(isFullCalendarYear(start, end) ? 'year' : 'custom');
