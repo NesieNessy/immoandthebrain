@@ -6,7 +6,7 @@ import type { RenovationCase } from '@/lib/detailCheck/renovation';
 import { USE_CASES, USE_CASE_GROUP_LABELS, isAvailable, type UseCaseGroup, type UseCaseId } from '@/lib/detailCheck/analysis/catalog';
 import { buildAnalysisCards, type AnalysisCard, type CardSeries } from '@/lib/detailCheck/analysis/cards';
 import { measureDeltas, type RentCalculatorResult } from '@/lib/detailCheck/analysis/metrics';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const STORAGE_KEY = 'detail-check:analysis-use-cases';
 const DEFAULT_SELECTION: UseCaseId[] = ['break-even'];
@@ -119,10 +119,25 @@ export function AnalysisPanel({
   };
 
   const wirtschaftlichkeitSelected = selected.includes('wirtschaftlichkeit');
-  const measures = useMemo(
-    () => (wirtschaftlichkeitSelected ? measureDeltas(result, params, cases) : undefined),
-    [result, params, cases, wirtschaftlichkeitSelected],
-  );
+
+  // viewPeriodYears does not affect the calculator engine (it only changes how far the
+  // existing result series is displayed), so it must not be part of the cache key below.
+  // Without excluding it, ticking the Betrachtungszeitraum stepper would re-run
+  // measureDeltas (n full calculator runs) on every keystroke even though nothing the
+  // engine cares about changed.
+  const engineKey = useMemo(() => JSON.stringify({ ...params, viewPeriodYears: undefined }), [params]);
+
+  const cacheRef = useRef<{ key: string; cases: RenovationCase[]; value: ReturnType<typeof measureDeltas> } | null>(null);
+  const measures = useMemo(() => {
+    if (!wirtschaftlichkeitSelected) return undefined;
+    const cached = cacheRef.current;
+    if (cached && cached.key === engineKey && cached.cases === cases) {
+      return cached.value;
+    }
+    const value = measureDeltas(result, params, cases);
+    cacheRef.current = { key: engineKey, cases, value };
+    return value;
+  }, [engineKey, cases, wirtschaftlichkeitSelected, result, params]);
 
   const cards = useMemo(
     () => buildAnalysisCards({ selected, result, params, cases, viewPeriodYears, measures }),
