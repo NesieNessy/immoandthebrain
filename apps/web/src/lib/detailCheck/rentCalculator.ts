@@ -550,7 +550,7 @@ function calculateTaxes(
   };
 }
 
-function buildTimeline(
+export function buildTimeline(
   params: CalculatorParams,
   increases558: RentIncrease558Row[],
   increases558WithRentIndex: RentIncrease558Row[],
@@ -570,6 +570,10 @@ function buildTimeline(
   let breakEvenWithRentIndex: string | null = null;
   let rentTotal = roundCurrency(params.monthlyRentStart);
   let rentTotalWithRentIndex = roundCurrency(params.monthlyRentStart);
+  // Last month with a negative after-tax cashflow, tracked in this same pass so
+  // the optimizer (includeTimeline = false) gets it without materializing
+  // 600 rows per candidate.
+  let lastNegativeCashflowOffset = -1;
   const timeline: RentTimelineRow[] = [];
   const delta558ByMonth = totalsByMonth(increases558, (item) => item.effectiveYyyymm, (item) => item.monthlyDelta);
   const indexedDelta558ByMonth = totalsByMonth(increases558WithRentIndex, (item) => item.effectiveYyyymm, (item) => item.monthlyDelta);
@@ -614,6 +618,7 @@ function buildTimeline(
     const expenses = roundCurrency(debtService + nonAllocableCosts + renovationPayment);
     const monthlyDelta = roundCurrency(income - expenses);
     const afterTaxCashflow = roundCurrency(monthlyDelta - taxes);
+    if (afterTaxCashflow < 0) lastNegativeCashflowOffset = offset;
     cumulativeIncome = roundCurrency(cumulativeIncome + income);
     cumulativeExpenses = roundCurrency(cumulativeExpenses + expenses + taxes);
     cumulativeTaxes = roundCurrency(cumulativeTaxes + taxes);
@@ -666,6 +671,8 @@ function buildTimeline(
     breakEvenWithRentIndex,
     endingCashflow: cumulativeCashflow,
     endingCashflowWithRentIndex: runningWithRentIndex,
+    /** First month from which the monthly after-tax cashflow never turns negative again; CALCULATION_HORIZON_MONTHS = never. */
+    sustainablyPositiveOffset: lastNegativeCashflowOffset + 1,
   };
 }
 
@@ -823,6 +830,10 @@ export function runRentCalculator(params: CalculatorParams, renovationCases: Ren
     increases558WithRentIndex,
     breakEven: scenario.breakEven,
     breakEvenWithRentIndex: scenario.breakEvenWithRentIndex,
+    // Top level, not in `metrics`: the golden snapshot compares `metrics` whole.
+    sustainablyPositiveFrom: scenario.sustainablyPositiveOffset < CALCULATION_HORIZON_MONTHS
+      ? addMonths(params.startYyyymm, scenario.sustainablyPositiveOffset)
+      : null,
     placementMode: params.placementMode,
     metrics,
   };
