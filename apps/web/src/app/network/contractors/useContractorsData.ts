@@ -5,7 +5,7 @@ import { getOpenJobs } from '@/lib/supabase/renovation_measure_job.supabase';
 import type { RenovationMeasureJobListing } from '@immoandthebrain/types';
 import { useEffect, useState } from 'react';
 
-export function useHandwerkerData() {
+export function useContractorsData() {
     const { user } = useRequireAuth();
     const [jobs, setJobs] = useState<RenovationMeasureJobListing[]>([]);
     const [isLoading, setIsLoading] = useState(true);

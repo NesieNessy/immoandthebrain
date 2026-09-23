@@ -6,7 +6,7 @@ import type { RenovationMeasureJobListing } from '@immoandthebrain/types';
 import { useMemo, useState } from 'react';
 import { PaginationFooter } from '../shared/PaginationFooter';
 import { paginate } from '../shared/pagination';
-import { useHandwerkerData } from './useHandwerkerData';
+import { useContractorsData } from './useContractorsData';
 
 const PAGE_SIZE = 10;
 
@@ -63,8 +63,8 @@ function JobCard({ job, expanded, onToggle }: {
     );
 }
 
-export function HandwerkerTab() {
-    const data = useHandwerkerData();
+export function ContractorsTab() {
+    const data = useContractorsData();
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [expandedJobs, setExpandedJobs] = useState<Set<number>>(new Set());

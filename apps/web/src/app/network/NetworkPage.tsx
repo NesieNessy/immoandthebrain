@@ -2,10 +2,10 @@
 
 import { Header, PAGE_CONTAINER_CLASS, PillOptions } from '@/components/ui';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ContractorsTab } from './contractors/ContractorsTab';
 import { ForumTab } from './forum/ForumTab';
 import { recentPostCount } from './forum/recentPostCount';
 import { useForumData } from './forum/useForumData';
-import { HandwerkerTab } from './handwerker/HandwerkerTab';
 import { WegsTab } from './weg/WegsTab';
 
 type NetworkTab = 'wegs' | 'handwerker' | 'forum';
@@ -56,7 +56,7 @@ export function NetworkPage() {
 
                 <div className="mt-6">
                     {activeTab === 'wegs' && <WegsTab />}
-                    {activeTab === 'handwerker' && <HandwerkerTab />}
+                    {activeTab === 'handwerker' && <ContractorsTab />}
                     {activeTab === 'forum' && <ForumTab data={forumData} />}
                 </div>
             </main>

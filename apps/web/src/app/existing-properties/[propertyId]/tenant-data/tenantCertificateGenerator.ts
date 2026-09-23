@@ -9,7 +9,7 @@ import { downloadBlob, formatDeDate } from '@/lib/utils';
 import type { TenancyDocument } from '@immoandthebrain/types';
 import { useRef, useState } from 'react';
 import { readFileAsDataUrl, useDocumentReplaceFlow } from './DocumentGeneratorParts';
-import type { CertificateContent } from './mieterbescheinigungLetter';
+import type { CertificateContent } from './tenantCertificateLetter';
 import { useUnitDocumentGeneratorData } from './useUnitDocumentGeneratorData';
 
 const WORD_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -25,7 +25,7 @@ const WORD_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingm
  * `archivedTenancyId` scopes to a past tenancy (Mieterhistorie view) instead of
  * the unit's current one, so a moved-out tenant's certificate isn't shown as current.
  */
-export function useMieterbescheinigungGenerator(propertyId: string, unitId: string, onUploaded?: () => void, archivedTenancyId?: number) {
+export function useTenantCertificateGenerator(propertyId: string, unitId: string, onUploaded?: () => void, archivedTenancyId?: number) {
     const { user } = useRequireAuth();
     const { showToast } = useToast();
     const { isLoading, notFound, property, unit, hasMultipleUnits, tenancy, persons, landlord, documents, setDocuments } =

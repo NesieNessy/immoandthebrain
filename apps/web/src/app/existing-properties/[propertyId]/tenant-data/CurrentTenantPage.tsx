@@ -11,7 +11,7 @@ import { formatDeDate } from '@/lib/utils';
 import { format } from 'date-fns';
 import { RotateCcw } from 'lucide-react';
 import { useState } from 'react';
-import { useMieterbescheinigungGenerator } from './mieterbescheinigungGenerator';
+import { useTenantCertificateGenerator } from './tenantCertificateGenerator';
 import { personDisplayName, useTenantUnitData } from './useTenantUnitData';
 
 interface CurrentTenantPageProps {
@@ -33,7 +33,7 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
     const data = useTenantUnitData(propertyId, property, unit, hasMultipleUnits, archivedTenancyId);
     // Own independent data load — lets "Word-Dokument generieren" run right
     // here instead of navigating to the /certificate review page first.
-    const certGen = useMieterbescheinigungGenerator(propertyId, String(unit.propertyUnitId), () => void data.refreshDocuments(), archivedTenancyId);
+    const certGen = useTenantCertificateGenerator(propertyId, String(unit.propertyUnitId), () => void data.refreshDocuments(), archivedTenancyId);
     const [reactivateModalOpen, setReactivateModalOpen] = useState(false);
     const [isReactivating, setIsReactivating] = useState(false);
 
