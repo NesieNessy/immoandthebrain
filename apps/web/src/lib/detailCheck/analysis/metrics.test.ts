@@ -47,8 +47,9 @@ describe('analysis metrics', () => {
   it('measure economics: Δ = with − without, not worth it within B (observed behaviour)', () => {
     const params = calculatorParams();
     const cases = [renovationCase('a', 10000)];
-    const [row] = measureEconomics(params, cases, 15);
-    const withPlan = runRentCalculator(params, cases).timeline;
+    const withResult = runRentCalculator(params, cases);
+    const [row] = measureEconomics(withResult, params, cases, 15);
+    const withPlan = withResult.timeline;
     const without = runRentCalculator({ ...params, excludedModernizationIds: ['a'] }, cases).timeline;
     const end = viewEndIndex(15);
     expect(row.id).toBe('a');
@@ -67,8 +68,8 @@ describe('analysis metrics', () => {
     const params = calculatorParams({ monthlyRentStart: 500, livingAreaM2: 100, rentIncreaseUtilizationPercent: 0 });
     const cases = [renovationCase('a', 3000)];
     const B = 30;
-    const [row] = measureEconomics(params, cases, B);
     const result = runRentCalculator(params, cases);
+    const [row] = measureEconomics(result, params, cases, B);
     const withPlan = result.timeline;
     const without = runRentCalculator({ ...params, excludedModernizationIds: ['a'] }, cases).timeline;
     const end = viewEndIndex(B);
@@ -91,7 +92,9 @@ describe('analysis metrics', () => {
   });
 
   it('measure economics skips measures that are not in the plan (e.g. excluded)', () => {
-    const rows = measureEconomics(calculatorParams({ excludedModernizationIds: ['a'] }), [renovationCase('a', 10000)], 15);
+    const params = calculatorParams({ excludedModernizationIds: ['a'] });
+    const cases = [renovationCase('a', 10000)];
+    const rows = measureEconomics(runRentCalculator(params, cases), params, cases, 15);
     expect(rows).toEqual([]);
   });
 });

@@ -361,6 +361,7 @@ function buildParams(
   const fallbackStart = new Date().toISOString().slice(0, 7);
   const livingAreaM2 = context.livingAreaM2;
   const rentStart = context.coldRent;
+  const last558Date = normalizeRecentMonth(saved?.last_558_date, 1);
   const savedFingerprint = typeof (saved?.result as Record<string, unknown> | undefined)?.contextFingerprint === 'string'
     ? String((saved!.result as Record<string, unknown>).contextFingerprint)
     : null;
@@ -416,8 +417,8 @@ function buildParams(
     yearOfConstruction: context.yearOfConstruction,
     city: context.city,
     postalCode: context.postalCode,
-    last558Date: normalizeRecentMonth(saved?.last_558_date, 1),
-    last558RentBefore: normalizeLast558RentBefore(savedParams.last558RentBefore, normalizeRecentMonth(saved?.last_558_date, 1)),
+    last558Date,
+    last558RentBefore: normalizeLast558RentBefore(savedParams.last558RentBefore, last558Date),
     rentIndexGrowthPercent: normalizeRentIndexGrowthPercent(savedParams.rentIndexGrowthPercent),
     viewPeriodYears: normalizeViewPeriodYears(savedParams.viewPeriodYears),
     last559Date: normalizeRecentMonth(saved?.last_559_date, 5),
@@ -510,6 +511,7 @@ export async function POST(request: Request) {
   const monthlyDebtService = requestedFinancingInterestRate == null
     ? context.monthlyDebtService
     : recomputeMonthlyDebtService(context.loanAmount, interestRate, context.repaymentRate);
+  const last558Date = normalizeRecentMonth(input.last558Date, 1);
   let params: CalculatorParams = {
     startYyyymm: normalizeYyyymm(input.startYyyymm, new Date().toISOString().slice(0, 7)),
     rentStartYyyymm: normalizeYyyymm(context.valuationDate, new Date().toISOString().slice(0, 7)),
@@ -518,8 +520,8 @@ export async function POST(request: Request) {
     yearOfConstruction: context.yearOfConstruction,
     city: context.city,
     postalCode: context.postalCode,
-    last558Date: normalizeRecentMonth(input.last558Date, 1),
-    last558RentBefore: normalizeLast558RentBefore(input.last558RentBefore, normalizeRecentMonth(input.last558Date, 1)),
+    last558Date,
+    last558RentBefore: normalizeLast558RentBefore(input.last558RentBefore, last558Date),
     rentIndexGrowthPercent: normalizeRentIndexGrowthPercent(input.rentIndexGrowthPercent),
     viewPeriodYears: normalizeViewPeriodYears(input.viewPeriodYears),
     last559Date: normalizeRecentMonth(input.last559Date, 5),

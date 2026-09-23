@@ -5,7 +5,7 @@ import type { CalculatorParams } from '@/lib/detailCheck/rentCalculator';
 import type { RenovationCase } from '@/lib/detailCheck/renovation';
 import { USE_CASES, USE_CASE_GROUP_LABELS, isAvailable, type UseCaseGroup, type UseCaseId } from '@/lib/detailCheck/analysis/catalog';
 import { buildAnalysisCards, type AnalysisCard, type CardSeries } from '@/lib/detailCheck/analysis/cards';
-import type { RentCalculatorResult } from '@/lib/detailCheck/analysis/metrics';
+import { measureDeltas, type RentCalculatorResult } from '@/lib/detailCheck/analysis/metrics';
 import { useEffect, useMemo, useState } from 'react';
 
 const STORAGE_KEY = 'detail-check:analysis-use-cases';
@@ -17,7 +17,9 @@ const MAX_VIEW_PERIOD_YEARS = 50;
 function readSelection(): UseCaseId[] {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? 'null');
-    return Array.isArray(parsed) ? parsed.filter((id): id is UseCaseId => USE_CASES.some((item) => item.id === id)) : DEFAULT_SELECTION;
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is UseCaseId => USE_CASES.some((item) => item.id === id && isAvailable(item)))
+      : DEFAULT_SELECTION;
   } catch {
     return DEFAULT_SELECTION;
   }
@@ -116,9 +118,15 @@ export function AnalysisPanel({
     setViewPeriodDraft(String(clamped));
   };
 
+  const wirtschaftlichkeitSelected = selected.includes('wirtschaftlichkeit');
+  const measures = useMemo(
+    () => (wirtschaftlichkeitSelected ? measureDeltas(result, params, cases) : undefined),
+    [result, params, cases, wirtschaftlichkeitSelected],
+  );
+
   const cards = useMemo(
-    () => buildAnalysisCards({ selected, result, params, cases, viewPeriodYears }),
-    [selected, result, params, cases, viewPeriodYears],
+    () => buildAnalysisCards({ selected, result, params, cases, viewPeriodYears, measures }),
+    [selected, result, params, cases, viewPeriodYears, measures],
   );
 
   return (

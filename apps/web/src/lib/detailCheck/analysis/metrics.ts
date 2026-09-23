@@ -24,6 +24,23 @@ export type MeasureEconomics = {
   delta: number[];
 };
 
+/**
+ * Vom Betrachtungszeitraum unabhängiger, teurer Teil je Maßnahme: die
+ * "ohne"-Rechnung über den vollen Zeitstrahl plus die daraus abgeleitete
+ * Δ-Serie. Wird von `measureEconomics` mit der billigen Kürzung auf B
+ * kombiniert und in der UI auf [result, params, cases] memoisiert.
+ */
+export type MeasureDelta = {
+  id: string;
+  title: string;
+  costs: number;
+  monthlyDelta: number;
+  capUsePercent: number;
+  paymentMonth: string;
+  /** Δ(t) = CF_mit(t) − CF_ohne(t) über den vollen Zeitstrahl. */
+  deltaSeries: number[];
+};
+
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 /** Index des letzten Monats im Betrachtungszeitraum. */
@@ -74,29 +91,57 @@ export function totalPayback(result: RentCalculatorResult): MonthPoint {
   );
 }
 
-/** Δ(t) = CF_mit(t) − CF_ohne(t) je geplanter Maßnahme; lohnt sich ⟺ Δ(B) ≥ 0. */
-export function measureEconomics(params: CalculatorParams, cases: RenovationCase[], viewPeriodYears: number): MeasureEconomics[] {
-  const withResult = runRentCalculator(params, cases);
-  const end = Math.min(viewEndIndex(viewPeriodYears), withResult.timeline.length - 1);
+/**
+ * Teurer Teil: Δ(t) = CF_mit(t) − CF_ohne(t) je geplanter Maßnahme über den
+ * vollen Zeitstrahl, unabhängig vom Betrachtungszeitraum B. `result` ist die
+ * bereits vorliegende "mit"-Rechnung — sie wird hier nicht erneut berechnet,
+ * nur je Maßnahme einmal ohne sie neu gerechnet.
+ */
+export function measureDeltas(result: RentCalculatorResult, params: CalculatorParams, cases: RenovationCase[]): MeasureDelta[] {
   const excluded = params.excludedModernizationIds ?? [];
-  return withResult.modernizationPlan.map((item) => {
+  return result.modernizationPlan.map((item) => {
     const without = runRentCalculator({ ...params, excludedModernizationIds: [...excluded, item.id] }, cases).timeline;
-    const delta = withResult.timeline
-      .slice(0, end + 1)
-      .map((row, index) => round2(row.cumulativeCashflow - without[index].cumulativeCashflow));
-    const paybackIndex = delta.findIndex((value, index) => withResult.timeline[index].yyyymm > item.paymentYyyymm && value >= 0);
-    const deltaAtViewEnd = delta[end] ?? 0;
+    const deltaSeries = result.timeline.map((row, index) => round2(row.cumulativeCashflow - without[index].cumulativeCashflow));
     return {
       id: item.id,
       title: item.title,
       costs: item.allocableCosts,
       monthlyDelta: item.monthlyDelta,
-      capUsePercent: withResult.capAbs > 0 ? round2((item.monthlyDelta / withResult.capAbs) * 100) : 0,
+      capUsePercent: result.capAbs > 0 ? round2((item.monthlyDelta / result.capAbs) * 100) : 0,
       paymentMonth: item.paymentYyyymm,
+      deltaSeries,
+    };
+  });
+}
+
+/** Billige Kürzung der vollen Δ-Serien auf den Betrachtungszeitraum B; lohnt sich ⟺ Δ(B) ≥ 0. */
+export function sliceMeasureEconomics(deltas: MeasureDelta[], result: RentCalculatorResult, viewPeriodYears: number): MeasureEconomics[] {
+  const end = Math.min(viewEndIndex(viewPeriodYears), result.timeline.length - 1);
+  return deltas.map((item) => {
+    const delta = item.deltaSeries.slice(0, end + 1);
+    const paybackIndex = delta.findIndex((value, index) => result.timeline[index].yyyymm > item.paymentMonth && value >= 0);
+    const deltaAtViewEnd = delta[end] ?? 0;
+    return {
+      id: item.id,
+      title: item.title,
+      costs: item.costs,
+      monthlyDelta: item.monthlyDelta,
+      capUsePercent: item.capUsePercent,
+      paymentMonth: item.paymentMonth,
       deltaAtViewEnd,
       worthIt: deltaAtViewEnd >= 0,
-      paybackMonth: paybackIndex < 0 ? null : withResult.timeline[paybackIndex].yyyymm,
+      paybackMonth: paybackIndex < 0 ? null : result.timeline[paybackIndex].yyyymm,
       delta,
     };
   });
+}
+
+/** Δ(t) = CF_mit(t) − CF_ohne(t) je geplanter Maßnahme; lohnt sich ⟺ Δ(B) ≥ 0. */
+export function measureEconomics(
+  result: RentCalculatorResult,
+  params: CalculatorParams,
+  cases: RenovationCase[],
+  viewPeriodYears: number,
+): MeasureEconomics[] {
+  return sliceMeasureEconomics(measureDeltas(result, params, cases), result, viewPeriodYears);
 }

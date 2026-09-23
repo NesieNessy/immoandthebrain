@@ -48,6 +48,7 @@ describe('analysis cards', () => {
       { label: 'Vorteil nach 15 Jahren', value: '-9.156 €' },
       { label: 'Amortisiert', value: 'nicht erreicht' },
     ]);
+    expect(card.note).toBe('Ohne die Maßnahme holt die §558-Erhöhung die Miete später ebenfalls nach – der Vorteil ist nur zeitlich.');
   });
 
   it('wirtschaftlichkeit card: worth-it measure gets literal success verdict and rows', () => {
@@ -69,6 +70,7 @@ describe('analysis cards', () => {
       { label: 'Vorteil nach 30 Jahren', value: '1.106 €' },
       { label: 'Amortisiert', value: '01/2048' },
     ]);
+    expect(card.note).toBeUndefined();
   });
 
   it('wirtschaftlichkeit without planned measures yields one muted hint card', () => {
