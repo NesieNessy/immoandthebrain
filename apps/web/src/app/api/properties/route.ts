@@ -195,7 +195,12 @@ export async function DELETE(request: Request) {
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: 'Ungültige Objekt-ID.' }, { status: 400 });
   }
-  const result = await db.query('DELETE FROM property WHERE property_id = $1 AND user_id = $2', [id, userId]);
-  if (!result.rowCount) return NextResponse.json({ error: 'Objekt nicht gefunden.' }, { status: 404 });
-  return NextResponse.json({ deleted: true });
+  try {
+    const result = await db.query('DELETE FROM property WHERE property_id = $1 AND user_id = $2', [id, userId]);
+    if (!result.rowCount) return NextResponse.json({ error: 'Objekt nicht gefunden.' }, { status: 404 });
+    return NextResponse.json({ deleted: true });
+  } catch (err) {
+    console.error('DELETE /api/properties failed:', err);
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+  }
 }

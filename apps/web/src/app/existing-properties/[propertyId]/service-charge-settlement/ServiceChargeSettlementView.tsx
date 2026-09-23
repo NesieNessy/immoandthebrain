@@ -52,6 +52,18 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
     const address = `${property.street} ${property.houseNumber}, ${property.postalCode} ${property.city}`;
     const unitLabel = formatUnitLabel(unit.unitLabel, unit.floor, unit.locationNote);
 
+    // Why "Neue NK-Vorauszahlung übernehmen" is greyed out — an icon-only
+    // button with no visible label has nothing else to explain itself with,
+    // and a disabled control with only a generic title left the landlord
+    // unable to tell "nothing to apply yet" from "something's broken".
+    const applyPrepaymentDisabledReason = data.isApplyingPrepayment
+        ? 'Wird übernommen …'
+        : data.newMonthlyPrepayment == null
+            ? 'Für das Wirtschaftsplan-Jahr sind noch keine umlagefähigen Kosten erfasst.'
+            : data.prepaymentDelta === 0
+                ? 'Die aktuelle Vorauszahlung entspricht bereits dem Wirtschaftsplan — nichts zu übernehmen.'
+                : null;
+
     const breadcrumbItems: BreadcrumbItem[] = hasMultipleUnits
         ? [
             { label: 'Bestandsobjekte', href: '/existing-properties', onClick: (e) => { if (data.isEditing) { e.preventDefault(); data.goTo('/existing-properties'); } } },
@@ -361,7 +373,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                 : null;
                                         return (
                                         <tr key={item.id ?? `new-${index}`}>
-                                            <td className="px-3 py-2 min-w-[220px]">
+                                            <td className="px-3 py-2 min-w-[220px] align-top">
                                                 <TextField
                                                     value={item.label}
                                                     placeholder="Bezeichnung"
@@ -376,7 +388,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     umlagefähig
                                                 </label>
                                             </td>
-                                            <td className="px-3 py-2 border-l border-border w-36">
+                                            <td className="px-3 py-2 border-l border-border w-36 align-top">
                                                 <div className="relative">
                                                     <NumberField
                                                         placeholder="–"
@@ -394,7 +406,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-3 py-2 w-36">
+                                            <td className="px-3 py-2 w-36 align-top">
                                                 <div className="relative">
                                                     <NumberField
                                                         placeholder="–"
@@ -430,7 +442,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-3 py-2 border-l border-border w-36">
+                                            <td className="px-3 py-2 border-l border-border w-36 align-top">
                                                 <div className="relative">
                                                     <NumberField
                                                         placeholder="–"
@@ -448,7 +460,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-3 py-2 w-36">
+                                            <td className="px-3 py-2 w-36 align-top">
                                                 <div className="relative">
                                                     <NumberField
                                                         placeholder="–"
@@ -484,7 +496,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-2 py-2">
+                                            <td className="px-2 py-2 align-top">
                                                 <button
                                                     type="button"
                                                     onClick={() => data.removeCostItem(index)}
@@ -578,29 +590,50 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                             <>
                                 <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <MetricCard
-                                        label="NK-Vorauszahlung aktuell"
-                                        value={`${euro(data.currentMonthlyPrepayment)}`}
+                                        // Frozen to this settlement's period end — never pulled along by
+                                        // applying a new rate for next year (that only takes effect the
+                                        // day after this period ends), so this always reflects what was
+                                        // actually billed for this Abrechnung, not whatever the tenancy's
+                                        // rate happens to be today.
+                                        label="Bisherige NK-Vorauszahlung"
+                                        value={`${euro(data.prepaymentUntilSettlement)}`}
                                         detail="/Monat"
                                     />
                                     <MetricCard
-                                        label="NK-Vorauszahlung neu"
+                                        label="Neue NK-Vorauszahlung"
                                         value={data.newMonthlyPrepayment != null ? euro(data.newMonthlyPrepayment) : '–'}
-                                        detail={data.budgetCoverage === 'shortfall' ? 'Erhöhung wegen Unterdeckung' : data.budgetCoverage === 'surplus' ? 'Reduzierung wegen Überdeckung' : `aus Wirtschaftsplan ${data.settlementYear + 1}`}
-                                        tone={data.budgetCoverage === 'shortfall' ? 'warning' : data.budgetCoverage === 'surplus' ? 'positive' : 'neutral'}
+                                        // The old "shortfall/surplus" wording here was computed from the
+                                        // underlying annual comparison alone, so it kept claiming e.g. "Reduzierung
+                                        // wegen Überdeckung" even once bisherige/neu already showed the identical
+                                        // number (nothing left to reduce). Shown only when the two displayed
+                                        // values actually differ — compared against prepaymentUntilSettlement
+                                        // (what's on screen), not the live tenancy rate the button itself acts on.
+                                        detail={data.displayedPrepaymentDelta == null
+                                            ? undefined
+                                            : data.displayedPrepaymentDelta === 0
+                                                ? 'entspricht der aktuellen Vorauszahlung'
+                                                : `${data.displayedPrepaymentDelta > 0 ? '+' : '−'}${euro(Math.abs(data.displayedPrepaymentDelta))}${data.displayedPrepaymentDeltaPercent != null ? ` (${data.displayedPrepaymentDeltaPercent > 0 ? '+' : '−'}${Math.abs(data.displayedPrepaymentDeltaPercent).toFixed(1).replace('.', ',')} %)` : ''}`}
+                                        tone={data.displayedPrepaymentDelta == null || data.displayedPrepaymentDelta === 0
+                                            ? 'neutral'
+                                            : data.displayedPrepaymentDelta > 0 ? 'warning' : 'positive'}
+                                        action={
+                                            <button
+                                                type="button"
+                                                onClick={() => void data.handleApplyPrepayment()}
+                                                disabled={applyPrepaymentDisabledReason != null}
+                                                aria-label="Neue NK-Vorauszahlung übernehmen"
+                                                title={applyPrepaymentDisabledReason ?? 'Neue NK-Vorauszahlung übernehmen'}
+                                                className="p-1 rounded text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:text-muted-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                            >
+                                                <Icons.RefreshCw className="w-4 h-4" />
+                                            </button>
+                                        }
                                     />
                                     <MetricCard
-                                        label="Neue Gesamtmiete"
+                                        label="Neue monatliche Gesamtmiete"
                                         value={euro(data.newTotalRent)}
-                                        detail={`inkl. ${euro(data.tenancy?.coldRent)} Nettomiete`}
-                                    />
-                                </div>
-                                <div className="mt-3 flex justify-end">
-                                    <Button
-                                        label="Neue NK-Vorauszahlung übernehmen"
-                                        icon={<Icons.RefreshCw className="w-4 h-4" />}
-                                        variant="outline"
-                                        disabled={!data.canApplyPrepayment || data.isApplyingPrepayment}
-                                        onClick={() => void data.handleApplyPrepayment()}
+                                        detail={`${euro(data.tenancy?.coldRent)} Nettomiete + ${euro(data.newMonthlyPrepayment ?? data.currentMonthlyPrepayment)} NK-Vorauszahlung`}
+                                        footnote={`Gültig ab: ${formatDeDate(data.nextPrepaymentEffectiveDate.toISOString())}`}
                                     />
                                 </div>
                             </>

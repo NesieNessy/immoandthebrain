@@ -8,9 +8,12 @@ interface NumberFieldProps extends Omit<React.InputHTMLAttributes<HTMLInputEleme
   label?: string;
   error?: string;
   unit?: string;
-  /** Hides the native up/down spin buttons — for fields (year, price, area)
-   *  where typing is the expected input and the tiny stepper arrows just
-   *  add visual clutter rather than a useful increment/decrement action. */
+  /** Removes the stepper entirely — both the visual up/down spin buttons
+   *  and the native ArrowUp/ArrowDown keyboard increment/decrement, which
+   *  fires even with the buttons hidden (they're separate browser behaviors
+   *  for a number input; hiding the buttons alone left the arrow keys still
+   *  silently nudging the value). For fields (year, price, area) where
+   *  typing is the expected input and any of that is just accidental. */
   hideStepper?: boolean;
   /** Appends a muted "(optional)" to the label instead of the mandatory
    *  default (no marker). */
@@ -28,6 +31,7 @@ export function NumberField({
   disabled,
   id,
   "aria-describedby": ariaDescribedBy,
+  onKeyDown,
   ...props
 }: NumberFieldProps) {
   const { controlId, errorId, describedBy, invalid } = useFieldIds({
@@ -35,6 +39,13 @@ export function NumberField({
     error,
     describedBy: ariaDescribedBy,
   });
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (hideStepper && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+    }
+    onKeyDown?.(e);
+  };
 
   return (
     <div className="w-full">
@@ -60,6 +71,7 @@ export function NumberField({
           )}
           readOnly={readOnly}
           disabled={disabled}
+          onKeyDown={handleKeyDown}
           {...props}
         />
         {unit && (
