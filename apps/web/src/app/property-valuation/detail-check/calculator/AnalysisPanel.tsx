@@ -38,7 +38,7 @@ function MiniChart({ series }: { series: CardSeries }) {
     <svg viewBox={`0 0 ${width} ${height}`} className="h-20 w-full" preserveAspectRatio="none" aria-hidden="true">
       <line x1={0} x2={width} y1={y(0)} y2={y(0)} stroke="var(--border)" strokeWidth={1} />
       <path d={path} fill="none" stroke="var(--primary)" strokeWidth={2} vectorEffect="non-scaling-stroke" />
-      {markerIndex != null && <circle cx={x(markerIndex)} cy={y(values[markerIndex])} r={4} fill="#c18424" />}
+      {markerIndex != null && <circle cx={x(markerIndex)} cy={y(values[markerIndex])} r={4} fill="var(--warning)" />}
     </svg>
   );
 }
@@ -84,6 +84,9 @@ export function AnalysisPanel({
   const [selected, setSelected] = useState<UseCaseId[]>(DEFAULT_SELECTION);
   useEffect(() => setSelected(readSelection()), []);
 
+  const [viewPeriodDraft, setViewPeriodDraft] = useState(String(viewPeriodYears));
+  useEffect(() => setViewPeriodDraft(String(viewPeriodYears)), [viewPeriodYears]);
+
   const toggle = (id: UseCaseId) => {
     setSelected((current) => {
       const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
@@ -92,12 +95,25 @@ export function AnalysisPanel({
     });
   };
 
-  const handleViewPeriodYearsChange = (raw: string) => {
-    if (raw.trim() === '') return;
+  const isValidYears = (parsed: number) =>
+    Number.isFinite(parsed) && Number.isInteger(parsed) && parsed >= MIN_VIEW_PERIOD_YEARS && parsed <= MAX_VIEW_PERIOD_YEARS;
+
+  const handleViewPeriodDraftChange = (raw: string) => {
+    setViewPeriodDraft(raw);
     const parsed = Number(raw);
-    if (!Number.isFinite(parsed)) return;
-    const clamped = Math.min(MAX_VIEW_PERIOD_YEARS, Math.max(MIN_VIEW_PERIOD_YEARS, Math.round(parsed)));
+    if (raw.trim() !== '' && isValidYears(parsed)) {
+      onViewPeriodYearsChange(parsed);
+    }
+  };
+
+  const commitViewPeriodDraft = () => {
+    const parsed = Number(viewPeriodDraft);
+    const clamped =
+      viewPeriodDraft.trim() === '' || !Number.isFinite(parsed)
+        ? viewPeriodYears
+        : Math.min(MAX_VIEW_PERIOD_YEARS, Math.max(MIN_VIEW_PERIOD_YEARS, Math.round(parsed)));
     onViewPeriodYearsChange(clamped);
+    setViewPeriodDraft(String(clamped));
   };
 
   const cards = useMemo(
@@ -115,8 +131,12 @@ export function AnalysisPanel({
             type="number"
             min={MIN_VIEW_PERIOD_YEARS}
             max={MAX_VIEW_PERIOD_YEARS}
-            value={viewPeriodYears}
-            onChange={(event) => handleViewPeriodYearsChange(event.target.value)}
+            value={viewPeriodDraft}
+            onChange={(event) => handleViewPeriodDraftChange(event.target.value)}
+            onBlur={commitViewPeriodDraft}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') commitViewPeriodDraft();
+            }}
             className="w-16 rounded-md border border-border bg-background px-2 py-1 text-right text-foreground"
           />
           Jahre
