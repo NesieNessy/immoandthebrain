@@ -4,7 +4,7 @@ import { Button, CalculatedPanel, Dropdown, FixedOverlay, LoadingScreen, MetricC
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
-import { addMonths, runRentCalculator, CALCULATION_HORIZON_MONTHS, CALCULATION_HORIZON_YEARS, type CalculatorMode, type CalculatorParams, type ModernizationPlanRow, type PlacementMode, type RentIndexSource, type RentIncrease558Row, type RentTimelineRow } from '@/lib/detailCheck/rentCalculator';
+import { addMonths, runRentCalculator, CALCULATION_HORIZON_MONTHS, CALCULATION_HORIZON_YEARS, DEFAULT_VIEW_PERIOD_YEARS, type CalculatorMode, type CalculatorParams, type ModernizationPlanRow, type PlacementMode, type RentIndexSource, type RentIncrease558Row, type RentTimelineRow } from '@/lib/detailCheck/rentCalculator';
 import { buildEffectiveCalculatorParams, overridesFromParams, type CalculatorOverrides, type CalculatorParameterFields } from '@/lib/detailCheck/calculatorParamNormalization';
 import { costForCase, type RenovationCase, type RenovationTiming } from '@/lib/detailCheck/renovation';
 import { Check, ChevronDown, ChevronUp, LineChart, Loader2, Sparkles } from 'lucide-react';
@@ -125,11 +125,9 @@ function parameterFieldsFromParams(params: CalculatorParams): CalculatorParamete
     rentIncreaseIntervalMonths: params.rentIncreaseIntervalMonths ?? 15,
     rentIncreaseUtilizationPercent: params.rentIncreaseUtilizationPercent ?? 100,
     mode: params.mode,
-    // TODO(SCRUM-96 Schnitt 2/3): wire real Parameter-panel inputs for these;
-    // until then the load effect has nothing to seed them from.
     rentIndexGrowthPercent: valueString(params.rentIndexGrowthPercent),
     last558RentBefore: valueString(params.last558RentBefore),
-    viewPeriodYears: params.viewPeriodYears ?? 15,
+    viewPeriodYears: params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS,
   };
 }
 
@@ -1505,8 +1503,11 @@ function CalculatorContent() {
   const [rentIndexPerM2, setRentIndexPerM2] = useState('');
   const [rentIndexSource, setRentIndexSource] = useState<RentIndexSource>('AUTOMATIC');
   const [last558Date, setLast558Date] = useState('');
+  const [last558RentBefore, setLast558RentBefore] = useState('');
   const [last559Date, setLast559Date] = useState('');
   const [last559MonthlyDelta, setLast559MonthlyDelta] = useState('');
+  const [rentIndexGrowthPercent, setRentIndexGrowthPercent] = useState('');
+  const [viewPeriodYears, setViewPeriodYears] = useState(DEFAULT_VIEW_PERIOD_YEARS);
   const [rentIncreaseIntervalMonths, setRentIncreaseIntervalMonths] = useState(15);
   const [rentIncreaseUtilizationPercent, setRentIncreaseUtilizationPercent] = useState(100);
   const [mode, setMode] = useState<CalculatorMode>('KNOWN');
@@ -1630,12 +1631,10 @@ function CalculatorContent() {
     rentIncreaseIntervalMonths,
     rentIncreaseUtilizationPercent,
     mode,
-    // TODO(SCRUM-96 Schnitt 2/3): no Parameter-panel inputs for these yet;
-    // empty/default text keeps buildEffectiveCalculatorParams on its defaults.
-    rentIndexGrowthPercent: '',
-    last558RentBefore: '',
-    viewPeriodYears: 15,
-  }), [startYyyymm, last558Date, last559Date, last559MonthlyDelta, rentIndexPerM2, rentIndexSource, rentIncreaseIntervalMonths, rentIncreaseUtilizationPercent, mode]);
+    rentIndexGrowthPercent,
+    last558RentBefore,
+    viewPeriodYears,
+  }), [startYyyymm, last558Date, last559Date, last559MonthlyDelta, rentIndexPerM2, rentIndexSource, rentIncreaseIntervalMonths, rentIncreaseUtilizationPercent, mode, rentIndexGrowthPercent, last558RentBefore, viewPeriodYears]);
 
   /**
    * The live preview: recomputed with `runRentCalculator` on every render
@@ -1748,8 +1747,11 @@ function CalculatorContent() {
         setRentIndexPerM2(valueString(loaded.params.rentIndexPerM2));
         setRentIndexSource(loaded.params.rentIndexSource ?? loaded.rentIndexSource ?? 'AUTOMATIC');
         setLast558Date(loaded.params.last558Date ?? '');
+        setLast558RentBefore(valueString(loaded.params.last558RentBefore));
         setLast559Date(loaded.params.last559Date ?? '');
         setLast559MonthlyDelta(valueString(loaded.params.last559MonthlyDelta));
+        setRentIndexGrowthPercent(valueString(loaded.params.rentIndexGrowthPercent));
+        setViewPeriodYears(loaded.params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS);
         setRentIncreaseIntervalMonths(loaded.params.rentIncreaseIntervalMonths ?? 15);
         setRentIncreaseUtilizationPercent(loaded.params.rentIncreaseUtilizationPercent ?? 100);
         setMode(loaded.params.mode);
@@ -1763,8 +1765,11 @@ function CalculatorContent() {
           rentIndexPerM2: valueString(loaded.params.rentIndexPerM2),
           rentIndexSource: loaded.params.rentIndexSource ?? loaded.rentIndexSource ?? 'AUTOMATIC',
           last558Date: loaded.params.last558Date ?? '',
+          last558RentBefore: valueString(loaded.params.last558RentBefore),
           last559Date: loaded.params.last559Date ?? '',
           last559MonthlyDelta: valueString(loaded.params.last559MonthlyDelta),
+          rentIndexGrowthPercent: valueString(loaded.params.rentIndexGrowthPercent),
+          viewPeriodYears: loaded.params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS,
           rentIncreaseIntervalMonths: loaded.params.rentIncreaseIntervalMonths ?? 15,
           rentIncreaseUtilizationPercent: loaded.params.rentIncreaseUtilizationPercent ?? 100,
         });
@@ -1836,6 +1841,9 @@ function CalculatorContent() {
           rentIndexPerM2: rentIndexSource === 'AUTOMATIC' || rentIndexPerM2 === '' ? null : parseDecimalInput(rentIndexPerM2),
           rentIndexSource,
           last558Date: last558Date || null,
+          last558RentBefore: last558Date && last558RentBefore !== '' ? parseDecimalInput(last558RentBefore) : null,
+          rentIndexGrowthPercent: rentIndexGrowthPercent === '' ? null : parseDecimalInput(rentIndexGrowthPercent),
+          viewPeriodYears,
           last559Date: last559Date || null,
           last559MonthlyDelta: parseDecimalInput(last559MonthlyDelta),
           rentIncreaseIntervalMonths,
@@ -1909,7 +1917,7 @@ function CalculatorContent() {
   useEffect(() => {
     if (isLoading || isSaving || !data || startMonthError || last558Error || last559Error || !startYyyymm || monthlyRentStart === '') return;
 
-    const signature = JSON.stringify({ startYyyymm, monthlyRentStart, rentIndexPerM2, rentIndexSource, last558Date, last559Date, last559MonthlyDelta, rentIncreaseIntervalMonths, rentIncreaseUtilizationPercent });
+    const signature = JSON.stringify({ startYyyymm, monthlyRentStart, rentIndexPerM2, rentIndexSource, last558Date, last558RentBefore, last559Date, last559MonthlyDelta, rentIndexGrowthPercent, viewPeriodYears, rentIncreaseIntervalMonths, rentIncreaseUtilizationPercent });
     if (signature === lastLiveCalculationRef.current) return;
 
     const timer = window.setTimeout(() => {
@@ -1918,7 +1926,7 @@ function CalculatorContent() {
     }, PARAMETER_AUTOSAVE_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timer);
-  }, [data, isLoading, isSaving, last558Date, last558Error, last559Date, last559Error, last559MonthlyDelta, mode, monthlyRentStart, rentIndexPerM2, rentIndexSource, rentIncreaseIntervalMonths, rentIncreaseUtilizationPercent, startMonthError, startYyyymm]);
+  }, [data, isLoading, isSaving, last558Date, last558Error, last558RentBefore, last559Date, last559Error, last559MonthlyDelta, mode, monthlyRentStart, rentIndexGrowthPercent, rentIndexPerM2, rentIndexSource, rentIncreaseIntervalMonths, rentIncreaseUtilizationPercent, startMonthError, startYyyymm, viewPeriodYears]);
 
   const handleModeChange = (value: string) => {
     const nextMode = value === 'POTENTIAL' ? 'POTENTIAL' : 'KNOWN';
@@ -2122,9 +2130,11 @@ function CalculatorContent() {
               <div className="order-2 grid gap-4 pt-2 lg:grid-cols-4 md:grid-cols-2">
                 <MonthField label="Start in Jahr/Monat" value={startYyyymm} error={startMonthError} onChange={setStartYyyymm} />
                 <MonthField label="Letzte Mieterhöhung §558" value={last558Date} error={last558Error} optional years={LAST_558_YEARS} onChange={setLast558Date} />
+                <TextField label="Miete vor der letzten §558-Erhöhung" optional value={last558RentBefore} suffix="€/Monat" inputMode="decimal" disabled={!last558Date} onChange={(event) => setLast558RentBefore(event.target.value)} helperText="Die Erhöhung zählt dann im Dreijahresfenster der Kappungsgrenze mit." />
                 <MonthField label="Letzte §559-Erhöhung" value={last559Date} error={last559Error} optional years={LAST_559_YEARS} onChange={setLast559Date} />
                 <TextField label="Betrag der letzten §559-Erhöhung" optional value={last559MonthlyDelta} suffix="€/Monat" inputMode="decimal" disabled={!last559Date} onChange={(event) => setLast559MonthlyDelta(event.target.value)} helperText="Wird auf den gesetzlichen Sechsjahres-Deckel angerechnet." />
                 <TextField label="Mietspiegel Vergleichswert" optional value={rentIndexPerM2} suffix="€/m²" inputMode="decimal" onChange={(e) => { setRentIndexPerM2(e.target.value); setRentIndexSource('MANUAL'); }} helperText="Automatisch aus Baujahr/Fläche, solange nicht überschrieben." />
+                <TextField label="Mietspiegel-Entwicklung" optional value={rentIndexGrowthPercent} suffix="% p. a." inputMode="decimal" placeholder="2" onChange={(event) => setRentIndexGrowthPercent(event.target.value)} helperText="Leer = 2 % pro Jahr." />
               </div>
 
               <div className="order-3 mt-5 border-y border-border py-3">
