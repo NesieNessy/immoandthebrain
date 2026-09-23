@@ -42,3 +42,6 @@ supabase/.temp
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# graphify: generierter Wissensgraph-Output (6 MB, wird per /graphify neu gebaut)
+graphify-out/

@@ -15,6 +15,7 @@ import {
   discardQuickCheck,
   updateQuickCheck,
 } from '@/lib/supabase/quick_check.supabase';
+import { isValidListingUrl } from '@/lib/listingUrl';
 import { cn } from '@/lib/utils';
 import { calcKpf } from '@/lib/quickCheck/kpf';
 import { isValidConstructionYear } from '@/lib/quickCheck/validation';
@@ -102,7 +103,11 @@ export function QuickCheckResultView({ id }: Props) {
     editForm.street.trim() !== '' &&
     editForm.street.trim().length <= 120 &&
     editForm.city.trim() !== '' &&
-    editForm.city.trim().length <= 120;
+    editForm.city.trim().length <= 120 &&
+    // Older quick checks can still hold plain text here from before links
+    // were validated; the portal section flags it, and saving waits until it
+    // is corrected or removed rather than failing on the server.
+    (!portalUrl.trim() || isValidListingUrl(portalUrl));
 
   // "Verwerfen"/"Übernehmen" also require the user to have actually changed
   // something compared to the loaded record.
