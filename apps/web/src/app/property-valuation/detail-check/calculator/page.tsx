@@ -2277,6 +2277,20 @@ function CalculatorContent() {
                 cases={data.renovationCases}
                 viewPeriodYears={viewPeriodYears}
                 onViewPeriodYearsChange={setViewPeriodYears}
+                mode={mode}
+                onApplyPlacements={(placements) => {
+                  // Same §558-plan reset the "Sanierungen und Mieterhöhungen
+                  // optimieren" button triggers (resetRentPlanRef.current = true
+                  // before recalc): a new set of modernization placements can
+                  // shift or invalidate previously chosen §558 increase months,
+                  // so the increase plan must be recomputed from scratch rather
+                  // than replayed onto the old placements. commitOverrides
+                  // updates the local preview synchronously (Gantt, top figures,
+                  // evaluation cards) and persists on its usual debounce, which
+                  // is what keeps the applied proposal after save + reload.
+                  resetRentPlanRef.current = true;
+                  commitOverrides({ modernizationPlacements: placements, rentIncreaseOverrides: {} });
+                }}
               />
             )}
 

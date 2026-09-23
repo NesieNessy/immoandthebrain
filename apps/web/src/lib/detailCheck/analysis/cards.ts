@@ -22,7 +22,13 @@ export type AnalysisCard = { id: string; title: string; verdict: CardVerdict; ro
 const currency = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
 const decimal = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 });
 
-function formatMonth(month: string | null): string {
+/** Formats an amount as `de-DE` EUR without decimals. Shared with the optimization cards (AnalysisPanel). */
+export function formatCurrency(amount: number): string {
+  return currency.format(amount);
+}
+
+/** `yyyy-mm` → `MM/YYYY`, or "nicht erreicht" for `null`. Shared with the optimization cards (AnalysisPanel). */
+export function formatMonth(month: string | null): string {
   if (!month) return 'nicht erreicht';
   const [year, mm] = month.split('-');
   return `${mm}/${year}`;

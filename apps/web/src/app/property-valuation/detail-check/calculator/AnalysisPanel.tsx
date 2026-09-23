@@ -1,12 +1,127 @@
 "use client";
 
-import { SectionLabel, Tag } from '@/components/ui';
-import type { CalculatorParams } from '@/lib/detailCheck/rentCalculator';
+import { Button, SectionLabel, Tag } from '@/components/ui';
+import type { CalculatorMode, CalculatorParams } from '@/lib/detailCheck/rentCalculator';
 import type { RenovationCase } from '@/lib/detailCheck/renovation';
-import { USE_CASES, USE_CASE_GROUP_LABELS, isAvailable, type UseCaseGroup, type UseCaseId } from '@/lib/detailCheck/analysis/catalog';
-import { buildAnalysisCards, type AnalysisCard, type CardSeries } from '@/lib/detailCheck/analysis/cards';
+import { OPTIMIZATION_OBJECTIVE, USE_CASES, USE_CASE_GROUP_LABELS, isAvailable, type UseCase, type UseCaseGroup, type UseCaseId } from '@/lib/detailCheck/analysis/catalog';
+import { buildAnalysisCards, formatCurrency, formatMonth, type AnalysisCard, type CardSeries } from '@/lib/detailCheck/analysis/cards';
 import { measureDeltas, type RentCalculatorResult } from '@/lib/detailCheck/analysis/metrics';
+import type { KeyFigures, OptimizationProposal } from '@/lib/detailCheck/analysis/optimize';
+import type { ObjectiveId } from '@/lib/detailCheck/analysis/objectives';
+import { useOptimization, type OptimizationState } from './useOptimization';
+import { Loader2, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+
+const duration = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+
+/** Welche Kennzahlzeile je Ziel fett dargestellt wird (Step 1 der Aufgabe). */
+const BOLD_ROW_BY_OBJECTIVE: Record<ObjectiveId, keyof KeyFigures> = {
+  EARLIEST_BREAK_EVEN: 'breakEven',
+  FASTEST_POSITIVE_CASHFLOW: 'sustainablyPositiveFrom',
+  MAX_RENT_IN_VIEW: 'rentSumInView',
+};
+
+function OptimizationTable({ proposal, viewPeriodYears }: { proposal: OptimizationProposal; viewPeriodYears: number }) {
+  const boldKey = BOLD_ROW_BY_OBJECTIVE[proposal.objective];
+  const rows: { key: keyof KeyFigures; label: string; format: (figures: KeyFigures) => string }[] = [
+    { key: 'breakEven', label: 'Break-even', format: (f) => formatMonth(f.breakEven) },
+    { key: 'sustainablyPositiveFrom', label: 'Cashflow dauerhaft positiv ab', format: (f) => formatMonth(f.sustainablyPositiveFrom) },
+    { key: 'rentSumInView', label: `Mietsumme in ${viewPeriodYears} Jahren`, format: (f) => formatCurrency(f.rentSumInView) },
+    { key: 'cashflowAtViewEnd', label: `Kumulierter Cashflow nach ${viewPeriodYears} Jahren`, format: (f) => formatCurrency(f.cashflowAtViewEnd) },
+  ];
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <th className="py-1.5 pr-2 font-normal">Kennzahl</th>
+            <th className="py-1.5 pr-2 text-right font-normal">Aktuell</th>
+            <th className="py-1.5 text-right font-normal">Vorschlag</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key} className={`border-t border-border ${row.key === boldKey ? 'font-semibold' : ''}`}>
+              <td className="py-1.5 pr-2 text-muted-foreground">{row.label}</td>
+              <td className="py-1.5 pr-2 text-right text-foreground">{row.format(proposal.before)}</td>
+              <td className="py-1.5 text-right text-foreground">{row.format(proposal.after)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function OptimizationCard({
+  useCase,
+  mode,
+  state,
+  viewPeriodYears,
+  onStart,
+  onApplyPlacements,
+}: {
+  useCase: UseCase;
+  mode: CalculatorMode;
+  state: OptimizationState;
+  viewPeriodYears: number;
+  onStart: () => void;
+  onApplyPlacements: (placements: Record<string, string>) => void;
+}) {
+  return (
+    <article className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-medium text-foreground">{useCase.label}</h3>
+        {mode !== 'KNOWN' && <Tag label="Nur mit bekannten Maßnahmen" variant="muted" />}
+        {mode === 'KNOWN' && state.status === 'error' && <Tag label="Fehler" variant="danger" />}
+        {mode === 'KNOWN' && state.status === 'done' && state.proposal === null && <Tag label="Keine Maßnahme geplant" variant="muted" />}
+        {mode === 'KNOWN' && state.status === 'done' && state.proposal !== null && (
+          <Tag label={state.proposal.improved ? 'Verbesserung' : 'Plan ist bereits optimal'} variant={state.proposal.improved ? 'success' : 'muted'} />
+        )}
+      </div>
+
+      {mode !== 'KNOWN' && (
+        <p className="text-sm text-muted-foreground">Im Szenario Potenzial gibt es keine Zeitpunkte zu optimieren.</p>
+      )}
+
+      {mode === 'KNOWN' && state.status === 'idle' && (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">{useCase.question}</p>
+          <Button label="Optimierung starten" variant="outline" icon={<Sparkles />} onClick={onStart} />
+        </div>
+      )}
+
+      {mode === 'KNOWN' && state.status === 'running' && (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          Rechnet … (ca. 5 Sekunden)
+        </p>
+      )}
+
+      {mode === 'KNOWN' && state.status === 'error' && (
+        <div className="space-y-3">
+          <p className="text-sm text-destructive">{state.message}</p>
+          <Button label="Erneut versuchen" variant="outline" icon={<Sparkles />} onClick={onStart} />
+        </div>
+      )}
+
+      {mode === 'KNOWN' && state.status === 'done' && state.proposal && (
+        <div className="space-y-3">
+          <OptimizationTable proposal={state.proposal} viewPeriodYears={viewPeriodYears} />
+          <p className="text-sm text-muted-foreground">
+            {state.proposal.changes.length === 0
+              ? 'Keine Verschiebung nötig.'
+              : state.proposal.changes.map((change) => `${change.title}: ${formatMonth(change.from)} → ${formatMonth(change.to)}`).join('; ')}
+          </p>
+          {state.proposal.improved && state.proposal.changes.length > 0 && (
+            <Button label="Übernehmen" variant="primary" onClick={() => onApplyPlacements(state.proposal!.placements)} />
+          )}
+          <p className="text-xs text-muted-foreground">Berechnet in {duration.format(state.durationMs / 1000)} s</p>
+        </div>
+      )}
+    </article>
+  );
+}
 
 const STORAGE_KEY = 'detail-check:analysis-use-cases';
 const DEFAULT_SELECTION: UseCaseId[] = ['break-even'];
@@ -76,15 +191,21 @@ export function AnalysisPanel({
   cases,
   viewPeriodYears,
   onViewPeriodYearsChange,
+  mode,
+  onApplyPlacements,
 }: {
   result: RentCalculatorResult;
   params: CalculatorParams;
   cases: RenovationCase[];
   viewPeriodYears: number;
   onViewPeriodYearsChange: (years: number) => void;
+  mode: CalculatorMode;
+  onApplyPlacements: (placements: Record<string, string>) => void;
 }) {
   const [selected, setSelected] = useState<UseCaseId[]>(DEFAULT_SELECTION);
   useEffect(() => setSelected(readSelection()), []);
+
+  const optimization = useOptimization(params, cases);
 
   const [viewPeriodDraft, setViewPeriodDraft] = useState(String(viewPeriodYears));
   useEffect(() => setViewPeriodDraft(String(viewPeriodYears)), [viewPeriodYears]);
@@ -144,6 +265,11 @@ export function AnalysisPanel({
     [selected, result, params, cases, viewPeriodYears, measures],
   );
 
+  const optimizationUseCases = useMemo(
+    () => USE_CASES.filter((item) => item.group === 'optimierung' && isAvailable(item) && selected.includes(item.id)),
+    [selected],
+  );
+
   return (
     <section className="order-3 space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -193,11 +319,26 @@ export function AnalysisPanel({
           })}
         </div>
       ))}
-      {cards.length === 0 ? (
+      {cards.length === 0 && optimizationUseCases.length === 0 ? (
         <p className="text-sm text-muted-foreground">Wähle oben eine Auswertung aus.</p>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {cards.map((card) => <Card key={card.id} card={card} />)}
+          {optimizationUseCases.map((useCase) => {
+            const objective = OPTIMIZATION_OBJECTIVE[useCase.id];
+            if (!objective) return null;
+            return (
+              <OptimizationCard
+                key={useCase.id}
+                useCase={useCase}
+                mode={mode}
+                state={optimization.stateFor(objective)}
+                viewPeriodYears={viewPeriodYears}
+                onStart={() => optimization.start(objective)}
+                onApplyPlacements={onApplyPlacements}
+              />
+            );
+          })}
         </div>
       )}
     </section>
