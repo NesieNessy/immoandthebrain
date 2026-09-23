@@ -269,3 +269,21 @@ Der Mietspiegel München folgt als eigenes Teilprojekt über
    in der Karte sichtbar genannt.
 3. **Anlageberatung:** Karten zeigen Kennzahlen und Annahmen; die Empfehlung
    begründet, statt zu raten.
+
+## Offene Punkte aus dem Schnitt-0-Review
+
+- **Schnitt 1:** `rentIndexGrowthPercent` und `last558RentBefore` fehlen noch in
+  `CalculatorOverrides`, `overridesFromParams` und `buildEffectiveCalculatorParams`.
+  Beide müssen dort zusammen mit `excludedModernizationIds` ergänzt und in den
+  Kontext-Fingerprint des Kalkulators aufgenommen werden — sonst liefert der
+  Kalkulator bei geänderten Werten veraltete (gecachte) Ergebnisse. Dafür fehlt
+  noch ein Test.
+- **Schnitt 4:** `excludedModernizationIds` wirkt bisher nur in `rentCalculator.ts`.
+  Kosten und Finanzierung (`renovation.ts` `sumSelectedCosts`,
+  `aggregateRenovationPricing`) zählen ausgeschlossene Maßnahmen weiterhin mit.
+  Vor den Auswahl-Vorschlägen muss der Ausschluss entweder in die
+  Kostenaggregation durchgereicht oder die Finanzierung je Kandidat neu
+  gerechnet werden.
+- **Bekannte Altlast:** `current558Base` enthält eine §559-Erhöhung vor dem Kauf,
+  deren Wirksamkeitsdatum nach Fensterbeginn liegt → die Kappungsbasis fällt
+  dadurch leicht zu hoch aus.
