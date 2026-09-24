@@ -7,7 +7,7 @@ import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
 import { addMonths, runRentCalculator, CALCULATION_HORIZON_MONTHS, CALCULATION_HORIZON_YEARS, DEFAULT_VIEW_PERIOD_YEARS, type CalculatorMode, type CalculatorParams, type ModernizationPlanRow, type PlacementMode, type RentIndexSource, type RentIncrease558Row, type RentTimelineRow } from '@/lib/detailCheck/rentCalculator';
 import { buildEffectiveCalculatorParams, overridesFromParams, type CalculatorOverrides, type CalculatorParameterFields } from '@/lib/detailCheck/calculatorParamNormalization';
 import { costForCase, type RenovationCase, type RenovationTiming } from '@/lib/detailCheck/renovation';
-import { Check, ChevronDown, ChevronUp, LineChart, Loader2, Sparkles } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, LineChart, Loader2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
@@ -2255,17 +2255,10 @@ function CalculatorContent() {
                   onClick={() => { cancelScheduledPersist(); resetRentPlanRef.current = true; void recalc(mode); }}
                   disabled={isSaving}
                 />
-                <Button
-                  label="Sanierungen und Mieterhöhungen optimieren"
-                  variant="outline"
-                  icon={<Sparkles />}
-                  onClick={() => { cancelScheduledPersist(); void recalc(mode, false, true); }}
-                  disabled={isSaving || mode === 'POTENTIAL'}
-                />
               </div>
               {placementMode === 'OPTIMIZED' && (
                 <p className="order-6 mt-3 text-sm text-muted-foreground">
-                  Sanierungen und daraus folgende §558-Mieterhöhungen sind anhand der Regler auf den frühestmöglichen Break-even optimiert.
+                  Sanierungszeitpunkte wurden auf den frühestmöglichen Break-even optimiert.
                 </p>
               )}
             </section>

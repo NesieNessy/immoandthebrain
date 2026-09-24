@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, SectionLabel, Tag } from '@/components/ui';
+import { Button, Dropdown, SectionLabel, Tag } from '@/components/ui';
 import type { CalculatorMode, CalculatorParams } from '@/lib/detailCheck/rentCalculator';
 import type { RenovationCase } from '@/lib/detailCheck/renovation';
 import { OPTIMIZATION_OBJECTIVE, USE_CASES, USE_CASE_GROUP_LABELS, isAvailable, type UseCase, type UseCaseGroup, type UseCaseId } from '@/lib/detailCheck/analysis/catalog';
@@ -84,13 +84,6 @@ function OptimizationCard({
         <p className="text-sm text-muted-foreground">Im Szenario Potenzial gibt es keine Zeitpunkte zu optimieren.</p>
       )}
 
-      {mode === 'KNOWN' && state.status === 'idle' && (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">{useCase.question}</p>
-          <Button label="Optimierung starten" variant="outline" icon={<Sparkles />} onClick={onStart} />
-        </div>
-      )}
-
       {mode === 'KNOWN' && state.status === 'running' && (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -124,19 +117,40 @@ function OptimizationCard({
 }
 
 const STORAGE_KEY = 'detail-check:analysis-use-cases';
+const GOAL_STORAGE_KEY = 'detail-check:optimization-goal';
 const DEFAULT_SELECTION: UseCaseId[] = ['break-even'];
-const GROUPS: UseCaseGroup[] = ['auswertung', 'simulation', 'optimierung'];
+const DEFAULT_GOAL: UseCaseId = 'optimaler-zeitpunkt';
+const GROUPS: UseCaseGroup[] = ['auswertung', 'simulation'];
 const MIN_VIEW_PERIOD_YEARS = 5;
 const MAX_VIEW_PERIOD_YEARS = 50;
+
+/** Anzeige-Labels für das Ziel-Dropdown (nur hier abweichend von den Katalog-Labels). */
+const GOAL_DROPDOWN_LABELS: Partial<Record<UseCaseId, string>> = {
+  'optimaler-zeitpunkt': 'Frühester Break-even',
+  'mieterhoehungsstrategie': 'Höchste Mieteinnahmen im Betrachtungszeitraum',
+  'cashflow-optimierung': 'Schnellster dauerhaft positiver Cashflow',
+};
+
+const OPTIMIZATION_USE_CASES = USE_CASES.filter((item) => item.group === 'optimierung');
 
 function readSelection(): UseCaseId[] {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? 'null');
     return Array.isArray(parsed)
-      ? parsed.filter((id): id is UseCaseId => USE_CASES.some((item) => item.id === id && isAvailable(item)))
+      ? parsed.filter((id): id is UseCaseId => USE_CASES.some((item) => item.id === id && item.group !== 'optimierung' && isAvailable(item)))
       : DEFAULT_SELECTION;
   } catch {
     return DEFAULT_SELECTION;
+  }
+}
+
+function readGoal(): UseCaseId {
+  try {
+    const parsed = window.localStorage.getItem(GOAL_STORAGE_KEY);
+    const match = OPTIMIZATION_USE_CASES.find((item) => item.id === parsed && isAvailable(item));
+    return match ? match.id : DEFAULT_GOAL;
+  } catch {
+    return DEFAULT_GOAL;
   }
 }
 
@@ -205,6 +219,14 @@ export function AnalysisPanel({
   const [selected, setSelected] = useState<UseCaseId[]>(DEFAULT_SELECTION);
   useEffect(() => setSelected(readSelection()), []);
 
+  const [goal, setGoal] = useState<UseCaseId>(DEFAULT_GOAL);
+  useEffect(() => setGoal(readGoal()), []);
+
+  const handleGoalChange = (id: UseCaseId) => {
+    setGoal(id);
+    try { window.localStorage.setItem(GOAL_STORAGE_KEY, id); } catch { /* ohne Speicher weiter */ }
+  };
+
   const optimization = useOptimization(params, cases);
 
   const [viewPeriodDraft, setViewPeriodDraft] = useState(String(viewPeriodYears));
@@ -265,13 +287,60 @@ export function AnalysisPanel({
     [selected, result, params, cases, viewPeriodYears, measures],
   );
 
-  const optimizationUseCases = useMemo(
-    () => USE_CASES.filter((item) => item.group === 'optimierung' && isAvailable(item) && selected.includes(item.id)),
-    [selected],
+  const goalUseCase = useMemo(
+    () => OPTIMIZATION_USE_CASES.find((item) => item.id === goal) ?? OPTIMIZATION_USE_CASES[0],
+    [goal],
+  );
+  const goalObjective = goalUseCase ? OPTIMIZATION_OBJECTIVE[goalUseCase.id] : undefined;
+  const goalState = goalObjective ? optimization.stateFor(goalObjective) : { status: 'idle' as const };
+  const optimizationRunning = goalState.status === 'running';
+
+  const goalOptions = useMemo(
+    () =>
+      OPTIMIZATION_USE_CASES.map((item) => {
+        const available = isAvailable(item);
+        const label = GOAL_DROPDOWN_LABELS[item.id] ?? item.label;
+        return { value: item.id, label: available ? label : `${label} (folgt)`, disabled: !available };
+      }),
+    [],
   );
 
   return (
     <section className="order-3 space-y-4">
+      <div className="space-y-3">
+        <SectionLabel>Optimieren</SectionLabel>
+        <div className="flex flex-col gap-3 md:flex-row md:items-end">
+          <div className="w-full md:flex-1">
+            <Dropdown
+              label="Ziel"
+              value={goal}
+              onChange={(event) => handleGoalChange(event.target.value as UseCaseId)}
+              options={goalOptions}
+              helperText={goalUseCase?.question}
+            />
+          </div>
+          <Button
+            label="Optimieren"
+            variant="primary"
+            icon={<Sparkles />}
+            onClick={() => goalObjective && optimization.start(goalObjective)}
+            disabled={optimizationRunning || mode !== 'KNOWN'}
+          />
+        </div>
+        {mode !== 'KNOWN' && (
+          <p className="text-sm text-muted-foreground">Optimieren ist nur mit bekannten Maßnahmen möglich.</p>
+        )}
+        {goalUseCase && goalObjective && goalState.status !== 'idle' && (
+          <OptimizationCard
+            useCase={goalUseCase}
+            mode={mode}
+            state={goalState}
+            viewPeriodYears={viewPeriodYears}
+            onStart={() => optimization.start(goalObjective)}
+            onApplyPlacements={onApplyPlacements}
+          />
+        )}
+      </div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <SectionLabel>Auswertungen</SectionLabel>
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -319,26 +388,11 @@ export function AnalysisPanel({
           })}
         </div>
       ))}
-      {cards.length === 0 && optimizationUseCases.length === 0 ? (
+      {cards.length === 0 ? (
         <p className="text-sm text-muted-foreground">Wähle oben eine Auswertung aus.</p>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {cards.map((card) => <Card key={card.id} card={card} />)}
-          {optimizationUseCases.map((useCase) => {
-            const objective = OPTIMIZATION_OBJECTIVE[useCase.id];
-            if (!objective) return null;
-            return (
-              <OptimizationCard
-                key={useCase.id}
-                useCase={useCase}
-                mode={mode}
-                state={optimization.stateFor(objective)}
-                viewPeriodYears={viewPeriodYears}
-                onStart={() => optimization.start(objective)}
-                onApplyPlacements={onApplyPlacements}
-              />
-            );
-          })}
         </div>
       )}
     </section>
