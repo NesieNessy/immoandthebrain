@@ -5,7 +5,7 @@ import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
 import { addMonths, runRentCalculator, CALCULATION_HORIZON_MONTHS, CALCULATION_HORIZON_YEARS, DEFAULT_VIEW_PERIOD_YEARS, type CalculatorMode, type CalculatorParams, type ModernizationPlanRow, type PlacementMode, type RentIndexSource, type RentIncrease558Row, type RentTimelineRow } from '@/lib/detailCheck/rentCalculator';
-import { buildEffectiveCalculatorParams, overridesFromParams, type CalculatorOverrides, type CalculatorParameterFields } from '@/lib/detailCheck/calculatorParamNormalization';
+import { buildEffectiveCalculatorParams, buildRestoreRequestBody, overridesFromParams, type CalculatorOverrides, type CalculatorParameterFields } from '@/lib/detailCheck/calculatorParamNormalization';
 import { costForCase, type RenovationCase, type RenovationTiming } from '@/lib/detailCheck/renovation';
 import { Check, ChevronDown, ChevronUp, LineChart, Loader2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -1540,7 +1540,7 @@ function CalculatorContent() {
    * was already running or done. They ended up on the calculator with their
    * changes silently written to the earlier steps.
    */
-  const [applyPhase, setApplyPhase] = useState<'ASK' | 'SAVING'>('ASK');
+  const [applyPhase, setApplyPhase] = useState<'ASK' | 'SAVING' | 'DISCARDING'>('ASK');
   /**
    * Resolver for the "Änderungen übernehmen?" dialog, so a caller that must
    * decide whether navigation may proceed — `beforeStepChange` returns a
@@ -1556,6 +1556,17 @@ function CalculatorContent() {
   const applyDecisionRef = useRef<((proceed: boolean) => void) | null>(null);
   const [upstreamResetNotice, setUpstreamResetNotice] = useState(false);
   const lastLiveCalculationRef = useRef('');
+  /**
+   * The server-confirmed response from this visit's initial GET, captured
+   * once and never overwritten. `data` moves forward with every autosave
+   * (`recalc` with `apply: false` persists into the calculator's own row,
+   * not just the preview), so it can no longer answer "what did the
+   * calculator row look like when this visit started" once anything has
+   * been saved — that's exactly what "Änderungen verwerfen und weiter"
+   * needs restore to, without touching the upstream renovation/financing
+   * tables (see `discardAndProceed`).
+   */
+  const initialDataRef = useRef<CalculatorResponse | null>(null);
   const resetRentPlanRef = useRef(false);
   type RecalcCall = { nextMode: CalculatorMode; navigate: boolean; optimize: boolean; overrides?: Partial<CalculatorOverrides>; apply: boolean };
   /**
@@ -1731,6 +1742,47 @@ function CalculatorContent() {
     setOpenTables((current) => ({ ...current, [table]: !current[table] }));
   };
 
+  /**
+   * Applies a server response's `params` to every piece of form/override
+   * state that mirrors it. Shared by the initial load and by
+   * `discardAndProceed`'s restore POST — both are "adopt this
+   * server-confirmed snapshot as the current state" and must stay in sync,
+   * or a field the load effect knows to reset could be missed on discard.
+   */
+  const applyServerSnapshot = (loaded: CalculatorResponse) => {
+    setData(loaded);
+    setStartYyyymm(loaded.params.startYyyymm);
+    setMonthlyRentStart(valueString(loaded.params.monthlyRentStart));
+    setRentIndexPerM2(valueString(loaded.params.rentIndexPerM2));
+    setRentIndexSource(loaded.params.rentIndexSource ?? loaded.rentIndexSource ?? 'AUTOMATIC');
+    setLast558Date(loaded.params.last558Date ?? '');
+    setLast558RentBefore(valueString(loaded.params.last558RentBefore));
+    setLast559Date(loaded.params.last559Date ?? '');
+    setLast559MonthlyDelta(valueString(loaded.params.last559MonthlyDelta));
+    setRentIndexGrowthPercent(valueString(loaded.params.rentIndexGrowthPercent));
+    setViewPeriodYears(loaded.params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS);
+    setRentIncreaseIntervalMonths(loaded.params.rentIncreaseIntervalMonths ?? 15);
+    setRentIncreaseUtilizationPercent(loaded.params.rentIncreaseUtilizationPercent ?? 100);
+    setMode(loaded.params.mode);
+    setPlacementMode(loaded.placementMode ?? loaded.params.placementMode ?? 'DEFAULT');
+    setEquityIncluded(loaded.params.equityIncluded === true);
+    setPendingOverrides(overridesFromParams(loaded.params));
+    lastLiveCalculationRef.current = JSON.stringify({
+      startYyyymm: loaded.params.startYyyymm,
+      monthlyRentStart: valueString(loaded.params.monthlyRentStart),
+      rentIndexPerM2: valueString(loaded.params.rentIndexPerM2),
+      rentIndexSource: loaded.params.rentIndexSource ?? loaded.rentIndexSource ?? 'AUTOMATIC',
+      last558Date: loaded.params.last558Date ?? '',
+      last558RentBefore: valueString(loaded.params.last558RentBefore),
+      last559Date: loaded.params.last559Date ?? '',
+      last559MonthlyDelta: valueString(loaded.params.last559MonthlyDelta),
+      rentIndexGrowthPercent: valueString(loaded.params.rentIndexGrowthPercent),
+      viewPeriodYears: loaded.params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS,
+      rentIncreaseIntervalMonths: loaded.params.rentIncreaseIntervalMonths ?? 15,
+      rentIncreaseUtilizationPercent: loaded.params.rentIncreaseUtilizationPercent ?? 100,
+    });
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1742,38 +1794,9 @@ function CalculatorContent() {
         if (!res.ok) throw new Error(await res.text());
         const loaded = await res.json() as CalculatorResponse;
         if (cancelled) return;
-        setData(loaded);
-        setStartYyyymm(loaded.params.startYyyymm);
-        setMonthlyRentStart(valueString(loaded.params.monthlyRentStart));
-        setRentIndexPerM2(valueString(loaded.params.rentIndexPerM2));
-        setRentIndexSource(loaded.params.rentIndexSource ?? loaded.rentIndexSource ?? 'AUTOMATIC');
-        setLast558Date(loaded.params.last558Date ?? '');
-        setLast558RentBefore(valueString(loaded.params.last558RentBefore));
-        setLast559Date(loaded.params.last559Date ?? '');
-        setLast559MonthlyDelta(valueString(loaded.params.last559MonthlyDelta));
-        setRentIndexGrowthPercent(valueString(loaded.params.rentIndexGrowthPercent));
-        setViewPeriodYears(loaded.params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS);
-        setRentIncreaseIntervalMonths(loaded.params.rentIncreaseIntervalMonths ?? 15);
-        setRentIncreaseUtilizationPercent(loaded.params.rentIncreaseUtilizationPercent ?? 100);
-        setMode(loaded.params.mode);
-        setPlacementMode(loaded.placementMode ?? loaded.params.placementMode ?? 'DEFAULT');
-        setEquityIncluded(loaded.params.equityIncluded === true);
-        setPendingOverrides(overridesFromParams(loaded.params));
+        applyServerSnapshot(loaded);
+        initialDataRef.current = loaded;
         setUpstreamResetNotice(loaded.overridesResetByUpstreamChange === true);
-        lastLiveCalculationRef.current = JSON.stringify({
-          startYyyymm: loaded.params.startYyyymm,
-          monthlyRentStart: valueString(loaded.params.monthlyRentStart),
-          rentIndexPerM2: valueString(loaded.params.rentIndexPerM2),
-          rentIndexSource: loaded.params.rentIndexSource ?? loaded.rentIndexSource ?? 'AUTOMATIC',
-          last558Date: loaded.params.last558Date ?? '',
-          last558RentBefore: valueString(loaded.params.last558RentBefore),
-          last559Date: loaded.params.last559Date ?? '',
-          last559MonthlyDelta: valueString(loaded.params.last559MonthlyDelta),
-          rentIndexGrowthPercent: valueString(loaded.params.rentIndexGrowthPercent),
-          viewPeriodYears: loaded.params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS,
-          rentIncreaseIntervalMonths: loaded.params.rentIncreaseIntervalMonths ?? 15,
-          rentIncreaseUtilizationPercent: loaded.params.rentIncreaseUtilizationPercent ?? 100,
-        });
       } catch (loadError) {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : 'Kalkulator konnte nicht geladen werden.');
       } finally {
@@ -2030,6 +2053,62 @@ function CalculatorContent() {
     setApplyPhase('ASK');
     setConfirmApplyOpen(true);
   });
+
+  /**
+   * "Änderungen verwerfen und weiter": the third way out of the apply dialog.
+   * Nothing from this visit's edits may survive — including whatever the
+   * debounced autosave already wrote into the calculator's own row, since
+   * `recalc` persists with `apply: false` on every ordinary edit, well
+   * before this dialog ever opens. Restoring means overwriting that row with
+   * the exact snapshot this visit started from (`initialDataRef`), sent
+   * through the same non-apply POST, so upstream renovation/financing tables
+   * are never touched — only "Übernehmen und weiter" is allowed to do that.
+   *
+   * Resolves the same way "Übernehmen und weiter" does: `true` tells
+   * whichever caller opened the dialog (`navigateWithConfirmation` or the
+   * stepper's `beforeStepChange`) that it may proceed to the target it
+   * already had in mind. This function never navigates itself.
+   */
+  const discardChangesAndProceed = async () => {
+    setApplyPhase('DISCARDING');
+    setError(null);
+    // Nothing scheduled or queued may fire after this point — it would
+    // reintroduce exactly what is being discarded.
+    cancelScheduledPersist();
+    queuedRecalcRef.current = null;
+    // Wait out a save already in flight rather than racing it: whichever
+    // POST lands second would win, and firing the restore concurrently with
+    // an autosave is the same double-transaction hazard `flushPendingSave`
+    // already guards against elsewhere.
+    while (isSavingRef.current) {
+      await new Promise((resolve) => window.setTimeout(resolve, 25));
+    }
+    queuedRecalcRef.current = null;
+    const initial = initialDataRef.current;
+    if (initial) {
+      overridesVersionRef.current += 1;
+      try {
+        const res = await authFetch('/api/detail-check/calculator', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildRestoreRequestBody(initial.params, quickCheckId, workflowId)),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const restored = await res.json() as CalculatorResponse;
+        applyServerSnapshot(restored);
+      } catch (discardError) {
+        setError(discardError instanceof Error ? discardError.message : 'Änderungen konnten nicht verworfen werden.');
+        setApplyPhase('ASK');
+        return;
+      }
+    }
+    resetRentPlanRef.current = false;
+    setHasPendingChanges(false);
+    hasPendingChangesRef.current = false;
+    setConfirmApplyOpen(false);
+    applyDecisionRef.current?.(true);
+    applyDecisionRef.current = null;
+  };
 
   /**
    * The single gate every way of leaving this page goes through. Anything
@@ -2469,6 +2548,16 @@ function CalculatorContent() {
                   </p>
                 </div>
               </div>
+            ) : applyPhase === 'DISCARDING' ? (
+              <div className="flex items-start gap-3" aria-live="polite">
+                <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-primary" />
+                <div>
+                  <h2 className="text-lg font-medium">Änderungen werden verworfen…</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Der Kalkulator wird auf den letzten gespeicherten Stand zurückgesetzt. Gleich geht es weiter.
+                  </p>
+                </div>
+              </div>
             ) : (
               <>
                 <h2 className="text-lg font-medium">Änderungen übernehmen?</h2>
@@ -2486,7 +2575,7 @@ function CalculatorContent() {
                     Übernehmen fehlgeschlagen: {error}
                   </div>
                 )}
-                <div className="flex justify-end gap-2">
+                <div className="flex flex-wrap justify-end gap-2">
                   <button
                     className="rounded-md border border-border px-3 py-2"
                     onClick={() => {
@@ -2502,6 +2591,12 @@ function CalculatorContent() {
                     }}
                   >
                     Hier bleiben
+                  </button>
+                  <button
+                    className="rounded-md border border-border px-3 py-2 text-muted-foreground hover:text-foreground"
+                    onClick={() => void discardChangesAndProceed()}
+                  >
+                    Änderungen verwerfen und weiter
                   </button>
                   <button
                     className="rounded-md bg-primary px-3 py-2 font-medium text-primary-foreground"

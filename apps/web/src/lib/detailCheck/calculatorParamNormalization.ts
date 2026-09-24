@@ -159,6 +159,57 @@ export function overridesFromParams(params: CalculatorParams): CalculatorOverrid
   };
 }
 
+/**
+ * Rebuilds the exact POST body the calculator page's `recalc` would send for
+ * a request whose every field equals the given (already server-normalized)
+ * `params` — used to restore the calculator row to a prior server-confirmed
+ * state (the "Änderungen verwerfen und weiter" flow) by writing that
+ * snapshot straight back, with `apply: false` so upstream renovation/
+ * financing tables are never touched.
+ *
+ * Reads only from `params` — never from any client-side form/override state —
+ * so the result is exactly what the server produced for that snapshot,
+ * regardless of what the user has typed since. `rentIndexPerM2` mirrors
+ * `recalc`'s own AUTOMATIC/MANUAL branch: null unless the snapshot was
+ * itself in MANUAL mode.
+ */
+export function buildRestoreRequestBody(
+  params: CalculatorParams,
+  quickCheckId: string | null,
+  workflowId: string | null,
+): Record<string, unknown> {
+  return {
+    quickCheckId,
+    workflowId,
+    startYyyymm: params.startYyyymm,
+    monthlyRentStart: params.monthlyRentStart,
+    rentIndexPerM2: params.rentIndexSource === 'AUTOMATIC' ? null : params.rentIndexPerM2,
+    rentIndexSource: params.rentIndexSource,
+    last558Date: params.last558Date ?? null,
+    last558RentBefore: params.last558Date ? params.last558RentBefore ?? null : null,
+    rentIndexGrowthPercent: params.rentIndexGrowthPercent ?? null,
+    viewPeriodYears: params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS,
+    last559Date: params.last559Date ?? null,
+    last559MonthlyDelta: params.last559MonthlyDelta,
+    rentIncreaseIntervalMonths: params.rentIncreaseIntervalMonths,
+    rentIncreaseUtilizationPercent: params.rentIncreaseUtilizationPercent,
+    mode: params.mode,
+    optimize: false,
+    financingInterestRateOverride: params.financingInterestRateOverride ?? null,
+    interestRateOverride: params.interestRateOverride ?? null,
+    equityIncluded: params.equityIncluded === true,
+    taxRate: params.taxRate ?? 0.42,
+    taxableLossesOffsettable: params.taxableLossesOffsettable === true,
+    modernizationPlacements: params.modernizationPlacements ?? {},
+    modernizationCostOverrides: params.modernizationCostOverrides ?? {},
+    renovationTimingOverrides: params.renovationTimingOverrides ?? {},
+    excludedModernizationIds: params.excludedModernizationIds ?? [],
+    resetRentIncreasePlan: false,
+    rentIncreaseOverrides: params.rentIncreaseOverrides ?? {},
+    apply: false,
+  };
+}
+
 /** The Parameter panel's editable fields, in the same string/number shape the page's form state holds them in. */
 export type CalculatorParameterFields = {
   startYyyymm: string;

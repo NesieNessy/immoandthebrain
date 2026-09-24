@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildEffectiveCalculatorParams,
+  buildRestoreRequestBody,
   clampInterestRate,
   normalizeLast558RentBefore,
   normalizeRecentMonth,
@@ -440,5 +441,47 @@ describe('SCRUM-96 Schnitt 1 inputs', () => {
     expect(result.rentIndexGrowthPercent).toBe(3.5);
     expect(result.last558RentBefore).toBe(900);
     expect(result.viewPeriodYears).toBe(20);
+  });
+});
+
+describe('buildRestoreRequestBody', () => {
+  it('mirrors the snapshot params exactly, with apply/optimize/resetRentIncreasePlan forced off', () => {
+    const body = buildRestoreRequestBody(fixtureParams, 'qc-1', null);
+
+    expect(body).toMatchObject({
+      quickCheckId: 'qc-1',
+      workflowId: null,
+      startYyyymm: fixtureParams.startYyyymm,
+      monthlyRentStart: fixtureParams.monthlyRentStart,
+      rentIndexSource: fixtureParams.rentIndexSource,
+      mode: fixtureParams.mode,
+      rentIncreaseIntervalMonths: fixtureParams.rentIncreaseIntervalMonths,
+      rentIncreaseUtilizationPercent: fixtureParams.rentIncreaseUtilizationPercent,
+      optimize: false,
+      resetRentIncreasePlan: false,
+      apply: false,
+    });
+  });
+
+  it('nulls out rentIndexPerM2 when the snapshot was AUTOMATIC, even if a value happens to be stored', () => {
+    const params = { ...fixtureParams, rentIndexSource: 'AUTOMATIC' as const, rentIndexPerM2: 12.34 };
+    expect(buildRestoreRequestBody(params, null, null).rentIndexPerM2).toBeNull();
+  });
+
+  it('keeps rentIndexPerM2 when the snapshot was MANUAL', () => {
+    const params = { ...fixtureParams, rentIndexSource: 'MANUAL' as const, rentIndexPerM2: 12.34 };
+    expect(buildRestoreRequestBody(params, null, null).rentIndexPerM2).toBe(12.34);
+  });
+
+  it('nulls last558RentBefore whenever last558Date is absent, regardless of a stale stored value', () => {
+    const params = { ...fixtureParams, last558Date: null, last558RentBefore: 900 };
+    expect(buildRestoreRequestBody(params, null, null).last558RentBefore).toBeNull();
+  });
+
+  it('never sets apply to true', () => {
+    // Guards the whole point of the discard flow: this body must never write
+    // back into the renovation/financing tables.
+    const body = buildRestoreRequestBody(fixtureParams, null, null);
+    expect(body.apply).toBe(false);
   });
 });
