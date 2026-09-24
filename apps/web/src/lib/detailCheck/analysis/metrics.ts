@@ -184,30 +184,37 @@ function npvAt(result: RentCalculatorResult, viewPeriodYears: number, equity: nu
  * EK-Rendite (IRR p.a.) über B, unabhängig vom Schalter „Eigenkapital
  * berücksichtigen": −equityAmount zu Beginn, monatliche afterTaxCashflow-
  * Zahlungen, plus Endwert im letzten Monat von B. Bisektion auf den
- * Monatszins in [-0.99, 1]; null wenn EK ≤ 0 oder kein Vorzeichenwechsel.
+ * Monatszins in [-0.5, 1]; null wenn EK ≤ 0, kein Vorzeichenwechsel oder eine
+ * NPV nicht endlich ist (z. B. gemischtes Vorzeichen bei stark negativen
+ * Zinsen — die untere Grenze war früher -0.99, wo 1/0.01^180 zu Infinity
+ * überläuft).
  */
 export function equityIrr(result: RentCalculatorResult, viewPeriodYears: number): number | null {
   const equity = result.params.equityAmount ?? 0;
   if (equity <= 0) return null;
 
-  let low = -0.99;
+  let low = -0.5;
   let high = 1;
   const npvLow = npvAt(result, viewPeriodYears, equity, low);
   const npvHigh = npvAt(result, viewPeriodYears, equity, high);
+  if (!Number.isFinite(npvLow) || !Number.isFinite(npvHigh)) return null;
   if ((npvLow > 0 && npvHigh > 0) || (npvLow < 0 && npvHigh < 0)) return null;
 
   let mid = 0;
   let npvMid = npvAt(result, viewPeriodYears, equity, mid);
+  if (!Number.isFinite(npvMid)) return null;
   for (let i = 0; i < 200 && Math.abs(npvMid) >= 0.01; i += 1) {
     mid = (low + high) / 2;
     npvMid = npvAt(result, viewPeriodYears, equity, mid);
+    if (!Number.isFinite(npvMid)) return null;
     if ((npvMid > 0) === (npvLow > 0)) {
       low = mid;
     } else {
       high = mid;
     }
   }
-  return Math.pow(1 + mid, 12) - 1;
+  const irr = Math.pow(1 + mid, 12) - 1;
+  return Number.isFinite(irr) ? irr : null;
 }
 
 /**

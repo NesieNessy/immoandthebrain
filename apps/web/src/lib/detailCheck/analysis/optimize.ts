@@ -1,22 +1,41 @@
 import { DEFAULT_VIEW_PERIOD_YEARS, runRentCalculator, type CalculatorParams } from '../rentCalculator';
 import type { RenovationCase } from '../renovation';
+import { equityIrr, planRoi } from './metrics';
 import { OBJECTIVES, compareScores, type ObjectiveId } from './objectives';
+import { optimizeSelection, type SelectionGoal } from './selection';
 
 /**
- * Ein Optimierungsvorschlag (SCRUM-96, Schnitt 3). Rechnet den heutigen Plan
+ * Ein Optimierungsvorschlag (SCRUM-96, Schnitt 3/4). Rechnet den heutigen Plan
  * und den optimierten Plan und liefert die Zeitpunkte zum Übernehmen — die
  * Planung selbst ändert sich erst, wenn die Seite sie übernimmt.
  */
 
-export type KeyFigures = { breakEven: string | null; sustainablyPositiveFrom: string | null; rentSumInView: number; cashflowAtViewEnd: number };
+export type OptimizationGoal = ObjectiveId | SelectionGoal | 'RECOMMENDATION';
+
+export type KeyFigures = {
+  breakEven: string | null;
+  sustainablyPositiveFrom: string | null;
+  rentSumInView: number;
+  cashflowAtViewEnd: number;
+  /** Kumulierter Cashflow nach Steuern am Ende des Betrachtungszeitraums (`metrics.endingCashflow`); für die Empfehlung. */
+  endingCashflow: number;
+  equityIrr: number | null;
+  /** Nur für ROI-Ziele/Vorschläge gefüllt — sonst `null` (`keyFigures` allein kennt die "ohne"-Basis nicht). */
+  roi: number | null;
+};
 export type PlacementChange = { id: string; title: string; from: string; to: string };
 export type OptimizationProposal = {
-  objective: ObjectiveId;
+  goal: OptimizationGoal;
   placements: Record<string, string>;
   before: KeyFigures;
   after: KeyFigures;
   changes: PlacementChange[];
   improved: boolean;
+  excludedModernizationIds: string[];
+  excludedTitles: string[];
+  reasoning?: string[];
+  chosenGoal?: OptimizationGoal;
+  tooMany?: boolean;
 };
 
 type Result = ReturnType<typeof runRentCalculator>;
@@ -35,6 +54,9 @@ export function keyFigures(result: Result, viewPeriodYears: number): KeyFigures 
     sustainablyPositiveFrom: result.sustainablyPositiveFrom,
     rentSumInView: Math.round(inView.reduce((sum, row) => sum + row.income, 0) * 100) / 100,
     cashflowAtViewEnd: inView[inView.length - 1]?.cumulativeCashflow ?? 0,
+    endingCashflow: result.metrics.endingCashflow,
+    equityIrr: equityIrr(result, viewPeriodYears),
+    roi: null,
   };
 }
 
@@ -54,7 +76,15 @@ function scoreOf(objective: ObjectiveId, figures: KeyFigures, result: Result, st
   });
 }
 
-export function runOptimization(params: CalculatorParams, cases: RenovationCase[], objective: ObjectiveId): OptimizationProposal | null {
+function changesOf(current: Result, replay: Result): PlacementChange[] {
+  const currentMonth = new Map(current.modernizationPlan.map((row) => [row.id, row.effectiveYyyymm]));
+  return replay.modernizationPlan
+    .filter((row) => currentMonth.has(row.id) && currentMonth.get(row.id) !== row.effectiveYyyymm)
+    .map((row) => ({ id: row.id, title: row.title, from: currentMonth.get(row.id) ?? '', to: row.effectiveYyyymm }));
+}
+
+/** Optimierung für ein Zeitpunkt-Ziel (`ObjectiveId`) — unverändert aus Schnitt 3. */
+function runObjectiveGoal(params: CalculatorParams, cases: RenovationCase[], objective: ObjectiveId): OptimizationProposal | null {
   if (params.mode !== 'KNOWN') return null;
   const viewPeriodYears = params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS;
   const current = runRentCalculator(params, cases);
@@ -69,17 +99,102 @@ export function runOptimization(params: CalculatorParams, cases: RenovationCase[
 
   const before = keyFigures(current, viewPeriodYears);
   const after = keyFigures(replay, viewPeriodYears);
-  const currentMonth = new Map(current.modernizationPlan.map((row) => [row.id, row.effectiveYyyymm]));
-  const changes = replay.modernizationPlan
-    .filter((row) => currentMonth.get(row.id) !== row.effectiveYyyymm)
-    .map((row) => ({ id: row.id, title: row.title, from: currentMonth.get(row.id) ?? '', to: row.effectiveYyyymm }));
+  const changes = changesOf(current, replay);
 
   return {
-    objective,
+    goal: objective,
     placements,
     before,
     after,
     changes,
     improved: compareScores(scoreOf(objective, after, replay, params.startYyyymm), scoreOf(objective, before, current, params.startYyyymm)) < 0,
+    excludedModernizationIds: [],
+    excludedTitles: [],
   };
+}
+
+/** Auswahl-Ziel (ROI / EK-Rendite, SCRUM-96 Schnitt 4): sucht über Ausschluss-Teilmengen, siehe selection.ts. */
+function runSelectionGoal(params: CalculatorParams, cases: RenovationCase[], goal: SelectionGoal): OptimizationProposal | null {
+  if (params.mode !== 'KNOWN') return null;
+  const viewPeriodYears = params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS;
+  const current = runRentCalculator(params, cases);
+  if (current.modernizationPlan.length === 0) return null;
+
+  const selection = optimizeSelection(params, cases, goal);
+  if (selection === null) return null;
+
+  const before = keyFigures(current, viewPeriodYears);
+
+  if ('tooMany' in selection) {
+    return {
+      goal,
+      placements: {},
+      before,
+      after: before,
+      changes: [],
+      improved: false,
+      excludedModernizationIds: [],
+      excludedTitles: [],
+      tooMany: true,
+    };
+  }
+
+  const baseExcluded = params.excludedModernizationIds ?? [];
+  const allExcluded = [...baseExcluded, ...selection.excludedModernizationIds];
+  const withoutAny = runRentCalculator(
+    {
+      ...params,
+      placementMode: 'DEFAULT',
+      modernizationPlacements: undefined,
+      rentIncreaseOverrides: undefined,
+      rentIncreasePlan: undefined,
+      excludedModernizationIds: [...baseExcluded, ...current.modernizationPlan.map((row) => row.id)],
+    },
+    cases,
+  );
+  const replay = runRentCalculator(
+    {
+      ...params,
+      placementMode: 'DEFAULT',
+      modernizationPlacements: selection.placements,
+      rentIncreaseOverrides: undefined,
+      rentIncreasePlan: undefined,
+      excludedModernizationIds: allExcluded,
+    },
+    cases,
+  );
+
+  const goalMetric = (result: Result) => (goal === 'MAX_ROI' ? planRoi(result, withoutAny, viewPeriodYears) : equityIrr(result, viewPeriodYears));
+  const after: KeyFigures = { ...keyFigures(replay, viewPeriodYears), roi: goal === 'MAX_ROI' ? goalMetric(replay) : null };
+  const beforeWithMetric: KeyFigures = { ...before, roi: goal === 'MAX_ROI' ? goalMetric(current) : null };
+
+  const beforeScore = goalMetric(current);
+  const afterScore = goalMetric(replay);
+  const improved = beforeScore == null ? afterScore != null : afterScore != null && afterScore > beforeScore + 1e-9;
+
+  const titleById = new Map(cases.map((item) => [item.id, item.massnahme]));
+  const excludedTitles = selection.excludedModernizationIds.map((id) => titleById.get(id) ?? id);
+
+  return {
+    goal,
+    placements: selection.placements,
+    before: beforeWithMetric,
+    after,
+    changes: changesOf(current, replay),
+    improved,
+    excludedModernizationIds: selection.excludedModernizationIds,
+    excludedTitles,
+  };
+}
+
+/** Zentraler Einstieg (SCRUM-96, Schnitt 4): Zeitpunkt-Ziele, Auswahl-Ziele. `RECOMMENDATION` läuft nur über `recommend`. */
+export function runGoal(params: CalculatorParams, cases: RenovationCase[], goal: OptimizationGoal): OptimizationProposal | null {
+  if (goal === 'MAX_ROI' || goal === 'MAX_EQUITY_IRR') return runSelectionGoal(params, cases, goal);
+  if (goal === 'RECOMMENDATION') return null;
+  return runObjectiveGoal(params, cases, goal);
+}
+
+/** Dünner Wrapper für Bestandscode/-tests (Schnitt 3): `objective` hieß früher das Feld, jetzt `goal`. */
+export function runOptimization(params: CalculatorParams, cases: RenovationCase[], objective: ObjectiveId): OptimizationProposal | null {
+  return runGoal(params, cases, objective);
 }

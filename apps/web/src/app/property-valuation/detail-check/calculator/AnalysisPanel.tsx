@@ -22,7 +22,9 @@ const BOLD_ROW_BY_OBJECTIVE: Record<ObjectiveId, keyof KeyFigures> = {
 };
 
 function OptimizationTable({ proposal, viewPeriodYears }: { proposal: OptimizationProposal; viewPeriodYears: number }) {
-  const boldKey = BOLD_ROW_BY_OBJECTIVE[proposal.objective];
+  // useOptimization only produces proposals for ObjectiveId goals (Schnitt 3 wiring); wiring the new
+  // ROI/EK-Rendite/Empfehlung goals into this table is SCRUM-96 Schnitt 4 Task 4, not this cast.
+  const boldKey = BOLD_ROW_BY_OBJECTIVE[proposal.goal as ObjectiveId];
   const rows: { key: keyof KeyFigures; label: string; format: (figures: KeyFigures) => string }[] = [
     { key: 'breakEven', label: 'Break-even', format: (f) => formatMonth(f.breakEven) },
     { key: 'sustainablyPositiveFrom', label: 'Cashflow dauerhaft positiv ab', format: (f) => formatMonth(f.sustainablyPositiveFrom) },

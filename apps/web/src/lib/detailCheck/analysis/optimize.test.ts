@@ -24,6 +24,7 @@ describe('runOptimization', () => {
     const params = calculatorParams();
     const proposal = runOptimization(params, cases, 'MAX_RENT_IN_VIEW')!;
     expect(proposal.before).toEqual(keyFigures(runRentCalculator(params, cases), 15));
+    expect(proposal.goal).toBe('MAX_RENT_IN_VIEW');
     for (const change of proposal.changes) expect(change.from).not.toBe(change.to);
     expect(proposal.changes.every((change) => proposal.placements[change.id] === change.to)).toBe(true);
   });

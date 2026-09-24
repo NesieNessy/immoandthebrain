@@ -152,6 +152,27 @@ describe('equity IRR and ROI', () => {
     expect(equityIrr(runRentCalculator(calculatorParams({ equityAmount: 0 }), []), 15)).toBeNull();
   });
 
+  it('IRR never returns NaN for mixed-sign cashflows, even at the extreme end of the search range', () => {
+    // Task 2 review finding: bisecting the monthly rate down to -0.99 makes
+    // 1/(1+rate)^180 overflow to Infinity, and Infinity combined with a
+    // negative terminal value can produce NaN instead of null. A large loan
+    // with a small debt service produces alternating-sign cashflows (heavy
+    // interest early, positive afterTaxCashflow later) that exercise this.
+    const params = calculatorParams({
+      equityAmount: 20000,
+      loanAmount: 280000,
+      interestRate: 6,
+      repaymentRate: 0.5,
+      monthlyDebtService: 500,
+      purchasePrice: 300000,
+      rentIndexGrowthPercent: -50,
+    });
+    const result = runRentCalculator(params, []);
+    const irr = equityIrr(result, 15);
+    expect(irr === null || Number.isFinite(irr)).toBe(true);
+    expect(Number.isNaN(irr)).toBe(false);
+  });
+
   it('ROI = ΔCF(B) / investment, null without investment', () => {
     const params = calculatorParams();
     const cases = [renovationCase('a', 10000)];
