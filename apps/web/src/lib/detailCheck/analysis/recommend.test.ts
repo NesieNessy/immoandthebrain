@@ -158,6 +158,7 @@ describe('recommend', () => {
 
     console.log(`recommend() with 4 planned measures took ${durationMs.toFixed(0)} ms`);
     expect(recommendation).not.toBeNull();
-    expect(durationMs).toBeLessThan(60000);
+    // No hard wall-clock assertion here: machine speed varies (CI runners can be
+    // several times slower than local), and the global `testTimeout` already guards against runaway/hanging runs.
   });
 });
