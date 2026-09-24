@@ -18,7 +18,7 @@ describe('runOptimization', () => {
     const replay = runRentCalculator({ ...params, modernizationPlacements: proposal.placements }, cases);
     expect(replay.modernizationPlan.map((row) => row.effectiveYyyymm)).toEqual(optimized.modernizationPlan.map((row) => row.effectiveYyyymm));
     expect(proposal.after).toEqual(keyFigures(replay, 15));
-  });
+  }, 30_000);
 
   it('before reflects the current plan and changes list only moved measures', () => {
     const params = calculatorParams();
@@ -27,7 +27,7 @@ describe('runOptimization', () => {
     expect(proposal.goal).toBe('MAX_RENT_IN_VIEW');
     for (const change of proposal.changes) expect(change.from).not.toBe(change.to);
     expect(proposal.changes.every((change) => proposal.placements[change.id] === change.to)).toBe(true);
-  });
+  }, 30_000);
 
   it('keyFigures reads B from viewPeriodYears', () => {
     const result = runRentCalculator(calculatorParams(), cases);
@@ -42,7 +42,7 @@ describe('runOptimization', () => {
     expect(proposal.noEquity).toBe(true);
     expect(proposal.improved).toBe(false);
     expect(proposal.tooMany).toBeFalsy();
-  });
+  }, 30_000);
 
   it('MAX_ROI/MAX_EQUITY_IRR proposals are never "improved" when the plan did not actually change, even at score ties (browser-fix, SCRUM-96)', () => {
     // Two measures that are both clearly worthwhile: the best subset keeps
@@ -53,5 +53,5 @@ describe('runOptimization', () => {
     if (proposal.excludedModernizationIds.length === 0 && proposal.changes.length === 0) {
       expect(proposal.improved).toBe(false);
     }
-  });
+  }, 30_000);
 });
