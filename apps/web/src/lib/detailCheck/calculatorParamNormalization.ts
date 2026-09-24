@@ -265,6 +265,7 @@ export function buildEffectiveCalculatorParams(
     serviceChargesNonAllocable: baseParams.serviceChargesNonAllocable,
     purchasePrice: baseParams.purchasePrice,
     totalInvestment: baseParams.totalInvestment,
+    renovationFinancedAmount: baseParams.renovationFinancedAmount,
     taxRate: normalizeTaxRate(overrides.taxRate),
     taxableLossesOffsettable: overrides.taxableLossesOffsettable === true,
     equityAmount: baseParams.equityAmount,

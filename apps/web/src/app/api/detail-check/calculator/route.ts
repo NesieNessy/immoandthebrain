@@ -316,6 +316,9 @@ async function loadContext(userId: string, workflowId: string, quickCheckId: str
     interestAdjustmentFactor: toNumber(financing?.interest_adjustment_factor ?? 1) || 1,
   });
   const selectedFinancing = selectedVariant === 'INDIVIDUAL' ? individualFinancing : offerFinancing;
+  const selectedRenovationFinancedAmount = selectedVariant === 'INDIVIDUAL'
+    ? toNumber(financing?.individual_renovation_costs ?? renovationFinancedAmount)
+    : toNumber(financing?.offer_renovation_costs ?? renovationFinancedAmount);
   const selectedEquity = selectedVariant === 'INDIVIDUAL'
     ? toNumber(financing?.individual_equity ?? 0)
     : toNumber(financing?.offer_equity ?? 0);
@@ -345,6 +348,7 @@ async function loadContext(userId: string, workflowId: string, quickCheckId: str
     monthlyAfa: buildingValue > 0 && afaPercent > 0 ? roundCurrency((buildingValue * (afaPercent / 100)) / 12) : 0,
     purchasePrice,
     totalInvestment: roundCurrency(selectedFinancing.totalCosts),
+    renovationFinancedAmount: selectedRenovationFinancedAmount,
     renovationCases,
   };
   // Derived from the values above rather than from `updated_at`: the wizard
@@ -406,6 +410,7 @@ function buildParams(
     || (savedParams.modernizationCostOverrides != null && Object.keys(savedParams.modernizationCostOverrides as object).length > 0)
     || (savedParams.renovationTimingOverrides != null && Object.keys(savedParams.renovationTimingOverrides as object).length > 0)
     || (savedParams.rentIncreaseOverrides != null && Object.keys(savedParams.rentIncreaseOverrides as object).length > 0)
+    || (Array.isArray(savedParams.excludedModernizationIds) && savedParams.excludedModernizationIds.length > 0)
   );
 
   return {
@@ -436,6 +441,12 @@ function buildParams(
     serviceChargesNonAllocable: context.serviceChargesNonAllocable,
     purchasePrice: context.purchasePrice,
     totalInvestment: context.totalInvestment,
+    renovationFinancedAmount: context.renovationFinancedAmount,
+    excludedModernizationIds: upstreamIsNewer
+      ? []
+      : (Array.isArray(savedParams.excludedModernizationIds)
+        ? savedParams.excludedModernizationIds.filter((id): id is string => typeof id === 'string')
+        : []),
     taxRate: normalizeTaxRate(savedParams.taxRate),
     taxableLossesOffsettable: savedParams.taxableLossesOffsettable === true,
     equityAmount: context.equityAmount,
@@ -544,6 +555,10 @@ export async function POST(request: Request) {
     serviceChargesNonAllocable: context.serviceChargesNonAllocable,
     purchasePrice: context.purchasePrice,
     totalInvestment: context.totalInvestment,
+    renovationFinancedAmount: context.renovationFinancedAmount,
+    excludedModernizationIds: Array.isArray(input.excludedModernizationIds)
+      ? input.excludedModernizationIds.filter((id: unknown): id is string => typeof id === 'string')
+      : [],
     taxRate: normalizeTaxRate(input.taxRate),
     taxableLossesOffsettable: input.taxableLossesOffsettable === true,
     equityAmount: context.equityAmount,

@@ -1859,6 +1859,7 @@ function CalculatorContent() {
           modernizationPlacements: effectiveOverrides.modernizationPlacements,
           modernizationCostOverrides: effectiveOverrides.modernizationCostOverrides,
           renovationTimingOverrides: effectiveOverrides.renovationTimingOverrides,
+          excludedModernizationIds: effectiveOverrides.excludedModernizationIds ?? [],
           resetRentIncreasePlan: optimize || resetRentPlanRef.current,
           rentIncreaseOverrides: optimize || resetRentPlanRef.current ? {} : effectiveOverrides.rentIncreaseOverrides,
           apply,

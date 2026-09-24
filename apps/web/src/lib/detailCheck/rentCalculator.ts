@@ -100,6 +100,15 @@ export type CalculatorParams = {
    * step — how a selection proposal (SCRUM-96) is shown before it is applied.
    */
   excludedModernizationIds?: string[];
+  /**
+   * Betrag der Sanierung, der im Finanzierungsschritt mitfinanziert ist
+   * (Kontext `renovationFinancedAmount` bzw. `financing.*_renovation_costs`
+   * der gewählten Variante — derselbe Wert, der in `computeFinancing` als
+   * `renovationCosts` für die gewählte Variante eingeht). Bestimmt, welcher
+   * Anteil der Kosten ausgeschlossener Maßnahmen `financingAfterExclusions`
+   * aus Darlehen/Gesamtinvestition herausrechnet.
+   */
+  renovationFinancedAmount?: number;
   rentIncreasePlan?: RentIncreasePlanRow[];
   rentIncreaseOverrides?: Record<string, { effectiveYyyymm?: string; monthlyDelta?: number }>;
   mode: CalculatorMode;
@@ -217,6 +226,32 @@ function capRoomAt(params: CalculatorParams, planned: ModernizationPlanRow[], ef
 /** Whether a renovation case takes part in the plan: selected, priced, and not excluded by a proposal. */
 function isPlannedCase(params: CalculatorParams, item: RenovationCase): boolean {
   return item.selected && Boolean(item.ai) && !(params.excludedModernizationIds ?? []).includes(item.id);
+}
+
+/**
+ * Ausgeschlossene Maßnahmen entfallen auch in der Finanzierung: der
+ * mitfinanzierte Anteil ihrer Kosten verringert Darlehen und Gesamtinvestition,
+ * die Rate sinkt im selben Verhältnis wie das Darlehen (Annuität ist linear im Darlehen).
+ */
+export function financingAfterExclusions(
+  params: CalculatorParams,
+  cases: RenovationCase[],
+): Pick<CalculatorParams, 'loanAmount' | 'monthlyDebtService' | 'totalInvestment'> {
+  const base = { loanAmount: params.loanAmount, monthlyDebtService: params.monthlyDebtService, totalInvestment: params.totalInvestment };
+  const excluded = new Set(params.excludedModernizationIds ?? []);
+  const financed = Math.max(0, params.renovationFinancedAmount ?? 0);
+  if (excluded.size === 0 || financed === 0) return base;
+  const planned = cases.filter((item) => isPlannedCase({ ...params, excludedModernizationIds: [] }, item));
+  const plannedCost = planned.reduce((sum, item) => sum + costForCase(item), 0);
+  if (plannedCost <= 0) return base;
+  const share = Math.min(1, financed / plannedCost);
+  const removed = planned.filter((item) => excluded.has(item.id)).reduce((sum, item) => sum + costForCase(item), 0) * share;
+  const loanAmount = roundCurrency(Math.max(0, params.loanAmount - removed));
+  return {
+    loanAmount,
+    monthlyDebtService: params.loanAmount > 0 ? roundCurrency(params.monthlyDebtService * loanAmount / params.loanAmount) : params.monthlyDebtService,
+    totalInvestment: roundCurrency(Math.max(0, params.totalInvestment - removed)),
+  };
 }
 
 function buildPlanFromPlacements(
@@ -789,6 +824,9 @@ function optimizeKnownModernizations(
 }
 
 export function runRentCalculator(params: CalculatorParams, renovationCases: RenovationCase[]) {
+  if ((params.excludedModernizationIds ?? []).length > 0) {
+    params = { ...params, ...financingAfterExclusions(params, renovationCases) };
+  }
   const denseMarket = isDenseMarket(params.city);
   const capPercent = denseMarket ? 0.15 : 0.2;
   const rentPerM2 = params.livingAreaM2 > 0 ? params.monthlyRentStart / params.livingAreaM2 : 0;
