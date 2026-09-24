@@ -44,7 +44,7 @@ describe('recommend', () => {
       expect(sentence.length).toBeGreaterThan(0);
       expect(sentence.trim().endsWith('.')).toBe(true);
     }
-  }, 30000);
+  });
 
   it('never picks MAX_EQUITY_IRR when there is no equity, and improved reflects the recommendation\'s own criterion (browser-fix, SCRUM-96)', () => {
     // Reproduces the browser workflow: several measures, equityAmount 0. The
@@ -80,7 +80,7 @@ describe('recommend', () => {
     } else {
       expect(recommendation!.improved).toBe(false);
     }
-  }, 60000);
+  });
 
   it('reasoning always covers break-even, cumulative cashflow and (if present) EK-Rendite, plus one deduplicated sentence per excluded measure (browser-fix, SCRUM-96)', () => {
     // Two measures share a title on purpose, to exercise the "(2×)" dedup —
@@ -115,7 +115,7 @@ describe('recommend', () => {
     if (measureSentences.length === 1 && recommendation!.excludedTitles.filter((t) => t === 'Neue Bodenbeläge (Parkett/Vinyl)').length === 2) {
       expect(measureSentences[0]).toContain('(2×)');
     }
-  }, 60000);
+  });
 
   it('picks NO_MODERNIZATION when none of the planned measures are profitable (SCRUM-96)', () => {
     // Deliberately expensive, low-return measures: costs the modernization
@@ -134,7 +134,7 @@ describe('recommend', () => {
     expect(recommendation!.excludedModernizationIds).toEqual(['a']);
     expect(recommendation!.reasoning).toBeDefined();
     expect(recommendation!.reasoning![0]).toBe('Rein finanziell lohnt sich keine der geplanten Maßnahmen im Betrachtungszeitraum.');
-  }, 30000);
+  });
 
   it('does not pick NO_MODERNIZATION when a measure is profitable (SCRUM-96)', () => {
     // Same "worth it" fixture as metrics.test.ts: a modest modernization that
@@ -146,7 +146,7 @@ describe('recommend', () => {
     const recommendation = recommend(params, cases);
     expect(recommendation).not.toBeNull();
     expect(recommendation!.chosenGoal).not.toBe('NO_MODERNIZATION');
-  }, 30000);
+  });
 
   it('measures recommend() runtime for 4 planned measures (report timing, no hard perf assertion beyond the timeout)', () => {
     const cases = [renovationCase('a', 8000), renovationCase('b', 15000), renovationCase('c', 25000), renovationCase('d', 45000)];
@@ -159,5 +159,5 @@ describe('recommend', () => {
     console.log(`recommend() with 4 planned measures took ${durationMs.toFixed(0)} ms`);
     expect(recommendation).not.toBeNull();
     expect(durationMs).toBeLessThan(60000);
-  }, 60000);
+  });
 });

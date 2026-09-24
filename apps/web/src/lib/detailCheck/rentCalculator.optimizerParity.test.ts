@@ -23,5 +23,5 @@ describe('optimizer — parity with the frozen pre-registry result', () => {
     expect(result.modernizationPlan).toEqual(expected.modernizationPlan);
     expect(result.breakEven).toBe(expected.breakEven);
     expect(result.metrics.endingCashflow).toBe(expected.endingCashflow);
-  }, 120_000);
+  });
 });

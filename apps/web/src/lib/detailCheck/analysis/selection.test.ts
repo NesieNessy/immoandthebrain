@@ -39,7 +39,7 @@ describe('optimizeSelection', () => {
     const cases = Array.from({ length: MAX_SELECTION_MEASURES + 1 }, (_, index) => renovationCase(`m${index}`, 1000));
     const params = calculatorParams({ excludedModernizationIds: ['m0'] });
     expect(optimizeSelection(params, cases, 'MAX_ROI')).not.toEqual({ tooMany: true });
-  }, 60000);
+  });
 
   it('MAX_ROI excludes a measure that is constructed to be uneconomical', () => {
     const cases = [renovationCase('cheap', 5000), renovationCase('expensive', 500000)];

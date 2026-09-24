@@ -10,7 +10,7 @@ describe('optimizer objective selection', () => {
     const implicit = runRentCalculator(optimized(), cases);
     const explicit = runRentCalculator(optimized({ optimizationObjective: 'EARLIEST_BREAK_EVEN' }), cases);
     expect(explicit.modernizationPlan).toEqual(implicit.modernizationPlan);
-  }, 30_000);
+  });
 
   it('is ignored when placements are fixed or placementMode is DEFAULT', () => {
     const base = runRentCalculator(calculatorParams(), cases);
@@ -25,7 +25,7 @@ describe('optimizer objective selection', () => {
     };
     expect(sumInView(optimized({ optimizationObjective: 'MAX_RENT_IN_VIEW' })))
       .toBeGreaterThanOrEqual(sumInView(optimized({ optimizationObjective: 'EARLIEST_BREAK_EVEN' })) - 0.01);
-  }, 30_000);
+  });
 
   it('FASTEST_POSITIVE_CASHFLOW never reaches a lasting positive cashflow later than the break-even optimum', () => {
     const month = (goal: 'FASTEST_POSITIVE_CASHFLOW' | 'EARLIEST_BREAK_EVEN') =>
