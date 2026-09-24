@@ -301,7 +301,7 @@ function TimelineRangeBar({
   );
 }
 
-function CalculatorChart({ rows, showRentIndex, viewport }: { rows: ChartRow[]; showRentIndex: boolean; viewport: TimelineViewport }) {
+function CalculatorChart({ rows, showRentIndex, viewport, breakEven }: { rows: ChartRow[]; showRentIndex: boolean; viewport: TimelineViewport; breakEven: string | null }) {
   const [chartMode, setChartMode] = useState<'monthly' | 'cumulative'>('monthly');
   const [hoveredEvent, setHoveredEvent] = useState<{ x: number; title: string; detail: string } | null>(null);
   const width = 1000;
@@ -335,7 +335,7 @@ function CalculatorChart({ rows, showRentIndex, viewport }: { rows: ChartRow[]; 
   const comparisonValues = chartMode === 'monthly' ? monthlyWithoutTax : cumulativeWithoutTax;
   const xAt = (index: number) => left + (visibleRows.length <= 1 ? 0 : (index / (visibleRows.length - 1)) * plotWidth);
   const yAt = (value: number) => top + height - ((value - domain.min) / (domain.max - domain.min || 1)) * height;
-  const breakEvenGlobalIndex = rows.findIndex((row) => row.afterTaxCumulative >= 0);
+  const breakEvenGlobalIndex = breakEven ? rows.findIndex((row) => row.yyyymm === breakEven) : -1;
   const breakEvenIndex = breakEvenGlobalIndex >= viewport.start && breakEvenGlobalIndex < viewport.start + viewport.span ? breakEvenGlobalIndex - viewport.start : -1;
   const eventRows = visibleRows.filter((row) => row.renovationPayment > 0 || row.delta558 > 0 || row.delta559 > 0);
   const zeroY = yAt(0);
@@ -385,13 +385,13 @@ function CalculatorChart({ rows, showRentIndex, viewport }: { rows: ChartRow[]; 
   );
 }
 
-function TimelineEventConnectors({ rows, viewport }: { rows: ChartRow[]; viewport: TimelineViewport }) {
+function TimelineEventConnectors({ rows, viewport, breakEven }: { rows: ChartRow[]; viewport: TimelineViewport; breakEven: string | null }) {
   const visibleRows = rows.slice(viewport.start, viewport.start + viewport.span);
   if (visibleRows.length === 0) return null;
   const events = visibleRows
     .map((row, index) => ({ row, index }))
     .filter(({ row }) => row.renovationPayment > 0 || row.delta558 > 0 || row.delta559 > 0);
-  const breakEvenIndex = visibleRows.findIndex((row) => row.afterTaxCumulative >= 0);
+  const breakEvenIndex = breakEven ? visibleRows.findIndex((row) => row.yyyymm === breakEven) : -1;
   const leftForIndex = (index: number) => 15 + (index / Math.max(1, visibleRows.length - 1)) * 85;
 
   return (
@@ -2188,8 +2188,8 @@ function CalculatorContent() {
               </div>
               <div className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-6">
                 <div className="relative overflow-hidden">
-                  <TimelineEventConnectors rows={chartRows} viewport={timelineViewport} />
-                  <CalculatorChart rows={chartRows} showRentIndex={showRentIndexComparison} viewport={timelineViewport} />
+                  <TimelineEventConnectors rows={chartRows} viewport={timelineViewport} breakEven={presented.breakEven} />
+                  <CalculatorChart rows={chartRows} showRentIndex={showRentIndexComparison} viewport={timelineViewport} breakEven={presented.breakEven} />
                   <PlanEditor
                     data={presented}
                     startYyyymm={startYyyymm}

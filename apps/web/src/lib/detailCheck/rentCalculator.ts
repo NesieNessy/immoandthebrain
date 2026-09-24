@@ -624,8 +624,12 @@ export function buildTimeline(
   let taxLossCarryforward = 0;
   let indexedLossCarryforward = 0;
   let runningWithRentIndex = params.equityIncluded ? roundCurrency(-(params.equityAmount ?? 0)) : 0;
-  let breakEven: string | null = null;
-  let breakEvenWithRentIndex: string | null = null;
+  // Last month with a negative cumulative cashflow, tracked in the same pass:
+  // break-even is the month AFTER this one (the first month the cumulative
+  // cashflow stays >= 0 for good), not the first month that happens to touch
+  // >= 0 before dipping negative again. -1 = never negative so far.
+  let lastNegativeCumulativeOffset = -1;
+  let lastNegativeIndexedCumulativeOffset = -1;
   let rentTotal = roundCurrency(params.monthlyRentStart);
   let rentTotalWithRentIndex = roundCurrency(params.monthlyRentStart);
   // Last month with a negative after-tax cashflow, tracked in this same pass so
@@ -685,7 +689,7 @@ export function buildTimeline(
     cumulativeTaxes = roundCurrency(cumulativeTaxes + taxes);
     cumulativeCashflowBeforeTax = roundCurrency(cumulativeCashflowBeforeTax + monthlyDelta);
     cumulativeCashflow = roundCurrency(cumulativeCashflow + afterTaxCashflow);
-    if (!breakEven && cumulativeCashflow >= 0) breakEven = yyyymm;
+    if (cumulativeCashflow < 0) lastNegativeCumulativeOffset = offset;
 
     const indexedTaxResult = calculateTaxes(
       roundCurrency(indexedIncome - nonAllocableCosts - afa - interest),
@@ -695,7 +699,7 @@ export function buildTimeline(
     );
     indexedLossCarryforward = indexedTaxResult.lossCarryforward;
     runningWithRentIndex = roundCurrency(runningWithRentIndex + indexedIncome - expenses - indexedTaxResult.taxes);
-    if (!breakEvenWithRentIndex && runningWithRentIndex >= 0) breakEvenWithRentIndex = yyyymm;
+    if (runningWithRentIndex < 0) lastNegativeIndexedCumulativeOffset = offset;
 
     if (includeTimeline) {
       timeline.push({
@@ -725,6 +729,16 @@ export function buildTimeline(
       });
     }
   }
+
+  // Break-even is the first month AFTER the last negative one — null if the
+  // cumulative cashflow is still negative in the last horizon month, and
+  // month 0 if it was never negative.
+  const breakEven = lastNegativeCumulativeOffset >= CALCULATION_HORIZON_MONTHS - 1
+    ? null
+    : addMonths(params.startYyyymm, lastNegativeCumulativeOffset + 1);
+  const breakEvenWithRentIndex = lastNegativeIndexedCumulativeOffset >= CALCULATION_HORIZON_MONTHS - 1
+    ? null
+    : addMonths(params.startYyyymm, lastNegativeIndexedCumulativeOffset + 1);
 
   return {
     timeline,

@@ -40,7 +40,13 @@ describe('analysis cards', () => {
   it('break-even card: in-range break-even yields a success verdict with a literal marker', () => {
     const [card] = build(['break-even'], 10);
     expect(card.series?.values).toHaveLength(viewEndIndex(10) + 1);
-    expect(card.series?.markerIndex).toBe(0);
+    // Break-even (SCRUM-96) is the month after the cumulative cashflow last
+    // dips negative — the modernization's Sanierungszahlung dips it below
+    // zero again after month 0, so the marker sits later than month 0.
+    const markerIndex = card.series?.markerIndex ?? null;
+    expect(markerIndex).not.toBeNull();
+    expect(result.timeline[markerIndex!].yyyymm).toBe(result.breakEven);
+    expect(result.timeline[markerIndex! - 1].cumulativeCashflow).toBeLessThan(0);
     expect(card.verdict).toEqual({ label: 'Im Betrachtungszeitraum', tone: 'success' });
   });
 
