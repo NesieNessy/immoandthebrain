@@ -76,8 +76,7 @@ export default function AdjustDistribution({ propertyId }: { propertyId: string 
         coOwnershipNumerator !== originalCoOwnershipNumerator ||
         coOwnershipDenominator !== originalCoOwnershipDenominator;
 
-    // Any navigation away from an unsaved edit is routed through here so it
-    // can be confirmed first (breadcrumb links, the cancel button, use-case menu).
+    // Routes navigation away from an unsaved edit through a confirm step.
     const goTo = (href: string) => {
         if (isEditing) {
             setPendingHref(href);
@@ -164,7 +163,6 @@ export default function AdjustDistribution({ propertyId }: { propertyId: string 
                 />
 
                 <div className="space-y-6">
-                    {/* Calculation Mode */}
                     <div>
                         <SectionLabel>Berechnungsmodus</SectionLabel>
                         <p className="mt-2 text-sm text-muted-foreground">
@@ -183,7 +181,6 @@ export default function AdjustDistribution({ propertyId }: { propertyId: string 
                         </div>
                     </div>
 
-                    {/* Plot data — only relevant for individual calculation */}
                     {splitMode === 'INDIVIDUAL' && (
                         <div>
                             <SectionLabel>Grundstücksdaten</SectionLabel>
@@ -226,7 +223,6 @@ export default function AdjustDistribution({ propertyId }: { propertyId: string 
                         </div>
                     )}
 
-                    {/* Result */}
                     <div>
                         <SectionLabel>Berechnete Aufteilung</SectionLabel>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3">
@@ -255,7 +251,6 @@ export default function AdjustDistribution({ propertyId }: { propertyId: string 
                 </div>
             </main>
 
-            {/* Sticky Action Bar */}
             <StickyActionBar
                 show={true}
                 onGhost={handleCancel}

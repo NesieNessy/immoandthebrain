@@ -26,14 +26,11 @@ const REQUIRED_MESSAGE = 'Pflichtfeld für den Hauptmieter.';
 
 /**
  * Nachname/Vorname/Steuer-ID/Einzugsdatum are required for the Hauptmieter
- * (is_primary) once that row will actually be written — backs the
- * tenancy_person_primary_*_required CHECK constraints
- * (20260911000003_tenancy_person_primary_required_fields.sql,
- * 20260915000001_tenancy_person_primary_name_required.sql) so the form
- * catches a violation before the save round-trip fails instead of after.
- * A person that won't be saved this round (a blank, unstarted draft row)
- * is never flagged — an entirely empty Mieterdaten form is a valid "no
- * tenant yet" state, not an error.
+ * once that row will actually be written — mirrors the DB's
+ * tenancy_person_primary_*_required CHECK constraints so the form catches a
+ * violation before the save round-trip fails. A row that won't be saved this
+ * round (blank draft) is never flagged: an empty form is a valid "no tenant
+ * yet" state.
  */
 export function validatePrimaryPerson(primaryPerson: PrimaryPersonInput | null): PrimaryPersonValidation {
     const willBeSaved = Boolean(

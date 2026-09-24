@@ -47,9 +47,8 @@ export interface RentalForm {
     tenancyEndDate: Date | undefined;
     coldRent: string;
     /** NK-Vorauszahlung — the tenant's monthly service-charge prepayment.
-     *  Also gets overwritten by the "NK-Vorauszahlung übernehmen" action on
-     *  the Nebenkostenabrechnung page; this is just the manual entry point
-     *  for it (e.g. the initial value on a new tenancy). */
+     *  Also overwritten by "NK-Vorauszahlung übernehmen" on the
+     *  Nebenkostenabrechnung page; this is just its manual entry point. */
     miscRent: string;
     parkingSpaceRent: string;
     houseMoney: string;
@@ -95,12 +94,10 @@ function serializeRentalForm(form: RentalForm): string {
     });
 }
 
-/** The full § 2 BetrKV position list — 18 apportionable categories (Nr. 1–17
- *  plus the standard "Sonstige Betriebskosten" catch-all), followed by the
- *  costs that are never allocable to tenants regardless of lease wording
- *  (Verwaltung, Instandhaltung, Modernisierung, Finanzierung, Rücklagen/AfA,
- *  Erstanschaffung von Erfassungsgeräten, Rechtskosten). Amounts start at 0
- *  — unused rows are simply not summed. */
+/** Full § 2 BetrKV position list — 18 apportionable categories (Nr. 1–17
+ *  plus "Sonstige Betriebskosten"), followed by costs never allocable to
+ *  tenants regardless of lease wording. Amounts start at 0 since unused
+ *  rows just aren't summed. */
 export const DEFAULT_COST_ITEMS: MaintenanceCostItem[] = [
     // Apportionable — § 2 Nr. 1–17 BetrKV
     { id: 'grundsteuer', label: 'Grundsteuer', amount: 0, allocable: true },
@@ -144,9 +141,8 @@ export interface PersonForm {
 const EMPTY_PRIMARY_PERSON: PersonForm = { id: null, lastName: '', firstName: '', taxId: '', isPrimary: true, moveInDate: undefined };
 
 /** Ausweis/Schufa/Bürgschaft are always per person. Mietvertrag defaults to
- *  one shared contract for the whole tenancy (single row); the "individual"
- *  toggle swaps that row for one per person, for cases where each tenant
- *  signed a separate contract. */
+ *  one shared contract (single row); the "individual" toggle swaps that for
+ *  one row per person when each tenant signed a separate contract. */
 const PER_PERSON_DOCUMENTS: TenancyDocumentType[] = ['Ausweis', 'Schufa', 'Bürgschaft', 'Gehaltsnachweise', 'Vormieterbescheinigung', 'Sonstiges'];
 const SHARED_DOCUMENTS: TenancyDocumentType[] = ['Mietvertrag'];
 /** Mieterbescheinigung is always one shared row for the whole tenancy — it
@@ -181,27 +177,22 @@ function serializePersons(persons: PersonForm[]): string {
 }
 
 /**
- * All the state, data-loading, and mutation logic shared by the
- * current-tenant and rental-agreement pages — they're separate
- * routes/components now (see CurrentTenantPage / TenantAgreementPage),
- * but both edit the same underlying tenancy/persons/maintenance_costs
- * records and share one save flow, so that part stays in one place
- * rather than being duplicated or awkwardly synced between two copies.
- */
-/**
- * `archivedTenancyId` switches this from the unit's current tenancy (the
- * normal tenant-data/rental-agreement flow) to a specific past one — used by
- * the tenant history's "Ansehen" action, which reuses this same page/hook
- * instead of a bespoke read view so archived tenants get the exact same
- * layout as the current one, just with the move-out surfaced.
+ * State, data-loading, and mutation logic shared by the current-tenant and
+ * rental-agreement pages (separate routes/components — see CurrentTenantPage
+ * / TenantAgreementPage) since both edit the same tenancy/persons/
+ * maintenance_costs records through one save flow.
+ *
+ * `archivedTenancyId` switches this from the unit's current tenancy to a
+ * specific past one — used by the tenant history's "Ansehen" action, which
+ * reuses this same hook so archived tenants get the same layout, just with
+ * the move-out surfaced.
  */
 export function useTenantUnitData(propertyId: string, property: Property, unit: PropertyUnit, hasMultipleUnits: boolean, archivedTenancyId?: number) {
     const router = useRouter();
     const { user } = useRequireAuth();
     const { showToast } = useToast();
-    // Archived (tenant history "Ansehen") view: same page, but nothing that
-    // mutates the record — upload/delete document controls fall back to
-    // their disabled/no-affordance branch below.
+    // Archived ("Ansehen") view: same page, but nothing mutates the record —
+    // upload/delete controls fall back to their disabled branch below.
     const readOnly = Boolean(archivedTenancyId);
 
     const [tenancy, setTenancy] = useState<Tenancy | null>(null);
@@ -242,12 +233,9 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
     const [historyEntries, setHistoryEntries] = useState<TenancyAdjustmentHistoryEntry[]>([]);
     const [isGeneratingLetter, setIsGeneratingLetter] = useState<TenancyAdjustmentType | null>(null);
     const [isResolvingAdjustment, setIsResolvingAdjustment] = useState<TenancyAdjustmentType | null>(null);
-    // The tenancy/persons/costs/history fetch below is a multi-await chain —
-    // without this, the form fields render interactive immediately, and a
-    // user (or a fast e2e test) can type into e.g. "Netto-Mieteinnahmen"
-    // before it resolves; when it then resolves, setRentalForm(form)
-    // unconditionally overwrites whatever was just typed. Save is gated on
-    // this being true so that race has no window to land in.
+    // Without this, form fields render interactive before the multi-await
+    // fetch below resolves, so typing can race the eventual setRentalForm(form)
+    // and get silently overwritten. Save is gated on this being true instead.
     const [isTenancyDataLoaded, setIsTenancyDataLoaded] = useState(false);
 
     useEffect(() => {
@@ -328,10 +316,9 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
         return () => { cancelled = true; };
     }, [user]);
 
-    // Lets a document flow that lives outside this hook's own upload path
-    // (e.g. the independent Mieterbescheinigung/Mietvertrag generators) tell
-    // this page's document list — and the documents table further down the
-    // page — to catch up after it uploads or deletes something on its own.
+    // Lets a document flow outside this hook's own upload path (e.g. the
+    // independent Mieterbescheinigung/Mietvertrag generators) refresh this
+    // page's document list after it uploads or deletes something on its own.
     const refreshDocuments = async () => {
         if (!tenancy) return;
         setDocuments(await getTenancyDocumentsByTenancy(tenancy.tenancyId));
@@ -367,15 +354,9 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
         setPendingHref(null);
     };
 
-    // Upload is only possible once the underlying row is actually saved —
-    // a draft person (id === null) or a unit with no tenancy yet has
-    // nothing to attach the document to. The rental agreement is either one
-    // shared row (default) or one row per person — never both — toggled via
-    // mietvertragIndividual; every rental-agreement row carries the toggle
-    // button so switching modes is reachable from any of them.
-    // The rental agreement can't meaningfully be generated without the
-    // landlord's own data, so the whole row — upload, toggle and generate —
-    // stays disabled until user-settings has been filled in.
+    // The rental agreement can't be generated without the landlord's own
+    // data, so the whole row (upload, toggle, generate) stays disabled until
+    // user-settings has been filled in.
     const landlordMissing = !landlord;
 
     // Total service charges is computed as the sum of the two breakdown fields
@@ -391,8 +372,8 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
     const effectiveRenovationReminderDate = rentalForm.renovationAdjustmentReminderDate ?? defaultRenovationReminderDate;
 
     // Ausweis/Schufa/Bürgschaft only — the rental agreement and tenant
-    // certificate moved to the "Generierbare Dokumente" section below,
-    // where the generate action can be a lot more prominent than a table icon.
+    // certificate moved to "Generierbare Dokumente" below, where the
+    // generate action can be more prominent than a table icon.
     const documentRows = useMemo(() => (
         persons.flatMap((person, personIndex) =>
             PER_PERSON_DOCUMENTS
@@ -570,13 +551,9 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
         });
     };
 
-    // A tenant change always needs confirmation first — it discards the
-    // currently-shown tenant. The two continue-paths both end the current
-    // tenancy (once the tenancy history record exists, that's what makes it
-    // show up there); leaving with a move-out navigates away immediately, so
-    // that part has to be written right away rather than deferred to the
-    // save handler like the "without move-out" path (which stays on the
-    // page to enter the new tenant).
+    // Both continue-paths end the current tenancy. The move-out path navigates
+    // away immediately, so it must write that end date right away rather than
+    // defer to the save handler like the "without move-out" path does.
     const confirmTenantChange = async (withMoveOut: boolean) => {
         setIsStartingTenantChange(true);
         try {
@@ -633,23 +610,19 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                 renovationAdjustmentEndDate: rentalForm.renovationAdjustmentEndDate ? format(rentalForm.renovationAdjustmentEndDate, 'yyyy-MM-dd') : null,
                 renovationAdjustmentAmount: rentalForm.renovationAdjustmentAmount !== '' ? Number(rentalForm.renovationAdjustmentAmount) : null,
                 renovationAdjustmentReminderDate: rentalForm.renovationAdjustmentReminderDate ? format(rentalForm.renovationAdjustmentReminderDate, 'yyyy-MM-dd') : null,
-                // Only ever forces this to true (renovation fields filled in here);
-                // never clobbers an explicit false set on the rental-agreement
-                // generation page when this tab's renovation fields are left untouched.
+                // Only ever forces true; never clobbers an explicit false set
+                // elsewhere when this tab's renovation fields are untouched.
                 renovationAdjustmentPlanned: (rentalForm.renovationAdjustmentStartDate || rentalForm.renovationAdjustmentEndDate || rentalForm.renovationAdjustmentAmount !== '') ? true : undefined,
             };
 
-            // A unit can only have one tenant at a time — any two tenancies on
-            // it whose date ranges genuinely overlap are always a data error
-            // (see the Mieterhistorie reactivation flow, which has the same
-            // check). Validated up front, before any write, so a rejected
-            // save never leaves the current tenancy half-ended.
+            // A unit can only have one tenant at a time, so overlapping tenancy
+            // date ranges are always a data error. Checked before any write so
+            // a rejected save never leaves the current tenancy half-ended.
             const assertNoOverlap = async (excludeTenancyId: number | null) => {
                 const existingTenancies = await getTenanciesByUnit(unit.propertyUnitId);
-                // tenancyStartDate is only nullable in the type to cover rows
-                // that can't legitimately reach here (a tenancy always has one
-                // in practice) — filtered out rather than widening the check's
-                // own date type to also handle "no start date at all".
+                // tenancyStartDate is nullable in the type only for rows that
+                // can't legitimately reach here — filtered out here rather
+                // than widening the check itself to handle "no start date".
                 const candidateTenancies = existingTenancies.filter(
                     (t): t is Tenancy & { tenancyStartDate: string } => t.tenancyStartDate != null,
                 );
@@ -773,11 +746,9 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                             taxId: p.taxId || null,
                             moveInDate,
                         });
-                        // The DB rejects a primary tenant with a blank Steuer-ID/
-                        // Einzugsdatum (tenancy_person_primary_*_required CHECK
-                        // constraints) — isPrimaryPersonValid should already have
-                        // kept Save disabled before this point, but silently
-                        // swallowing a failure here would otherwise report
+                        // DB CHECK constraints reject a primary tenant with a blank
+                        // Steuer-ID/Einzugsdatum; isPrimaryPersonValid should already
+                        // block Save, but throw here too rather than silently report
                         // "gespeichert" while this person's edits were dropped.
                         if (!updated) throw new Error(`Mieterdaten für Person ${i + 1} konnten nicht gespeichert werden.`);
                     } else if (p.lastName.trim() !== '' || p.firstName.trim() !== '') {
@@ -985,10 +956,9 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
         },
     ];
 
-    // Shared row renderer for the rental-agreement/tenant-certificate cards
-    // in "Generierbare Dokumente" — same view/download/delete/upload logic
-    // as the documents table's action column, just inside a card row
-    // instead of a table cell.
+    // Shared row renderer for the "Generierbare Dokumente" cards — same
+    // view/download/delete/upload logic as the documents table's action
+    // column, inside a card row instead of a table cell.
     const renderDocRow = (
         row: { key: string; tenant: string; tenancyPersonId?: number | null; canUpload: boolean; doc?: TenancyDocument },
         documentType: TenancyDocumentType,
@@ -1075,11 +1045,9 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
         );
     };
 
-    // Standalone upload control for the footer of generated-document cards
-    // (Mietvertrag, Mieterbescheinigung) — re-uploading replaces whatever's
-    // there. Sized and styled to match the Button component's md/ghost look
-    // exactly, since it can't use Button itself (needs to wrap a hidden
-    // file input via a <label for>).
+    // Standalone upload control for generated-document card footers —
+    // matches Button's md/ghost look but can't use Button itself since it
+    // needs to wrap a hidden file input via a <label for>.
     const renderFooterUpload = (
         row: { key: string; tenancyPersonId?: number | null; canUpload: boolean },
         documentType: TenancyDocumentType,
@@ -1210,10 +1178,8 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
         }
     };
 
-    // Accepting applies the change (rent adjustments bump net rental income;
-    // renovation adjustment has no single field to bump) and logs it to the
-    // history. Declining just clears the pending fields — nothing is ever
-    // written to the history unless the client actually accepted it.
+    // Accepting applies the change and logs it to history; declining just
+    // clears the pending fields — history is never written unless accepted.
     const handleAcceptRentAdjustment = async () => {
         if (!tenancy) return;
         setIsResolvingAdjustment('rent');

@@ -39,19 +39,12 @@ export function useTaxDocumentsData(propertyId: string) {
     const [pendingDelete, setPendingDelete] = useState<TaxExpenseCategory | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [selectedYear, setSelectedYear] = useState<number | null>(null);
-    // Years with a real receipt (or the current calendar year) show up on
-    // their own — this adds a year on top of that, for planning ahead before
-    // any receipt for it exists yet. Local/session-only: once the user
-    // actually adds a category or receipt in it, it becomes a "real" year
-    // (derived from that data) and no longer depends on this.
+    // Years for planning ahead with no receipt yet; local/session-only until
+    // a real category or receipt is added, then it becomes a "real" year.
     const [manuallyAddedYears, setManuallyAddedYears] = useState<number[]>([]);
-    // The current calendar year always gets a card by default (a landlord
-    // always needs somewhere to start this year's filing) — this tracks
-    // whether the user explicitly deleted it, since without an explicit
-    // flag it would either always win (current year could never actually be
-    // deleted) or only show up when the list is otherwise completely empty
-    // (which made it vanish the instant any *other* year was added, even
-    // though the user never asked to remove it).
+    // Tracks explicit deletion of the current year's default card — without
+    // this flag it would either never be deletable, or reappear/vanish based
+    // on whether other years exist, regardless of user intent.
     const [currentYearDismissed, setCurrentYearDismissed] = useState(false);
     // Archiving just hides a year from the cards row (session-only, nothing
     // persisted or deleted) — "Archivierte Jahre anzeigen" brings it back.
@@ -59,14 +52,9 @@ export function useTaxDocumentsData(propertyId: string) {
     const [showArchivedYears, setShowArchivedYears] = useState(false);
     const [pendingDeleteYear, setPendingDeleteYear] = useState<number | null>(null);
     const [isDeletingYear, setIsDeletingYear] = useState(false);
-    // The last label persistLabel actually confirmed to the server for each
-    // category — deliberately NOT read from `rows`, because updateLocalLabel
-    // (fired on every keystroke) already overwrites rows[i].category.label
-    // with whatever the user is currently typing. persistLabel needs to know
-    // what the label was *before* this edit to tell "naming a blank
-    // category" apart from "renaming an already-named one" (and from each
-    // other's other-property sync target) — reading from `rows` at blur time
-    // would just compare the new value against itself.
+    // Last label confirmed to the server per category — not read from `rows`,
+    // since updateLocalLabel overwrites it on every keystroke. Needed to tell
+    // "naming a blank category" apart from "renaming" at blur time.
     const persistedLabelsRef = useRef<Map<number, string>>(new Map());
 
     useEffect(() => {
@@ -84,9 +72,8 @@ export function useTaxDocumentsData(propertyId: string) {
 
             let categories = foundCategories;
             if (foundProperty) {
-                // A brand-new property (no categories at all yet) first picks
-                // up whatever custom categories the user's other properties
-                // already have, so it starts fully in sync with them.
+                // A brand-new property seeds from other properties' custom
+                // categories first, so it starts in sync with them.
                 if (foundCategories.length === 0) {
                     const otherProperties = (await getProperties(foundProperty.userId)).filter((p) => p.propertyId !== id && !p.archivedAt);
                     const otherCategorySets = await Promise.all(otherProperties.map((p) => getTaxExpenseCategoriesByProperty(p.propertyId)));
@@ -108,10 +95,8 @@ export function useTaxDocumentsData(propertyId: string) {
                         categories = created.filter((c): c is TaxExpenseCategory => c !== null);
                     }
                 }
-                // The reference defaults are always ensured on top, topping
-                // up whichever ones are still missing — not just on a
-                // brand-new property, but also one that already has some
-                // categories (e.g. only picked up a smaller custom set above).
+                // Reference defaults are always topped up, even on properties
+                // that already have some categories.
                 categories = await ensureDefaultTaxExpenseCategories(id, categories);
             }
             if (cancelled) return;
@@ -131,20 +116,13 @@ export function useTaxDocumentsData(propertyId: string) {
     const allDocuments = useMemo(() => rows.flatMap((row) => row.documents), [rows]);
     const availableYears = useMemo(() => {
         const years = new Set([...availableTaxYears(allDocuments), ...manuallyAddedYears]);
-        // The current year shows by default (whether or not it has any real
-        // receipts yet) unless the user explicitly deleted its card — real
-        // documents in it always win regardless, since those already put it
-        // in `years` above via availableTaxYears. Deliberately no "never
-        // truly empty" fallback here: forcing the current year back in
-        // whenever it was the only year left would make it undeletable in
-        // exactly the case a landlord is most likely to want to delete it
-        // (nothing else uploaded yet) — an empty "Dieses Objekt · nach Jahr"
-        // row is fine; "Jahr hinzufügen" is still right there.
+        // Current year shows by default unless explicitly dismissed. No
+        // "never truly empty" fallback — that would make it undeletable
+        // exactly when a landlord is most likely to want to delete it.
         if (!currentYearDismissed) years.add(new Date().getFullYear());
         return Array.from(years).sort((a, b) => b - a);
     }, [allDocuments, manuallyAddedYears, currentYearDismissed]);
-    // One breakdown per available year — backs the "Dieses Objekt · nach
-    // Jahr" cards, letting the user pick which year the table below shows.
+    // One breakdown per available year, backing the year-selector cards.
     const yearSummaries = useMemo(
         () => availableYears.map((year) => summarizeTaxYear(rows.map((row) => row.category), allDocuments, year)),
         [availableYears, rows, allDocuments],
@@ -156,11 +134,8 @@ export function useTaxDocumentsData(propertyId: string) {
     const isCategoryUploading = (categoryId: number): boolean =>
         rows.find((row) => row.category.taxExpenseCategoryId === categoryId)?.isUploading ?? false;
 
-    // "Dieses Objekt · nach Jahr" already shows every year with a real
-    // receipt — this adds a card for any year the user picks on top of that
-    // (planning ahead before the calendar rolls over, or filling in a past
-    // year that never got a receipt uploaded). A no-op if that year already
-    // has a card (real or previously added).
+    // Adds a card for a year with no receipt yet (planning ahead, or
+    // backfilling a past year); no-op if the year already has a card.
     const addYear = (year: number) => {
         if (year === new Date().getFullYear()) setCurrentYearDismissed(false);
         if (availableYears.includes(year)) { setSelectedYear(year); return; }
@@ -239,11 +214,8 @@ export function useTaxDocumentsData(propertyId: string) {
         setRows((prev) => prev.map((row) => row.category.taxExpenseCategoryId === categoryId ? { ...row, category: { ...row.category, label } } : row));
     };
 
-    // Categories are kept in sync by name across every active property —
-    // adding, renaming, and deleting one here does the same on every other
-    // property that has (or, for adding, doesn't yet have) a category with
-    // that name. Each property still tracks its own amounts/receipts
-    // against its own copy of the row; only the name is shared.
+    // Categories are kept in sync by name across every active property;
+    // only the name is shared, each property keeps its own amounts/receipts.
     const getOtherActiveProperties = async (): Promise<Property[]> => {
         if (!property) return [];
         const allProperties = await getProperties(property.userId);

@@ -51,12 +51,9 @@ async function loadUnitRow(unit: PropertyUnit): Promise<UnitRow> {
 }
 
 /**
- * Entry point for a property. A property with no Einheit yet is backed with
- * a single default one transparently (see load() below), so in practice this
- * always resolves to either one unit or several. With exactly one it goes
- * straight into that unit's hub — there's no picking to do. With several, it
- * shows the units table first so the whole hub (Mieterdaten, Mietvertrag,
- * Nebenkostenabrechnung, …) can be entered already scoped to one unit.
+ * Entry point for a property. A unit-less property is transparently backed
+ * with one default unit (see load()), so this always resolves to either one
+ * unit (go straight to its hub) or several (show a picker table first).
  */
 export default function PropertyEntry({ propertyId }: { propertyId: string }) {
     const router = useRouter();
@@ -77,14 +74,10 @@ export default function PropertyEntry({ propertyId }: { propertyId: string }) {
         ]);
         setProperty(foundProperty);
 
-        // A property with no Einheit defined yet is just as usable as one with
-        // exactly one — an Einfamilienhaus or Eigentumswohnung has no reason to
-        // differentiate between units. Rather than blocking Mieterdaten,
-        // Mietvertrag, etc. behind a manual "create a unit first" step, back it
-        // transparently with a single default unit representing the whole
-        // object the first time the property is opened. A genuinely second
-        // Einheit added later then simply joins this one, instead of the
-        // property ever having skipped past having one at all.
+        // A single-family house or condo has no reason to differentiate units,
+        // so rather than blocking tenant/lease features behind a manual
+        // "create a unit first" step, auto-create one default unit on first
+        // open. A real second unit added later just joins this one.
         let units = foundUnits;
         if (foundProperty && foundUnits.length === 0) {
             const defaultUnit = await createPropertyUnit({
@@ -127,9 +120,8 @@ export default function PropertyEntry({ propertyId }: { propertyId: string }) {
 
     if (!property) return <PropertyNotFoundPage />;
 
-    // load() always backs a unit-less property with a default unit, so this
-    // only triggers if that creation call itself failed — fall back to the
-    // hub in property-only mode so setup actions stay reachable regardless.
+    // Only reached if the default-unit creation in load() failed; fall back
+    // to property-only hub mode so setup actions stay reachable.
     if (units.length === 0) {
         return <PropertyHub propertyId={propertyId} unitId={null} />;
     }

@@ -136,6 +136,7 @@ const RESOURCES: Record<string, ResourceConfig> = {
     primaryKey: 'renovation_measure_id',
     columns: [
       'property_id', 'sort_order', 'title', 'category', 'description', 'estimated_cost', 'quoted_cost',
+      'budget_min', 'budget_max',
       'preferred_start_date', 'quoted_start_date', 'actual_completion_date',
       'published', 'published_at', 'quote_accepted',
       'craftsman_confirmed_completed', 'customer_confirmed_completed', 'craftsman_notes',
@@ -149,7 +150,7 @@ const RESOURCES: Record<string, ResourceConfig> = {
     lockedColumns: {
       lockColumn: 'quote_accepted',
       columns: [
-        'title', 'estimated_cost', 'quoted_cost', 'preferred_start_date', 'quoted_start_date',
+        'title', 'estimated_cost', 'quoted_cost', 'budget_min', 'budget_max', 'preferred_start_date', 'quoted_start_date',
         'published', 'published_at', 'description', 'craftsman_notes',
       ],
     },

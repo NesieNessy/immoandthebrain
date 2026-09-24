@@ -1,13 +1,10 @@
 import { isDenseMarket } from '@/lib/detailCheck/rentCalculator';
 import { addMonths, differenceInCalendarMonths, format, parseISO } from 'date-fns';
 
-// Tenancy-scoped versions of the same §558/§559 formulas rentCalculator.ts
-// uses for its 50-year investment simulation — evaluated for a single
-// "what's the next possible increase from today" proposal instead of a
-// 600-month loop, against live Tenancy/history data instead of a one-shot
-// valuation workflow's CalculatorParams. Dates here are full "yyyy-MM-dd"
-// strings (as stored on Tenancy/tenancy_adjustment_history), not the
-// "yyyy-MM" strings rentCalculator.ts's own date helpers use internally.
+// Tenancy-scoped versions of rentCalculator.ts's §558/§559 formulas: evaluated
+// as a single "next possible increase from today" against live Tenancy data,
+// not the 50-year simulation loop. Dates are full "yyyy-MM-dd" strings, unlike
+// rentCalculator.ts's internal "yyyy-MM".
 
 function toDate(value: string): Date {
     return parseISO(value);

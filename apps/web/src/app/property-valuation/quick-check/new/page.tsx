@@ -59,7 +59,7 @@ export default function QuickCheckPage() {
 
   const currentYear = new Date().getFullYear();
 
-  // Per-field validation — only shown when the field has been touched (non-empty)
+  // Only shown once a field is touched (non-empty)
   const fieldErrors = getQuickCheckFieldErrors(form, purchasePrice, coldRent, currentYear);
 
   const handleFieldChange = (field: keyof FormData, value: string) => {
@@ -79,8 +79,7 @@ export default function QuickCheckPage() {
 
   const isEditing = portalUrl !== '' || Object.values(form).some((value) => value !== '');
 
-  // Any navigation away from an unsaved draft is routed through here so
-  // it can be confirmed first (breadcrumb links, the back button).
+  // Routes navigation through here so an unsaved draft can be confirmed first.
   const goTo = (href: string) => {
     if (isEditing) {
       setPendingHref(href);
@@ -94,8 +93,7 @@ export default function QuickCheckPage() {
     setPendingHref(null);
   };
 
-  // Shared by "Übernehmen" and "Detailbewertung starten" — both need the
-  // quick-check saved first; they just navigate to a different place after.
+  // Shared by "Übernehmen" and "Detailbewertung starten"; only the navigation after differs.
   const saveQuickCheck = async () => {
     if (!isFormValid || isSaving || !user) return null;
     const computedKpf = calcKpf(purchasePrice, coldRent);

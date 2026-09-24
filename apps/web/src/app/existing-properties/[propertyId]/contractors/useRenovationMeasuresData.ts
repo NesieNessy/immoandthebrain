@@ -24,13 +24,10 @@ export interface NewMeasureForm {
 export const EMPTY_NEW_MEASURE: NewMeasureForm = { title: '', category: '', estimatedCost: '', preferredStartDate: undefined };
 
 /**
- * There is no craftsperson-facing portal — the property owner enters the
- * quote and completion state themselves once they have it (by phone/email/
- * etc. with the contractor), so every field here is owner-editable and every
- * change is persisted immediately rather than batched behind a page-level
- * "Save". quoteAccepted is the one field that gates the others: once a
- * measure is commissioned, its cost/date/publish/delete controls lock —
- * confirming completion is the only thing still reachable after that.
+ * No craftsperson-facing portal — owner enters quote/completion state
+ * themselves, so every field is owner-editable and persisted immediately
+ * (no page-level "Save"). quoteAccepted locks cost/date/publish/delete;
+ * only completion confirmation stays reachable after that.
  */
 export function useRenovationMeasuresData(propertyId: string) {
     const { showToast } = useToast();
@@ -67,9 +64,8 @@ export function useRenovationMeasuresData(propertyId: string) {
         setMeasures((prev) => prev.map((m) => (m.renovationMeasureId === fallbackId ? updated : m)));
     };
 
-    // Optimistic — the field is already visible mid-edit via the caller's own
-    // setMeasures before this fires (e.g. NumberField/CalendarField onChange),
-    // this just persists it and reconciles with the server's row afterward.
+    // Caller already applied the change optimistically via updateLocalField;
+    // this persists it and reconciles with the server's row.
     const persistField = async (measureId: number, patch: Partial<RenovationMeasure>) => {
         const updated = await updateRenovationMeasure(measureId, patch);
         replaceMeasure(updated, measureId);
@@ -89,6 +85,8 @@ export function useRenovationMeasuresData(propertyId: string) {
             description: null,
             estimatedCost: form.estimatedCost !== '' ? Number(form.estimatedCost) : null,
             quotedCost: null,
+            budgetMin: null,
+            budgetMax: null,
             preferredStartDate: form.preferredStartDate ? form.preferredStartDate.toISOString().slice(0, 10) : null,
             quotedStartDate: null,
             actualCompletionDate: null,
@@ -120,8 +118,7 @@ export function useRenovationMeasuresData(propertyId: string) {
 
     const toggleCraftsmanConfirmed = (measure: RenovationMeasure) => {
         const next = !measure.craftsmanConfirmedCompleted;
-        // Un-confirming the contractor's report can't leave a stale customer
-        // confirmation sitting on top of it.
+        // Un-confirming must also clear a stale customer confirmation.
         const patch = next ? { craftsmanConfirmedCompleted: next } : { craftsmanConfirmedCompleted: next, customerConfirmedCompleted: false };
         updateLocalField(measure.renovationMeasureId, patch);
         void persistField(measure.renovationMeasureId, patch);

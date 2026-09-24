@@ -80,8 +80,7 @@ export default function AdjustRnd({ propertyId }: { propertyId: string }) {
         setIsEditing(hasChanges);
     }, [rndMode, modernization, originalRndMode, originalModernization]);
 
-    // Any navigation away from an unsaved edit is routed through here so it
-    // can be confirmed first (breadcrumb links, the cancel button, use-case menu).
+    // Routes navigation away from an unsaved edit through a confirm step.
     const goTo = (href: string) => {
         if (isEditing) {
             setPendingHref(href);
@@ -111,8 +110,7 @@ export default function AdjustRnd({ propertyId }: { propertyId: string }) {
     const handleSave = async () => {
         if (!property) return;
 
-        // Standard mode ignores modernization entirely, so don't carry stale
-        // individual selections (or their derived RND/AfA) forward once saved.
+        // Standard mode ignores modernization; don't carry stale individual selections forward.
         const savedModernization = rndMode === 'STANDARD' ? EMPTY_MODERNIZATION : modernization;
         const savedRnd = rndMode === 'STANDARD'
             ? { remainingUsefulLifeYears: 50, afaPercent: 2 }
@@ -176,7 +174,6 @@ export default function AdjustRnd({ propertyId }: { propertyId: string }) {
 
                 <div>
                     <div className="space-y-6">
-                        {/* Calculation Mode */}
                         <div>
                             <SectionLabel>Berechnungsmodus</SectionLabel>
                             <div className="pt-3">
@@ -189,7 +186,6 @@ export default function AdjustRnd({ propertyId }: { propertyId: string }) {
                             </div>
                         </div>
 
-                        {/* Summary */}
                         <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-lg border border-border bg-muted/30">
                             <div className="flex gap-8 shrink-0">
                                 <div>
@@ -212,7 +208,6 @@ export default function AdjustRnd({ propertyId }: { propertyId: string }) {
                             </p>
                         </div>
 
-                        {/* Renovation Section */}
                         {rndMode === 'INDIVIDUAL' && (
                             <div>
                                 <SectionLabel>Modernisierungen</SectionLabel>
@@ -254,7 +249,6 @@ export default function AdjustRnd({ propertyId }: { propertyId: string }) {
                 </div>
             </main>
 
-            {/* Sticky Action Bar */}
             <StickyActionBar
                 show={true}
                 onGhost={handleCancel}

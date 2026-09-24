@@ -19,10 +19,8 @@ function dayDiff(a: string, b: string): number {
     return Math.round((parseISO(b).getTime() - parseISO(a).getTime()) / (1000 * 60 * 60 * 24));
 }
 
-/** Keeps rolling `dateField`/`reminderField`/(optionally) `endDateField`
- *  forward one month at a time (via rolloverTargetDateIfDue) until the
- *  target date is no longer overdue — the "carried forward to the
- *  following month" behavior, applied lazily whenever the page loads. */
+/** Rolls `dateField`/`reminderField`/`endDateField` forward one month at a
+ *  time until no longer overdue; applied lazily on page load. */
 function rollForward(tenancy: Tenancy, dateField: string | null, reminderField: string | null, endDateField: string | null) {
     if (!dateField) return null;
     let current = dateField;

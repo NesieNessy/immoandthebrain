@@ -53,10 +53,8 @@ function letterFrame(title: string, bodyHtml: string): string {
 }
 
 /**
- * HTML approximation of the Anpassungsschreiben, for the "Vorschau" tab only
- * — the real deliverable is the .docx from adjustmentDocx.ts (Word blobs
- * aren't browser-renderable), so this exists purely to preview the same
- * content and wording before generating.
+ * HTML preview only — the real deliverable is the .docx from adjustmentDocx.ts,
+ * since Word blobs aren't browser-renderable.
  */
 export function adjustmentLetterHtml(p: AdjustmentLetterParams): string {
     const outcome = adjustmentOutcomeFor(p.overUnderCoverage);

@@ -22,11 +22,8 @@ export function calcPositionPct(
 }
 
 // ── Fixed KPF classification ─────────────────────────────────────────────────
-// Replaces the old per-postal-code comparison corridor (kpf_ranges table) with
-// a static market-knowledge scale: the KPF is the inverse of the gross yield,
-// and general German market experience puts typical bands at these bounds
-// (higher-priced regions like Munich/Hamburg > 25, mid-size cities 20–25,
-// rural / higher-yield areas < 20).
+// Replaces the old per-postal-code kpf_ranges table with a static market-knowledge
+// scale (KPF is inverse gross yield): >25 pricey regions, 20-25 mid-size cities, <20 rural.
 
 /** Fixed display scale for the KPF gauge — left = green/cheap, right = red/expensive. */
 export const KPF_SCALE_MIN = 15;

@@ -15,8 +15,7 @@ import { format } from 'date-fns';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useRef, useState } from 'react';
 
-/** Strips the "data:image/...;base64," prefix — Property.imageUrl stores
- *  raw base64 only; base64ToDataUri() re-adds the right prefix for display. */
+/** Strips the "data:image/...;base64," prefix; Property.imageUrl stores raw base64 only. */
 function readFileAsRawBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -40,9 +39,8 @@ function NewPropertyPageContent() {
   const { user, isLoading: authLoading } = useRequireAuth();
   const { showToast } = useToast();
 
-  // Prefill comes from NewPropertyModal's "Aus Detailbewertung übernehmen"
-  // step via query params — that step already has the full row in memory,
-  // so there's no need to re-fetch it here. Absent for "Manuell erfassen".
+  // Prefill comes via query params from NewPropertyModal's "Aus Detailbewertung
+  // übernehmen" step, which already has the full row in memory. Absent for "Manuell erfassen".
   const [objektkategorie, setObjektkategorie] = useState(searchParams.get('kategorie') ?? '');
   const [kaufdatum, setKaufdatum] = useState<Date | undefined>(undefined);
   const [kaufpreis, setKaufpreis] = useState('');
@@ -60,8 +58,7 @@ function NewPropertyPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
 
-  // Prefilled values (from query params) count as the starting point, not
-  // as an unsaved edit — only further changes should count as "dirty".
+  // Prefilled values are the starting point, not an unsaved edit; only further changes count as "dirty".
   const initial = useRef({
     objektkategorie, strasseHausnummer, plz, ort, bundesland, baujahr,
     wohnflaeche, anzahlZimmer, stellplaetze, energieeffizienz, kaufpreis,
@@ -99,8 +96,7 @@ function NewPropertyPageContent() {
     kaufdatum !== initial.kaufdatum ||
     bildBase64 !== initial.bildBase64;
 
-  // Any navigation away from an unsaved draft is routed through here so
-  // it can be confirmed first (breadcrumb links, the back button).
+  // Routes navigation away from an unsaved draft through a confirm step.
   const goTo = (href: string) => {
     if (isEditing) {
       setPendingHref(href);

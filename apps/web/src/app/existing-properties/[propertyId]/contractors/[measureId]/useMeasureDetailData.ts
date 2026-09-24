@@ -36,11 +36,10 @@ import { useEffect, useState } from 'react';
 import { canConfirmCustomerCompletion, isLocked as isMeasureLocked } from '../measureStatus';
 
 /**
- * There is no craftsperson-facing portal — every field here is owner-
- * editable, and (matching the overview table) every change is persisted
- * immediately. quoteAccepted is what locks the measure's core fields;
- * accepting a quote from the list below sets it the same way the overview
- * table's "Beauftragt" toggle does.
+ * No craftsperson-facing portal — every field is owner-editable and
+ * persisted immediately, matching the overview table. quoteAccepted locks
+ * the measure's core fields; accepting a quote sets it the same way the
+ * overview table's "Beauftragt" toggle does.
  */
 export function useMeasureDetailData(propertyId: string, measureId: string) {
     const { showToast } = useToast();
@@ -133,9 +132,8 @@ export function useMeasureDetailData(propertyId: string, measureId: string) {
         return true;
     };
 
-    // Only one quote can be accepted at a time — clears any other accepted
-    // quote on this measure, then syncs the parent measure's quotedCost /
-    // quoteAccepted so the overview table keeps reflecting it.
+    // Only one quote can be accepted at a time; syncs parent measure's
+    // quotedCost/quoteAccepted so the overview table reflects it.
     const acceptQuote = async (quote: RenovationMeasureQuote) => {
         if (!measure) return;
         const others = quotes.filter((q) => q.renovationMeasureQuoteId !== quote.renovationMeasureQuoteId && q.accepted);

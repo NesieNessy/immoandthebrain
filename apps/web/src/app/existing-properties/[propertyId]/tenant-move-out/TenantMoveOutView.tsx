@@ -133,7 +133,6 @@ export function TenantMoveOutView({ propertyId, property, unit, hasMultipleUnits
                         </div>
                     )}
 
-                    {/* Move-out data */}
                     <div>
                         <SectionLabel>Auszugsdaten</SectionLabel>
                         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -152,7 +151,6 @@ export function TenantMoveOutView({ propertyId, property, unit, hasMultipleUnits
                         </div>
                     </div>
 
-                    {/* Meter readings */}
                     <div>
                         <SectionLabel>Zählerstände bei Auszug</SectionLabel>
                         <div className="mt-3 flex flex-col gap-2">
@@ -196,7 +194,6 @@ export function TenantMoveOutView({ propertyId, property, unit, hasMultipleUnits
                         />
                     </div>
 
-                    {/* Damages */}
                     <div>
                         <SectionLabel>Beschreibung der Schäden</SectionLabel>
                         <div className="mt-3 flex flex-col gap-3">
@@ -242,7 +239,6 @@ export function TenantMoveOutView({ propertyId, property, unit, hasMultipleUnits
                         />
                     </div>
 
-                    {/* Generatable documents */}
                     <div>
                         <SectionLabel>Generierbare Dokumente</SectionLabel>
                         <div className="mt-3">
@@ -306,7 +302,6 @@ export function TenantMoveOutView({ propertyId, property, unit, hasMultipleUnits
                         </div>
                     </div>
 
-                    {/* Closing */}
                     <div>
                         <SectionLabel>Abschluss</SectionLabel>
                         <div className="mt-3 flex items-center gap-3 flex-wrap">

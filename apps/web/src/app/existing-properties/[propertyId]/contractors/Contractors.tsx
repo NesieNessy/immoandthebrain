@@ -219,8 +219,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                             value={toDate(m.actualCompletionDate)}
                             onChange={(date) => {
                                 const next = toDateInput(date);
-                                // Clearing the completion date can't leave a stale
-                                // customer confirmation behind it.
+                                // Clearing completion date must also clear stale customer confirmation.
                                 const patch = next ? { actualCompletionDate: next } : { actualCompletionDate: next, customerConfirmedCompleted: false };
                                 data.updateLocalField(m.renovationMeasureId, patch);
                                 void data.persistField(m.renovationMeasureId, patch);

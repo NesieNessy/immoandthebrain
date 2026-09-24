@@ -8,7 +8,6 @@ export interface CertificateContent {
     landlordName: string;
     landlordStreet: string;
     landlordCity: string;
-    /** Whether the Vermieter is also the Eigentümer of the unit. */
     isLandlordOwner: boolean;
     propertyAddress: string;
     unitLabel: string;
