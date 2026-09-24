@@ -1,7 +1,7 @@
 "use client";
 
-import { runOptimization } from '@/lib/detailCheck/analysis/optimize';
-import type { ObjectiveId } from '@/lib/detailCheck/analysis/objectives';
+import { runGoal, type OptimizationGoal } from '@/lib/detailCheck/analysis/optimize';
+import { recommend } from '@/lib/detailCheck/analysis/recommend';
 import type { CalculatorParams } from '@/lib/detailCheck/rentCalculator';
 import type { RenovationCase } from '@/lib/detailCheck/renovation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -15,12 +15,16 @@ export type OptimizationState =
 
 const IDLE: OptimizationState = { status: 'idle' };
 
+function runInline(params: CalculatorParams, cases: RenovationCase[], goal: OptimizationGoal): OptimizationProposal | null {
+  return goal === 'RECOMMENDATION' ? recommend(params, cases) : runGoal(params, cases, goal);
+}
+
 /**
  * Startet Optimierungen im Web Worker (bis zu drei parallel, je Ziel ein
  * Worker) und cacht die Ergebnisse je Eingabestand: ändert sich die Planung,
  * gelten alte Vorschläge nicht mehr und die Karten zeigen wieder „Starten".
  *
- * Die Zustände sind je `${inputKey}|${objective}` abgelegt, ein alter Stand
+ * Die Zustände sind je `${inputKey}|${goal}` abgelegt, ein alter Stand
  * wird also nie erneut angezeigt — ein Zurücksetzen von `states` beim
  * Wechsel des Eingabestands ist daher für die Korrektheit nicht nötig, nur
  * laufende Worker eines veralteten Stands werden noch abgebrochen.
@@ -29,13 +33,13 @@ export function useOptimization(params: CalculatorParams, cases: RenovationCase[
   // Betrachtungszeitraum gehört dazu: er ist Teil des Ziels „Mietsumme über B".
   const inputKey = useMemo(() => JSON.stringify({ params, cases }), [params, cases]);
   const [states, setStates] = useState<Record<string, OptimizationState>>({});
-  const workersRef = useRef(new Map<ObjectiveId, Worker>());
+  const workersRef = useRef(new Map<OptimizationGoal, Worker>());
   const requestIdRef = useRef(0);
 
   useEffect(() => {
     // Eingabestand geändert: alte Worker sind veraltet und werden
     // abgebrochen. `states` selbst muss nicht geleert werden — es ist je
-    // `${inputKey}|${objective}` abgelegt, ein alter Stand wird also nie
+    // `${inputKey}|${goal}` abgelegt, ein alter Stand wird also nie
     // wieder angezeigt.
     const workers = workersRef.current;
     return () => {
@@ -44,10 +48,10 @@ export function useOptimization(params: CalculatorParams, cases: RenovationCase[
     };
   }, [inputKey]);
 
-  const stateFor = useCallback((objective: ObjectiveId) => states[`${inputKey}|${objective}`] ?? IDLE, [states, inputKey]);
+  const stateFor = useCallback((goal: OptimizationGoal) => states[`${inputKey}|${goal}`] ?? IDLE, [states, inputKey]);
 
-  const start = useCallback((objective: ObjectiveId) => {
-    const key = `${inputKey}|${objective}`;
+  const start = useCallback((goal: OptimizationGoal) => {
+    const key = `${inputKey}|${goal}`;
     const requestId = ++requestIdRef.current;
     setStates((current) => ({ ...current, [key]: { status: 'running', startedAt: Date.now() } }));
 
@@ -55,7 +59,7 @@ export function useOptimization(params: CalculatorParams, cases: RenovationCase[
       const startedAt = performance.now();
       window.setTimeout(() => {
         try {
-          const proposal = runOptimization(params, cases, objective);
+          const proposal = runInline(params, cases, goal);
           setStates((current) => ({ ...current, [key]: { status: 'done', proposal, durationMs: performance.now() - startedAt } }));
         } catch (error) {
           setStates((current) => ({ ...current, [key]: { status: 'error', message: error instanceof Error ? error.message : String(error) } }));
@@ -64,13 +68,13 @@ export function useOptimization(params: CalculatorParams, cases: RenovationCase[
       return;
     }
 
-    workersRef.current.get(objective)?.terminate();
+    workersRef.current.get(goal)?.terminate();
     const worker = new Worker(new URL('./optimizer.worker.ts', import.meta.url));
-    workersRef.current.set(objective, worker);
+    workersRef.current.set(goal, worker);
     worker.onmessage = (event: MessageEvent<{ requestId: number; ok: boolean; proposal?: OptimizationProposal | null; durationMs?: number; message?: string }>) => {
       if (event.data.requestId !== requestId) return;
       worker.terminate();
-      workersRef.current.delete(objective);
+      workersRef.current.delete(goal);
       setStates((current) => ({
         ...current,
         [key]: event.data.ok
@@ -80,10 +84,10 @@ export function useOptimization(params: CalculatorParams, cases: RenovationCase[
     };
     worker.onerror = (event) => {
       worker.terminate();
-      workersRef.current.delete(objective);
+      workersRef.current.delete(goal);
       setStates((current) => ({ ...current, [key]: { status: 'error', message: event.message || 'Worker-Fehler' } }));
     };
-    worker.postMessage({ requestId, params, cases, objective });
+    worker.postMessage({ requestId, params, cases, goal });
   }, [inputKey, params, cases]);
 
   return { stateFor, start };

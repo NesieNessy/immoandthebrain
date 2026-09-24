@@ -2,34 +2,69 @@
 
 import { Button, Dropdown, SectionLabel, Tag } from '@/components/ui';
 import type { CalculatorMode, CalculatorParams } from '@/lib/detailCheck/rentCalculator';
+import { DEFAULT_RENT_INDEX_GROWTH_PERCENT } from '@/lib/detailCheck/rentCalculator';
 import type { RenovationCase } from '@/lib/detailCheck/renovation';
-import { OPTIMIZATION_OBJECTIVE, USE_CASES, USE_CASE_GROUP_LABELS, isAvailable, type UseCase, type UseCaseGroup, type UseCaseId } from '@/lib/detailCheck/analysis/catalog';
+import { OPTIMIZATION_GOAL, USE_CASES, USE_CASE_GROUP_LABELS, isAvailable, type UseCase, type UseCaseGroup, type UseCaseId } from '@/lib/detailCheck/analysis/catalog';
 import { buildAnalysisCards, formatCurrency, formatMonth, type AnalysisCard, type CardSeries } from '@/lib/detailCheck/analysis/cards';
 import { measureDeltas, type RentCalculatorResult } from '@/lib/detailCheck/analysis/metrics';
-import type { KeyFigures, OptimizationProposal } from '@/lib/detailCheck/analysis/optimize';
-import type { ObjectiveId } from '@/lib/detailCheck/analysis/objectives';
+import type { KeyFigures, OptimizationGoal, OptimizationProposal } from '@/lib/detailCheck/analysis/optimize';
+import { MAX_SELECTION_MEASURES } from '@/lib/detailCheck/analysis/selection';
 import { useOptimization, type OptimizationState } from './useOptimization';
 import { Loader2, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const duration = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+const percent = new Intl.NumberFormat('de-DE', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-/** Welche Kennzahlzeile je Ziel fett dargestellt wird (Step 1 der Aufgabe). */
-const BOLD_ROW_BY_OBJECTIVE: Record<ObjectiveId, keyof KeyFigures> = {
+function formatPercentOrDash(value: number | null): string {
+  return value == null ? '–' : percent.format(value);
+}
+
+/** Welche Kennzahlzeile je Ziel fett dargestellt wird. */
+const BOLD_ROW_BY_GOAL: Record<OptimizationGoal, keyof KeyFigures> = {
   EARLIEST_BREAK_EVEN: 'breakEven',
   FASTEST_POSITIVE_CASHFLOW: 'sustainablyPositiveFrom',
   MAX_RENT_IN_VIEW: 'rentSumInView',
+  MAX_ROI: 'roi',
+  MAX_EQUITY_IRR: 'equityIrr',
+  RECOMMENDATION: 'breakEven',
 };
 
+/** Laufzeithinweis je Ziel für die "Rechnet …"-Anzeige. */
+const RUNTIME_HINT_BY_GOAL: Record<OptimizationGoal, string> = {
+  EARLIEST_BREAK_EVEN: 'ca. 5 Sekunden',
+  FASTEST_POSITIVE_CASHFLOW: 'ca. 5 Sekunden',
+  MAX_RENT_IN_VIEW: 'ca. 5 Sekunden',
+  MAX_ROI: 'ca. 15–30 Sekunden',
+  MAX_EQUITY_IRR: 'ca. 15–30 Sekunden',
+  RECOMMENDATION: 'bis zu 1 Minute',
+};
+
+/** Aktualisiert einmal pro Sekunde die verstrichene Zeit, solange eine Optimierung läuft. */
+function useElapsedSeconds(startedAt: number | undefined): number {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (startedAt == null) {
+      setElapsed(0);
+      return;
+    }
+    const tick = () => setElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [startedAt]);
+  return elapsed;
+}
+
 function OptimizationTable({ proposal, viewPeriodYears }: { proposal: OptimizationProposal; viewPeriodYears: number }) {
-  // useOptimization only produces proposals for ObjectiveId goals (Schnitt 3 wiring); wiring the new
-  // ROI/EK-Rendite/Empfehlung goals into this table is SCRUM-96 Schnitt 4 Task 4, not this cast.
-  const boldKey = BOLD_ROW_BY_OBJECTIVE[proposal.goal as ObjectiveId];
+  const boldKey = BOLD_ROW_BY_GOAL[proposal.goal];
   const rows: { key: keyof KeyFigures; label: string; format: (figures: KeyFigures) => string }[] = [
     { key: 'breakEven', label: 'Break-even', format: (f) => formatMonth(f.breakEven) },
     { key: 'sustainablyPositiveFrom', label: 'Cashflow dauerhaft positiv ab', format: (f) => formatMonth(f.sustainablyPositiveFrom) },
     { key: 'rentSumInView', label: `Mietsumme in ${viewPeriodYears} Jahren`, format: (f) => formatCurrency(f.rentSumInView) },
     { key: 'cashflowAtViewEnd', label: `Kumulierter Cashflow nach ${viewPeriodYears} Jahren`, format: (f) => formatCurrency(f.cashflowAtViewEnd) },
+    { key: 'equityIrr', label: 'Eigenkapitalrendite p. a.', format: (f) => formatPercentOrDash(f.equityIrr) },
+    { key: 'roi', label: 'ROI der Modernisierung', format: (f) => formatPercentOrDash(f.roi) },
   ];
   return (
     <div className="overflow-x-auto">
@@ -57,19 +92,26 @@ function OptimizationTable({ proposal, viewPeriodYears }: { proposal: Optimizati
 
 function OptimizationCard({
   useCase,
+  goal,
+  goalLabel,
   mode,
   state,
   viewPeriodYears,
+  rentIndexGrowthPercent,
   onStart,
   onApplyPlacements,
 }: {
   useCase: UseCase;
+  goal: OptimizationGoal;
+  goalLabel: (goal: OptimizationGoal) => string;
   mode: CalculatorMode;
   state: OptimizationState;
   viewPeriodYears: number;
+  rentIndexGrowthPercent: number;
   onStart: () => void;
-  onApplyPlacements: (placements: Record<string, string>) => void;
+  onApplyPlacements: (placements: Record<string, string>, excludedModernizationIds: string[]) => void;
 }) {
+  const elapsed = useElapsedSeconds(state.status === 'running' ? state.startedAt : undefined);
   return (
     <article className="rounded-lg border border-border bg-card p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -77,7 +119,8 @@ function OptimizationCard({
         {mode !== 'KNOWN' && <Tag label="Nur mit bekannten Maßnahmen" variant="muted" />}
         {mode === 'KNOWN' && state.status === 'error' && <Tag label="Fehler" variant="danger" />}
         {mode === 'KNOWN' && state.status === 'done' && state.proposal === null && <Tag label="Keine Maßnahme geplant" variant="muted" />}
-        {mode === 'KNOWN' && state.status === 'done' && state.proposal !== null && (
+        {mode === 'KNOWN' && state.status === 'done' && state.proposal?.tooMany && <Tag label="Zu viele Maßnahmen" variant="muted" />}
+        {mode === 'KNOWN' && state.status === 'done' && state.proposal !== null && !state.proposal.tooMany && (
           <Tag label={state.proposal.improved ? 'Verbesserung' : 'Plan ist bereits optimal'} variant={state.proposal.improved ? 'success' : 'muted'} />
         )}
       </div>
@@ -89,7 +132,7 @@ function OptimizationCard({
       {mode === 'KNOWN' && state.status === 'running' && (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          Rechnet … (ca. 5 Sekunden)
+          Rechnet … ({RUNTIME_HINT_BY_GOAL[goal]}) — {elapsed}s
         </p>
       )}
 
@@ -100,7 +143,13 @@ function OptimizationCard({
         </div>
       )}
 
-      {mode === 'KNOWN' && state.status === 'done' && state.proposal && (
+      {mode === 'KNOWN' && state.status === 'done' && state.proposal?.tooMany && (
+        <p className="text-sm text-muted-foreground">
+          Zu viele geplante Maßnahmen für eine vollständige Auswahl-Optimierung (mehr als {MAX_SELECTION_MEASURES}).
+        </p>
+      )}
+
+      {mode === 'KNOWN' && state.status === 'done' && state.proposal && !state.proposal.tooMany && (
         <div className="space-y-3">
           <OptimizationTable proposal={state.proposal} viewPeriodYears={viewPeriodYears} />
           <p className="text-sm text-muted-foreground">
@@ -108,8 +157,30 @@ function OptimizationCard({
               ? 'Keine Verschiebung nötig.'
               : state.proposal.changes.map((change) => `${change.title}: ${formatMonth(change.from)} → ${formatMonth(change.to)}`).join('; ')}
           </p>
-          {state.proposal.improved && state.proposal.changes.length > 0 && (
-            <Button label="Übernehmen" variant="primary" onClick={() => onApplyPlacements(state.proposal!.placements)} />
+          {state.proposal.excludedTitles.length > 0 && (
+            <p className="text-sm text-muted-foreground">Nicht durchführen: {state.proposal.excludedTitles.join(', ')}</p>
+          )}
+          {state.proposal.goal === 'RECOMMENDATION' && state.proposal.chosenGoal && (
+            <div className="space-y-1">
+              <p className="text-sm text-foreground">Gewähltes Ziel: {goalLabel(state.proposal.chosenGoal)}</p>
+              {state.proposal.reasoning && state.proposal.reasoning.length > 0 && (
+                <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                  {state.proposal.reasoning.map((sentence) => <li key={sentence}>{sentence}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+          {(goal === 'MAX_EQUITY_IRR' || state.proposal.chosenGoal === 'MAX_EQUITY_IRR') && (
+            <p className="text-xs text-muted-foreground">
+              Annahme: Wertsteigerung {rentIndexGrowthPercent} % p. a. (Mietspiegel-Entwicklung)
+            </p>
+          )}
+          {state.proposal.improved && (
+            <Button
+              label="Übernehmen"
+              variant="primary"
+              onClick={() => onApplyPlacements(state.proposal!.placements, state.proposal!.excludedModernizationIds)}
+            />
           )}
           <p className="text-xs text-muted-foreground">Berechnet in {duration.format(state.durationMs / 1000)} s</p>
         </div>
@@ -131,9 +202,23 @@ const GOAL_DROPDOWN_LABELS: Partial<Record<UseCaseId, string>> = {
   'optimaler-zeitpunkt': 'Frühester Break-even',
   'mieterhoehungsstrategie': 'Höchste Mieteinnahmen im Betrachtungszeitraum',
   'cashflow-optimierung': 'Schnellster dauerhaft positiver Cashflow',
+  'modernisierungsstrategie': 'Beste Maßnahmen-Auswahl (ROI)',
+  'kapitalrendite': 'Höchste Eigenkapitalrendite',
+  'empfehlung': 'Empfehlung (alle Ziele)',
 };
 
 const OPTIMIZATION_USE_CASES = USE_CASES.filter((item) => item.group === 'optimierung');
+
+/** Umkehrung von `OPTIMIZATION_GOAL`/`GOAL_DROPDOWN_LABELS`: Dropdown-Label je `OptimizationGoal`, für die Empfehlungskarte ("Gewähltes Ziel: …"). */
+const GOAL_LABEL_BY_GOAL: Partial<Record<OptimizationGoal, string>> = Object.fromEntries(
+  OPTIMIZATION_USE_CASES
+    .map((item) => [OPTIMIZATION_GOAL[item.id], GOAL_DROPDOWN_LABELS[item.id] ?? item.label] as const)
+    .filter((entry): entry is [OptimizationGoal, string] => entry[0] !== undefined),
+);
+
+function labelForGoal(goal: OptimizationGoal): string {
+  return GOAL_LABEL_BY_GOAL[goal] ?? goal;
+}
 
 function readSelection(): UseCaseId[] {
   try {
@@ -209,6 +294,7 @@ export function AnalysisPanel({
   onViewPeriodYearsChange,
   mode,
   onApplyPlacements,
+  onResetExclusions,
 }: {
   result: RentCalculatorResult;
   params: CalculatorParams;
@@ -216,7 +302,8 @@ export function AnalysisPanel({
   viewPeriodYears: number;
   onViewPeriodYearsChange: (years: number) => void;
   mode: CalculatorMode;
-  onApplyPlacements: (placements: Record<string, string>) => void;
+  onApplyPlacements: (placements: Record<string, string>, excludedModernizationIds: string[]) => void;
+  onResetExclusions: () => void;
 }) {
   const [selected, setSelected] = useState<UseCaseId[]>(DEFAULT_SELECTION);
   useEffect(() => setSelected(readSelection()), []);
@@ -293,7 +380,7 @@ export function AnalysisPanel({
     () => OPTIMIZATION_USE_CASES.find((item) => item.id === goal) ?? OPTIMIZATION_USE_CASES[0],
     [goal],
   );
-  const goalObjective = goalUseCase ? OPTIMIZATION_OBJECTIVE[goalUseCase.id] : undefined;
+  const goalObjective = goalUseCase ? OPTIMIZATION_GOAL[goalUseCase.id] : undefined;
   const goalState = goalObjective ? optimization.stateFor(goalObjective) : { status: 'idle' as const };
   const optimizationRunning = goalState.status === 'running';
 
@@ -306,6 +393,12 @@ export function AnalysisPanel({
       }),
     [],
   );
+
+  const currentExcludedIds = useMemo(() => params.excludedModernizationIds ?? [], [params.excludedModernizationIds]);
+  const currentExcludedTitles = useMemo(() => {
+    const titleById = new Map(cases.map((item) => [item.id, item.massnahme]));
+    return currentExcludedIds.map((id) => titleById.get(id) ?? id);
+  }, [currentExcludedIds, cases]);
 
   return (
     <section className="order-3 space-y-4">
@@ -335,12 +428,21 @@ export function AnalysisPanel({
         {goalUseCase && goalObjective && goalState.status !== 'idle' && (
           <OptimizationCard
             useCase={goalUseCase}
+            goal={goalObjective}
+            goalLabel={labelForGoal}
             mode={mode}
             state={goalState}
             viewPeriodYears={viewPeriodYears}
+            rentIndexGrowthPercent={params.rentIndexGrowthPercent ?? DEFAULT_RENT_INDEX_GROWTH_PERCENT}
             onStart={() => optimization.start(goalObjective)}
             onApplyPlacements={onApplyPlacements}
           />
+        )}
+        {currentExcludedIds.length > 0 && (
+          <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span>Ausgeschlossen: {currentExcludedTitles.join(', ')}</span>
+            <Button label="Alle wieder aufnehmen" variant="outline" onClick={onResetExclusions} />
+          </p>
         )}
       </div>
       <div className="flex flex-wrap items-end justify-between gap-3">

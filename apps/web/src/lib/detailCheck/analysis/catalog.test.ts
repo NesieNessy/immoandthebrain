@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OPTIMIZATION_OBJECTIVE, USE_CASES, isAvailable } from './catalog';
+import { OPTIMIZATION_GOAL, USE_CASES, isAvailable } from './catalog';
 
 describe('use case catalog', () => {
   it('lists twelve unique use cases', () => {
@@ -7,16 +7,17 @@ describe('use case catalog', () => {
     expect(new Set(USE_CASES.map((item) => item.id)).size).toBe(12);
   });
 
-  it('slices 1 and 3 are available: three evaluations and three optimizations', () => {
+  it('slices 1, 3 and 4 are available: three evaluations and all six optimizations, simulations still follow', () => {
     expect(USE_CASES.filter(isAvailable).map((item) => item.id)).toEqual([
       'break-even', 'amortisation', 'wirtschaftlichkeit',
       'optimaler-zeitpunkt', 'mieterhoehungsstrategie', 'cashflow-optimierung',
+      'modernisierungsstrategie', 'kapitalrendite', 'empfehlung',
     ]);
   });
 
-  it('every available optimization has an objective', () => {
+  it('every available optimization has a goal', () => {
     for (const item of USE_CASES.filter((useCase) => useCase.group === 'optimierung' && isAvailable(useCase))) {
-      expect(OPTIMIZATION_OBJECTIVE[item.id]).toBeDefined();
+      expect(OPTIMIZATION_GOAL[item.id]).toBeDefined();
     }
   });
 

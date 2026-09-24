@@ -2272,7 +2272,7 @@ function CalculatorContent() {
                 viewPeriodYears={viewPeriodYears}
                 onViewPeriodYearsChange={setViewPeriodYears}
                 mode={mode}
-                onApplyPlacements={(placements) => {
+                onApplyPlacements={(placements, excludedModernizationIds) => {
                   // Same §558-plan reset the "Sanierungen und Mieterhöhungen
                   // optimieren" button triggers (resetRentPlanRef.current = true
                   // before recalc): a new set of modernization placements can
@@ -2283,7 +2283,11 @@ function CalculatorContent() {
                   // evaluation cards) and persists on its usual debounce, which
                   // is what keeps the applied proposal after save + reload.
                   resetRentPlanRef.current = true;
-                  commitOverrides({ modernizationPlacements: placements, rentIncreaseOverrides: {} });
+                  commitOverrides({ modernizationPlacements: placements, excludedModernizationIds, rentIncreaseOverrides: {} });
+                }}
+                onResetExclusions={() => {
+                  resetRentPlanRef.current = true;
+                  commitOverrides({ excludedModernizationIds: [], modernizationPlacements: {} });
                 }}
               />
             )}
