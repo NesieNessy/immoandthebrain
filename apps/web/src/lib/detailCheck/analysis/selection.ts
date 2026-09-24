@@ -1,5 +1,6 @@
-import { runRentCalculator, type CalculatorParams } from '../rentCalculator';
+import type { CalculatorParams } from '../rentCalculator';
 import type { RenovationCase } from '../renovation';
+import { cachedRun, createAnalysisCache, type AnalysisCache, type Result } from './cache';
 import { equityIrr, planRoi } from './metrics';
 import { runOptimization } from './optimize';
 
@@ -21,8 +22,6 @@ export type SelectionResult =
   | { tooMany: true }
   | null;
 
-type Result = ReturnType<typeof runRentCalculator>;
-
 function scoreFor(goal: SelectionGoal, result: Result, withoutAny: Result, viewPeriodYears: number): number {
   const value = goal === 'MAX_ROI' ? planRoi(result, withoutAny, viewPeriodYears) : equityIrr(result, viewPeriodYears);
   return value == null ? -Infinity : value;
@@ -38,8 +37,9 @@ function subsetsOf(ids: string[], includeEmpty: boolean): Set<string>[] {
   return subsets;
 }
 
-function runWithExclusion(params: CalculatorParams, cases: RenovationCase[], excludedModernizationIds: string[]): Result {
-  return runRentCalculator(
+function runWithExclusion(params: CalculatorParams, cases: RenovationCase[], excludedModernizationIds: string[], cache: AnalysisCache): Result {
+  return cachedRun(
+    cache,
     { ...params, placementMode: 'DEFAULT', modernizationPlacements: undefined, rentIncreasePlan: undefined, rentIncreaseOverrides: undefined, excludedModernizationIds },
     cases,
   );
@@ -52,20 +52,25 @@ function breakEvenOffset(result: Result, start: string): number {
   return (y - sy) * 12 + (m - sm);
 }
 
-export function optimizeSelection(params: CalculatorParams, cases: RenovationCase[], goal: SelectionGoal): SelectionResult {
+export function optimizeSelection(
+  params: CalculatorParams,
+  cases: RenovationCase[],
+  goal: SelectionGoal,
+  cache: AnalysisCache = createAnalysisCache(),
+): SelectionResult {
   const baseExcluded = params.excludedModernizationIds ?? [];
   const baseExcludedSet = new Set(baseExcluded);
   const planned = cases.filter((item) => item.selected && Boolean(item.ai) && !baseExcludedSet.has(item.id)).map((item) => item.id);
   if (planned.length > MAX_SELECTION_MEASURES) return { tooMany: true };
   if (planned.length === 0) return null;
 
-  const withoutAny = runWithExclusion(params, cases, [...baseExcluded, ...planned]);
+  const withoutAny = runWithExclusion(params, cases, [...baseExcluded, ...planned], cache);
   const includeEmpty = goal === 'MAX_EQUITY_IRR';
   const subsets = subsetsOf(planned, includeEmpty);
 
   const stage1 = subsets.map((keep) => {
     const excludedModernizationIds = [...baseExcluded, ...planned.filter((id) => !keep.has(id))];
-    const result = runWithExclusion(params, cases, excludedModernizationIds);
+    const result = runWithExclusion(params, cases, excludedModernizationIds, cache);
     return { keep, excludedModernizationIds, score: scoreFor(goal, result, withoutAny, params.viewPeriodYears ?? 15) };
   });
   stage1.sort((a, b) => b.score - a.score);
@@ -79,12 +84,13 @@ export function optimizeSelection(params: CalculatorParams, cases: RenovationCas
       return { excludedModernizationIds: candidate.excludedModernizationIds, placements: {}, score: candidate.score, breakEvenOffset: breakEvenOffset(result, params.startYyyymm) };
     }
     const paramsExcl = { ...params, excludedModernizationIds: candidate.excludedModernizationIds };
-    const proposal = runOptimization(paramsExcl, cases, 'EARLIEST_BREAK_EVEN');
+    const proposal = runOptimization(paramsExcl, cases, 'EARLIEST_BREAK_EVEN', cache);
     if (!proposal) {
-      const result = runWithExclusion(params, cases, candidate.excludedModernizationIds);
+      const result = runWithExclusion(params, cases, candidate.excludedModernizationIds, cache);
       return { excludedModernizationIds: candidate.excludedModernizationIds, placements: {}, score: candidate.score, breakEvenOffset: breakEvenOffset(result, params.startYyyymm) };
     }
-    const replay = runRentCalculator(
+    const replay = cachedRun(
+      cache,
       { ...paramsExcl, placementMode: 'DEFAULT', modernizationPlacements: proposal.placements, rentIncreaseOverrides: undefined, rentIncreasePlan: undefined },
       cases,
     );

@@ -1,5 +1,6 @@
 import { DEFAULT_VIEW_PERIOD_YEARS, runRentCalculator, type CalculatorParams } from '../rentCalculator';
 import type { RenovationCase } from '../renovation';
+import { cachedProposal, cachedRun, createAnalysisCache, type AnalysisCache } from './cache';
 import { equityIrr, planRoi } from './metrics';
 import { OBJECTIVES, compareScores, type ObjectiveId } from './objectives';
 import { optimizeSelection, type SelectionGoal } from './selection';
@@ -83,44 +84,53 @@ function changesOf(current: Result, replay: Result): PlacementChange[] {
     .map((row) => ({ id: row.id, title: row.title, from: currentMonth.get(row.id) ?? '', to: row.effectiveYyyymm }));
 }
 
-/** Optimierung für ein Zeitpunkt-Ziel (`ObjectiveId`) — unverändert aus Schnitt 3. */
-function runObjectiveGoal(params: CalculatorParams, cases: RenovationCase[], objective: ObjectiveId): OptimizationProposal | null {
+/** Optimierung für ein Zeitpunkt-Ziel (`ObjectiveId`) — unverändert aus Schnitt 3, jetzt über `cache` memoisiert. */
+function runObjectiveGoal(params: CalculatorParams, cases: RenovationCase[], objective: ObjectiveId, cache: AnalysisCache): OptimizationProposal | null {
   if (params.mode !== 'KNOWN') return null;
-  const viewPeriodYears = params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS;
-  const current = runRentCalculator(params, cases);
-  if (current.modernizationPlan.length === 0) return null;
 
-  const optimized = runRentCalculator(
-    { ...params, placementMode: 'OPTIMIZED', modernizationPlacements: undefined, rentIncreaseOverrides: undefined, rentIncreasePlan: undefined, optimizationObjective: objective },
-    cases,
-  );
-  const placements = Object.fromEntries(optimized.modernizationPlan.map((row) => [row.id, row.effectiveYyyymm]));
-  const replay = runRentCalculator({ ...params, placementMode: 'DEFAULT', modernizationPlacements: placements, rentIncreaseOverrides: undefined, rentIncreasePlan: undefined }, cases);
+  // Dieselbe (params, objective)-Kombination kann sowohl als eigenes Ziel als
+  // auch aus Stufe 2 der Auswahl-Suche (selection.ts, EARLIEST_BREAK_EVEN auf
+  // demselben Ausschluss) angefragt werden — Feinoptimierung nicht doppelt
+  // rechnen.
+  const key = `objective:${objective}:${JSON.stringify(params)}`;
+  return cachedProposal(cache, key, () => {
+    const viewPeriodYears = params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS;
+    const current = cachedRun(cache, params, cases);
+    if (current.modernizationPlan.length === 0) return null;
 
-  const before = keyFigures(current, viewPeriodYears);
-  const after = keyFigures(replay, viewPeriodYears);
-  const changes = changesOf(current, replay);
+    const optimized = cachedRun(
+      cache,
+      { ...params, placementMode: 'OPTIMIZED', modernizationPlacements: undefined, rentIncreaseOverrides: undefined, rentIncreasePlan: undefined, optimizationObjective: objective },
+      cases,
+    );
+    const placements = Object.fromEntries(optimized.modernizationPlan.map((row) => [row.id, row.effectiveYyyymm]));
+    const replay = cachedRun(cache, { ...params, placementMode: 'DEFAULT', modernizationPlacements: placements, rentIncreaseOverrides: undefined, rentIncreasePlan: undefined }, cases);
 
-  return {
-    goal: objective,
-    placements,
-    before,
-    after,
-    changes,
-    improved: compareScores(scoreOf(objective, after, replay, params.startYyyymm), scoreOf(objective, before, current, params.startYyyymm)) < 0,
-    excludedModernizationIds: [],
-    excludedTitles: [],
-  };
+    const before = keyFigures(current, viewPeriodYears);
+    const after = keyFigures(replay, viewPeriodYears);
+    const changes = changesOf(current, replay);
+
+    return {
+      goal: objective,
+      placements,
+      before,
+      after,
+      changes,
+      improved: compareScores(scoreOf(objective, after, replay, params.startYyyymm), scoreOf(objective, before, current, params.startYyyymm)) < 0,
+      excludedModernizationIds: [],
+      excludedTitles: [],
+    };
+  });
 }
 
 /** Auswahl-Ziel (ROI / EK-Rendite, SCRUM-96 Schnitt 4): sucht über Ausschluss-Teilmengen, siehe selection.ts. */
-function runSelectionGoal(params: CalculatorParams, cases: RenovationCase[], goal: SelectionGoal): OptimizationProposal | null {
+function runSelectionGoal(params: CalculatorParams, cases: RenovationCase[], goal: SelectionGoal, cache: AnalysisCache): OptimizationProposal | null {
   if (params.mode !== 'KNOWN') return null;
   const viewPeriodYears = params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS;
-  const current = runRentCalculator(params, cases);
+  const current = cachedRun(cache, params, cases);
   if (current.modernizationPlan.length === 0) return null;
 
-  const selection = optimizeSelection(params, cases, goal);
+  const selection = optimizeSelection(params, cases, goal, cache);
   if (selection === null) return null;
 
   const before = keyFigures(current, viewPeriodYears);
@@ -141,7 +151,8 @@ function runSelectionGoal(params: CalculatorParams, cases: RenovationCase[], goa
 
   const baseExcluded = params.excludedModernizationIds ?? [];
   const allExcluded = [...baseExcluded, ...selection.excludedModernizationIds];
-  const withoutAny = runRentCalculator(
+  const withoutAny = cachedRun(
+    cache,
     {
       ...params,
       placementMode: 'DEFAULT',
@@ -152,7 +163,8 @@ function runSelectionGoal(params: CalculatorParams, cases: RenovationCase[], goa
     },
     cases,
   );
-  const replay = runRentCalculator(
+  const replay = cachedRun(
+    cache,
     {
       ...params,
       placementMode: 'DEFAULT',
@@ -188,13 +200,13 @@ function runSelectionGoal(params: CalculatorParams, cases: RenovationCase[], goa
 }
 
 /** Zentraler Einstieg (SCRUM-96, Schnitt 4): Zeitpunkt-Ziele, Auswahl-Ziele. `RECOMMENDATION` läuft nur über `recommend`. */
-export function runGoal(params: CalculatorParams, cases: RenovationCase[], goal: OptimizationGoal): OptimizationProposal | null {
-  if (goal === 'MAX_ROI' || goal === 'MAX_EQUITY_IRR') return runSelectionGoal(params, cases, goal);
+export function runGoal(params: CalculatorParams, cases: RenovationCase[], goal: OptimizationGoal, cache: AnalysisCache = createAnalysisCache()): OptimizationProposal | null {
+  if (goal === 'MAX_ROI' || goal === 'MAX_EQUITY_IRR') return runSelectionGoal(params, cases, goal, cache);
   if (goal === 'RECOMMENDATION') return null;
-  return runObjectiveGoal(params, cases, goal);
+  return runObjectiveGoal(params, cases, goal, cache);
 }
 
-/** Dünner Wrapper für Bestandscode/-tests (Schnitt 3): `objective` hieß früher das Feld, jetzt `goal`. */
-export function runOptimization(params: CalculatorParams, cases: RenovationCase[], objective: ObjectiveId): OptimizationProposal | null {
-  return runGoal(params, cases, objective);
+/** Dünner Wrapper für Bestandscode/-tests (Schnitt 3): `objective` hieß früher das Feld, jetzt `goal`. `cache` optional — teilt Zwischenergebnisse mit einem umgebenden `recommend()`/`optimizeSelection()`-Aufruf. */
+export function runOptimization(params: CalculatorParams, cases: RenovationCase[], objective: ObjectiveId, cache?: AnalysisCache): OptimizationProposal | null {
+  return runGoal(params, cases, objective, cache);
 }

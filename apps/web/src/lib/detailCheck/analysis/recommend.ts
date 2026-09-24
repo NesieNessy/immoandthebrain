@@ -1,5 +1,6 @@
 import type { CalculatorParams } from '../rentCalculator';
 import type { RenovationCase } from '../renovation';
+import { createAnalysisCache } from './cache';
 import { formatCurrency, formatMonth } from './cards';
 import { runGoal, type OptimizationGoal, type OptimizationProposal } from './optimize';
 
@@ -64,14 +65,27 @@ function reasoningFor(proposal: OptimizationProposal, current: OptimizationPropo
   return sentences.slice(0, 5);
 }
 
-/** Rechnet alle fünf Ziele und liefert den nach Break-even/Endcashflow besten Vorschlag samt Begründung. */
-export function recommend(params: CalculatorParams, cases: RenovationCase[]): OptimizationProposal | null {
+/** Die fünf Ziele, die für `RECOMMENDATION` verglichen werden — auch für den Aufrufer nützlich (z. B. um sie parallel in Workern zu starten). */
+export { CANDIDATE_GOALS as RECOMMENDATION_CANDIDATE_GOALS };
+
+/**
+ * Auswahl + Begründung aus bereits gerechneten Proposals (SCRUM-96,
+ * Performance): reine Funktion, damit der Hook die fünf Ziele parallel in
+ * Workern rechnen kann und trotzdem dieselbe Auswahl-/Begründungslogik nutzt
+ * wie `recommend()`. `proposals` darf für ein Ziel fehlen oder `null`/
+ * `tooMany` sein — solche Ziele werden wie bisher übersprungen.
+ */
+export function pickRecommendation(
+  params: CalculatorParams,
+  cases: RenovationCase[],
+  proposals: Partial<Record<OptimizationGoal, OptimizationProposal | null>>,
+): OptimizationProposal | null {
   if (params.mode !== 'KNOWN') return null;
   const start = params.startYyyymm;
 
   let best: { goal: OptimizationGoal; proposal: OptimizationProposal; score: [number, number] } | null = null;
   for (const goal of CANDIDATE_GOALS) {
-    const proposal = runGoal(params, cases, goal);
+    const proposal = proposals[goal];
     if (!proposal || proposal.tooMany) continue;
     const candidateScore = score(proposal, start);
     if (!best || compare(candidateScore, best.score) < 0) {
@@ -88,4 +102,22 @@ export function recommend(params: CalculatorParams, cases: RenovationCase[]): Op
     chosenGoal: best.goal,
     reasoning: reasoning.length > 0 ? reasoning : undefined,
   };
+}
+
+/** Rechnet alle fünf Ziele und liefert den nach Break-even/Endcashflow besten Vorschlag samt Begründung. */
+export function recommend(params: CalculatorParams, cases: RenovationCase[]): OptimizationProposal | null {
+  if (params.mode !== 'KNOWN') return null;
+
+  // Ein gemeinsamer Cache über alle fünf Ziele: MAX_ROI/MAX_EQUITY_IRR
+  // rechnen in Stufe 1 identische Teilmengen, und EARLIEST_BREAK_EVEN kann
+  // sowohl als eigenes Ziel als auch in deren Stufe 2 angefragt werden. Nur
+  // sinnvoll, wenn alle Ziele im selben Thread laufen (siehe `pickRecommendation`
+  // für den parallelen Worker-Fall im Hook).
+  const cache = createAnalysisCache();
+  const proposals: Partial<Record<OptimizationGoal, OptimizationProposal | null>> = {};
+  for (const goal of CANDIDATE_GOALS) {
+    proposals[goal] = runGoal(params, cases, goal, cache);
+  }
+
+  return pickRecommendation(params, cases, proposals);
 }
