@@ -28,6 +28,7 @@ const BOLD_ROW_BY_GOAL: Record<OptimizationGoal, keyof KeyFigures> = {
   MAX_ROI: 'roi',
   MAX_EQUITY_IRR: 'equityIrr',
   RECOMMENDATION: 'breakEven',
+  NO_MODERNIZATION: 'breakEven',
 };
 
 /** Laufzeithinweis je Ziel für die "Rechnet …"-Anzeige. */
@@ -38,6 +39,7 @@ const RUNTIME_HINT_BY_GOAL: Record<OptimizationGoal, string> = {
   MAX_ROI: 'ca. 15–30 Sekunden',
   MAX_EQUITY_IRR: 'ca. 15–30 Sekunden',
   RECOMMENDATION: 'bis zu 1 Minute',
+  NO_MODERNIZATION: 'ca. 5 Sekunden',
 };
 
 /** Aktualisiert einmal pro Sekunde die verstrichene Zeit, solange eine Optimierung läuft. */
@@ -217,11 +219,15 @@ const GOAL_DROPDOWN_LABELS: Partial<Record<UseCaseId, string>> = {
 const OPTIMIZATION_USE_CASES = USE_CASES.filter((item) => item.group === 'optimierung');
 
 /** Umkehrung von `OPTIMIZATION_GOAL`/`GOAL_DROPDOWN_LABELS`: Dropdown-Label je `OptimizationGoal`, für die Empfehlungskarte ("Gewähltes Ziel: …"). */
-const GOAL_LABEL_BY_GOAL: Partial<Record<OptimizationGoal, string>> = Object.fromEntries(
-  OPTIMIZATION_USE_CASES
-    .map((item) => [OPTIMIZATION_GOAL[item.id], GOAL_DROPDOWN_LABELS[item.id] ?? item.label] as const)
-    .filter((entry): entry is [OptimizationGoal, string] => entry[0] !== undefined),
-);
+const GOAL_LABEL_BY_GOAL: Partial<Record<OptimizationGoal, string>> = {
+  ...Object.fromEntries(
+    OPTIMIZATION_USE_CASES
+      .map((item) => [OPTIMIZATION_GOAL[item.id], GOAL_DROPDOWN_LABELS[item.id] ?? item.label] as const)
+      .filter((entry): entry is [OptimizationGoal, string] => entry[0] !== undefined),
+  ),
+  // Never in the dropdown (`catalog.ts`) — only ever shown as a recommendation's chosen goal.
+  NO_MODERNIZATION: 'Nicht modernisieren',
+};
 
 function labelForGoal(goal: OptimizationGoal): string {
   return GOAL_LABEL_BY_GOAL[goal] ?? goal;

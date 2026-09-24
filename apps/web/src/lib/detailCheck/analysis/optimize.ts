@@ -11,7 +11,8 @@ import { optimizeSelection, type SelectionGoal } from './selection';
  * Planung selbst ändert sich erst, wenn die Seite sie übernimmt.
  */
 
-export type OptimizationGoal = ObjectiveId | SelectionGoal | 'RECOMMENDATION';
+/** `NO_MODERNIZATION` never appears in the goal dropdown (`catalog.ts`) — it only exists as a recommendation candidate: "keep the plan as-is, drop every currently planned measure." */
+export type OptimizationGoal = ObjectiveId | SelectionGoal | 'RECOMMENDATION' | 'NO_MODERNIZATION';
 
 export type KeyFigures = {
   breakEven: string | null;
@@ -224,10 +225,61 @@ function runSelectionGoal(params: CalculatorParams, cases: RenovationCase[], goa
   };
 }
 
+/**
+ * "Nicht modernisieren" (SCRUM-96): schließt alle aktuell geplanten Maßnahmen
+ * aus und rechnet den Plan danach — als Kandidat für `pickRecommendation`,
+ * falls sich rein finanziell keine der geplanten Maßnahmen im
+ * Betrachtungszeitraum lohnt. Anders als `runSelectionGoal` keine
+ * Teilmengensuche (billig: ein einziger Lauf).
+ */
+function runNoModernizationGoal(params: CalculatorParams, cases: RenovationCase[], cache: AnalysisCache): OptimizationProposal | null {
+  if (params.mode !== 'KNOWN') return null;
+  const viewPeriodYears = params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS;
+  const current = cachedRun(cache, params, cases);
+  if (current.modernizationPlan.length === 0) return null;
+
+  const baseExcluded = params.excludedModernizationIds ?? [];
+  const plannedIds = current.modernizationPlan.map((row) => row.id);
+
+  const replay = cachedRun(
+    cache,
+    {
+      ...params,
+      placementMode: 'DEFAULT',
+      modernizationPlacements: undefined,
+      rentIncreaseOverrides: undefined,
+      rentIncreasePlan: undefined,
+      excludedModernizationIds: [...baseExcluded, ...plannedIds],
+    },
+    cases,
+  );
+
+  const before = keyFigures(current, viewPeriodYears);
+  const after = keyFigures(replay, viewPeriodYears);
+  const changes = changesOf(current, replay);
+
+  const titleById = new Map(cases.map((item) => [item.id, item.massnahme]));
+  const excludedTitles = plannedIds.map((id) => titleById.get(id) ?? id);
+
+  return {
+    goal: 'NO_MODERNIZATION',
+    placements: {},
+    before,
+    after,
+    changes,
+    // The recommendation's own criterion decides "improved" in `pickRecommendation`;
+    // as a standalone sub-goal (never surfaced on its own card) this default is unused.
+    improved: false,
+    excludedModernizationIds: plannedIds,
+    excludedTitles,
+  };
+}
+
 /** Zentraler Einstieg (SCRUM-96, Schnitt 4): Zeitpunkt-Ziele, Auswahl-Ziele. `RECOMMENDATION` läuft nur über `recommend`. */
 export function runGoal(params: CalculatorParams, cases: RenovationCase[], goal: OptimizationGoal, cache: AnalysisCache = createAnalysisCache()): OptimizationProposal | null {
   if (goal === 'MAX_ROI' || goal === 'MAX_EQUITY_IRR') return runSelectionGoal(params, cases, goal, cache);
   if (goal === 'RECOMMENDATION') return null;
+  if (goal === 'NO_MODERNIZATION') return runNoModernizationGoal(params, cases, cache);
   return runObjectiveGoal(params, cases, goal, cache);
 }
 

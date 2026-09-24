@@ -5,12 +5,16 @@ import { dedupeTitles, formatCurrency, formatMonth } from './cards';
 import { runGoal, type OptimizationGoal, type OptimizationProposal } from './optimize';
 
 /**
- * Empfehlung (SCRUM-96, Schnitt 4): rechnet alle fünf Ziele und wählt das
+ * Empfehlung (SCRUM-96, Schnitt 4): rechnet alle sechs Ziele und wählt das
  * beste nach `[breakEvenOffset, -endingCashflow]` des jeweiligen
  * `after`-Plans — dieselbe lexikographische Regel wie `EARLIEST_BREAK_EVEN`,
  * hier über die Ziele hinweg statt über Zeitpunkte.
  */
-const CANDIDATE_GOALS: OptimizationGoal[] = ['EARLIEST_BREAK_EVEN', 'MAX_RENT_IN_VIEW', 'FASTEST_POSITIVE_CASHFLOW', 'MAX_ROI', 'MAX_EQUITY_IRR'];
+// NO_MODERNIZATION listed first so it wins ties against a selection goal that
+// happens to land on the very same "exclude everything" result (e.g. MAX_ROI
+// when no measure is profitable) — the reasoning's "Rein finanziell lohnt
+// sich..." framing only ever comes from this candidate.
+const CANDIDATE_GOALS: OptimizationGoal[] = ['NO_MODERNIZATION', 'EARLIEST_BREAK_EVEN', 'MAX_RENT_IN_VIEW', 'FASTEST_POSITIVE_CASHFLOW', 'MAX_ROI', 'MAX_EQUITY_IRR'];
 
 const percent = new Intl.NumberFormat('de-DE', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const signedCurrency = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0, signDisplay: 'always' });
@@ -90,12 +94,12 @@ function reasoningFor(proposal: OptimizationProposal, current: OptimizationPropo
   return sentences;
 }
 
-/** Die fünf Ziele, die für `RECOMMENDATION` verglichen werden — auch für den Aufrufer nützlich (z. B. um sie parallel in Workern zu starten). */
+/** Die sechs Ziele, die für `RECOMMENDATION` verglichen werden — auch für den Aufrufer nützlich (z. B. um sie parallel in Workern zu starten). */
 export { CANDIDATE_GOALS as RECOMMENDATION_CANDIDATE_GOALS };
 
 /**
  * Auswahl + Begründung aus bereits gerechneten Proposals (SCRUM-96,
- * Performance): reine Funktion, damit der Hook die fünf Ziele parallel in
+ * Performance): reine Funktion, damit der Hook die sechs Ziele parallel in
  * Workern rechnen kann und trotzdem dieselbe Auswahl-/Begründungslogik nutzt
  * wie `recommend()`. `proposals` darf für ein Ziel fehlen oder `null`/
  * `tooMany`/`noEquity` sein — solche Ziele werden wie bisher übersprungen
@@ -123,6 +127,9 @@ export function pickRecommendation(
   if (!best) return null;
 
   const reasoning = reasoningFor(best.proposal, best.proposal.before, start);
+  if (best.goal === 'NO_MODERNIZATION') {
+    reasoning.unshift('Rein finanziell lohnt sich keine der geplanten Maßnahmen im Betrachtungszeitraum.');
+  }
 
   // The recommendation's own criterion decides "improved" here — not
   // whatever the winning sub-goal computed for itself (e.g. MAX_EQUITY_IRR's
@@ -142,11 +149,11 @@ export function pickRecommendation(
   };
 }
 
-/** Rechnet alle fünf Ziele und liefert den nach Break-even/Endcashflow besten Vorschlag samt Begründung. */
+/** Rechnet alle sechs Ziele und liefert den nach Break-even/Endcashflow besten Vorschlag samt Begründung. */
 export function recommend(params: CalculatorParams, cases: RenovationCase[]): OptimizationProposal | null {
   if (params.mode !== 'KNOWN') return null;
 
-  // Ein gemeinsamer Cache über alle fünf Ziele: MAX_ROI/MAX_EQUITY_IRR
+  // Ein gemeinsamer Cache über alle sechs Ziele: MAX_ROI/MAX_EQUITY_IRR
   // rechnen in Stufe 1 identische Teilmengen, und EARLIEST_BREAK_EVEN kann
   // sowohl als eigenes Ziel als auch in deren Stufe 2 angefragt werden. Nur
   // sinnvoll, wenn alle Ziele im selben Thread laufen (siehe `pickRecommendation`

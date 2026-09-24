@@ -21,7 +21,7 @@ function runInline(params: CalculatorParams, cases: RenovationCase[], goal: Opti
 }
 
 /**
- * Startet Optimierungen im Web Worker (bis zu fünf parallel, je Ziel ein
+ * Startet Optimierungen im Web Worker (bis zu sechs parallel, je Ziel ein
  * Worker) und cacht die Ergebnisse je Eingabestand: ändert sich die Planung,
  * gelten alte Vorschläge nicht mehr und die Karten zeigen wieder „Starten".
  *
@@ -31,7 +31,7 @@ function runInline(params: CalculatorParams, cases: RenovationCase[], goal: Opti
  * laufende Worker eines veralteten Stands werden noch abgebrochen.
  *
  * `RECOMMENDATION` (SCRUM-96, Performance) läuft nicht mehr als ein eigener,
- * sequenzieller Worker-Aufruf: die fünf Kandidaten-Ziele werden parallel (je
+ * sequenzieller Worker-Aufruf: die sechs Kandidaten-Ziele werden parallel (je
  * ein Worker, wie bei den einzelnen Karten) gestartet — bereits fertige
  * Ergebnisse desselben Eingabestands werden wiederverwendet — und über die
  * reine `pickRecommendation` zur Empfehlung kombiniert.
@@ -121,7 +121,8 @@ export function useOptimization(params: CalculatorParams, cases: RenovationCase[
     const startedAt = performance.now();
     setStates((current) => ({ ...current, [key]: { status: 'running', startedAt: Date.now() } }));
 
-    // Höchstens 5 gleichzeitige Worker: es gibt genau 5 Kandidaten-Ziele, sie
+    // Höchstens 6 gleichzeitige Worker: es gibt genau 6 Kandidaten-Ziele
+    // (einschließlich NO_MODERNIZATION, billig — ein einziger Lauf), sie
     // laufen also alle parallel — bereits fertige gehen ohne neuen Worker
     // durch `goalResult`.
     Promise.all(RECOMMENDATION_CANDIDATE_GOALS.map((goal) => goalResult(goal))).then((results) => {

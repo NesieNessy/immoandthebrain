@@ -3,7 +3,7 @@ import { calculatorParams, renovationCase } from '../testFixtures';
 import { runGoal, type OptimizationGoal } from './optimize';
 import { recommend } from './recommend';
 
-const CANDIDATE_GOALS: OptimizationGoal[] = ['EARLIEST_BREAK_EVEN', 'MAX_RENT_IN_VIEW', 'FASTEST_POSITIVE_CASHFLOW', 'MAX_ROI', 'MAX_EQUITY_IRR'];
+const CANDIDATE_GOALS: OptimizationGoal[] = ['NO_MODERNIZATION', 'EARLIEST_BREAK_EVEN', 'MAX_RENT_IN_VIEW', 'FASTEST_POSITIVE_CASHFLOW', 'MAX_ROI', 'MAX_EQUITY_IRR'];
 
 function monthsFrom(start: string, month: string | null): number {
   if (!month) return 9999;
@@ -116,6 +116,37 @@ describe('recommend', () => {
       expect(measureSentences[0]).toContain('(2×)');
     }
   }, 60000);
+
+  it('picks NO_MODERNIZATION when none of the planned measures are profitable (SCRUM-96)', () => {
+    // Deliberately expensive, low-return measures: costs the modernization
+    // never earns back within the Betrachtungszeitraum, so dropping the
+    // whole plan must win over every time-based/selection goal.
+    // A single, deliberately absurd measure: no exclusion subset or
+    // re-placement can ever make it earn back 5.000.000 € within the
+    // Betrachtungszeitraum, so "exclude everything" is the true optimum —
+    // not an artifact of cap-room interaction between several measures.
+    const cases = [renovationCase('a', 5_000_000)];
+    const params = calculatorParams();
+
+    const recommendation = recommend(params, cases);
+    expect(recommendation).not.toBeNull();
+    expect(recommendation!.chosenGoal).toBe('NO_MODERNIZATION');
+    expect(recommendation!.excludedModernizationIds).toEqual(['a']);
+    expect(recommendation!.reasoning).toBeDefined();
+    expect(recommendation!.reasoning![0]).toBe('Rein finanziell lohnt sich keine der geplanten Maßnahmen im Betrachtungszeitraum.');
+  }, 30000);
+
+  it('does not pick NO_MODERNIZATION when a measure is profitable (SCRUM-96)', () => {
+    // Same "worth it" fixture as metrics.test.ts: a modest modernization that
+    // pays off within a 30-year Betrachtungszeitraum when the landlord never
+    // raises rent via §558.
+    const cases = [renovationCase('a', 3000)];
+    const params = calculatorParams({ monthlyRentStart: 500, livingAreaM2: 100, rentIncreaseUtilizationPercent: 0, viewPeriodYears: 30 });
+
+    const recommendation = recommend(params, cases);
+    expect(recommendation).not.toBeNull();
+    expect(recommendation!.chosenGoal).not.toBe('NO_MODERNIZATION');
+  }, 30000);
 
   it('measures recommend() runtime for 4 planned measures (report timing, no hard perf assertion beyond the timeout)', () => {
     const cases = [renovationCase('a', 8000), renovationCase('b', 15000), renovationCase('c', 25000), renovationCase('d', 45000)];
