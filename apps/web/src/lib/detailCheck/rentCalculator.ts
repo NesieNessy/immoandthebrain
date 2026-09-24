@@ -1,5 +1,5 @@
 import { roundCurrency } from './acquisitionCosts';
-import { compareScores, EARLIEST_BREAK_EVEN, type OptimizationObjective, type ScoredPlan } from './analysis/objectives';
+import { compareScores, EARLIEST_BREAK_EVEN, OBJECTIVES, type ObjectiveId, type OptimizationObjective, type ScoredPlan } from './analysis/objectives';
 import { costForCase, type RenovationCase, type RenovationTiming } from './renovation';
 
 export type CalculatorMode = 'KNOWN' | 'POTENTIAL';
@@ -23,6 +23,9 @@ export const CALCULATION_HORIZON_MONTHS = CALCULATION_HORIZON_YEARS * 12;
 
 /** The rent-index growth that used to be hard-wired; kept as the default so results do not move. */
 export const DEFAULT_RENT_INDEX_GROWTH_PERCENT = 2;
+
+/** Betrachtungszeitraum B der Auswertungen (SCRUM-96); beeinflusst die Engine nicht. */
+export const DEFAULT_VIEW_PERIOD_YEARS = 15;
 
 /**
  * Growth factor of the rent index `offset` months into the projection. Stepped
@@ -64,6 +67,14 @@ export type CalculatorParams = {
    * to be hard-wired.
    */
   rentIndexGrowthPercent?: number;
+  /** Betrachtungszeitraum der Auswertungen in Jahren; nur gespeichert, von runRentCalculator ignoriert. */
+  viewPeriodYears?: number;
+  /**
+   * Mieterhöhungsstrategie für den Optimierer; nur wirksam, wenn placementMode
+   * === 'OPTIMIZED' und keine modernizationPlacements gesetzt sind. Fehlt/unbekannt
+   * = EARLIEST_BREAK_EVEN.
+   */
+  optimizationObjective?: ObjectiveId;
   monthlyDebtService: number;
   loanAmount: number;
   interestRate: number;
@@ -89,6 +100,15 @@ export type CalculatorParams = {
    * step — how a selection proposal (SCRUM-96) is shown before it is applied.
    */
   excludedModernizationIds?: string[];
+  /**
+   * Betrag der Sanierung, der im Finanzierungsschritt mitfinanziert ist
+   * (Kontext `renovationFinancedAmount` bzw. `financing.*_renovation_costs`
+   * der gewählten Variante — derselbe Wert, der in `computeFinancing` als
+   * `renovationCosts` für die gewählte Variante eingeht). Bestimmt, welcher
+   * Anteil der Kosten ausgeschlossener Maßnahmen `financingAfterExclusions`
+   * aus Darlehen/Gesamtinvestition herausrechnet.
+   */
+  renovationFinancedAmount?: number;
   rentIncreasePlan?: RentIncreasePlanRow[];
   rentIncreaseOverrides?: Record<string, { effectiveYyyymm?: string; monthlyDelta?: number }>;
   mode: CalculatorMode;
@@ -206,6 +226,32 @@ function capRoomAt(params: CalculatorParams, planned: ModernizationPlanRow[], ef
 /** Whether a renovation case takes part in the plan: selected, priced, and not excluded by a proposal. */
 function isPlannedCase(params: CalculatorParams, item: RenovationCase): boolean {
   return item.selected && Boolean(item.ai) && !(params.excludedModernizationIds ?? []).includes(item.id);
+}
+
+/**
+ * Ausgeschlossene Maßnahmen entfallen auch in der Finanzierung: der
+ * mitfinanzierte Anteil ihrer Kosten verringert Darlehen und Gesamtinvestition,
+ * die Rate sinkt im selben Verhältnis wie das Darlehen (Annuität ist linear im Darlehen).
+ */
+export function financingAfterExclusions(
+  params: CalculatorParams,
+  cases: RenovationCase[],
+): Pick<CalculatorParams, 'loanAmount' | 'monthlyDebtService' | 'totalInvestment'> {
+  const base = { loanAmount: params.loanAmount, monthlyDebtService: params.monthlyDebtService, totalInvestment: params.totalInvestment };
+  const excluded = new Set(params.excludedModernizationIds ?? []);
+  const financed = Math.max(0, params.renovationFinancedAmount ?? 0);
+  if (excluded.size === 0 || financed === 0) return base;
+  const planned = cases.filter((item) => isPlannedCase({ ...params, excludedModernizationIds: [] }, item));
+  const plannedCost = planned.reduce((sum, item) => sum + costForCase(item), 0);
+  if (plannedCost <= 0) return base;
+  const share = Math.min(1, financed / plannedCost);
+  const removed = planned.filter((item) => excluded.has(item.id)).reduce((sum, item) => sum + costForCase(item), 0) * share;
+  const loanAmount = roundCurrency(Math.max(0, params.loanAmount - removed));
+  return {
+    loanAmount,
+    monthlyDebtService: params.loanAmount > 0 ? roundCurrency(params.monthlyDebtService * loanAmount / params.loanAmount) : params.monthlyDebtService,
+    totalInvestment: roundCurrency(Math.max(0, params.totalInvestment - removed)),
+  };
 }
 
 function buildPlanFromPlacements(
@@ -578,14 +624,20 @@ export function buildTimeline(
   let taxLossCarryforward = 0;
   let indexedLossCarryforward = 0;
   let runningWithRentIndex = params.equityIncluded ? roundCurrency(-(params.equityAmount ?? 0)) : 0;
-  let breakEven: string | null = null;
-  let breakEvenWithRentIndex: string | null = null;
+  // Last month with a negative cumulative cashflow, tracked in the same pass:
+  // break-even is the month AFTER this one (the first month the cumulative
+  // cashflow stays >= 0 for good), not the first month that happens to touch
+  // >= 0 before dipping negative again. -1 = never negative so far.
+  let lastNegativeCumulativeOffset = -1;
+  let lastNegativeIndexedCumulativeOffset = -1;
   let rentTotal = roundCurrency(params.monthlyRentStart);
   let rentTotalWithRentIndex = roundCurrency(params.monthlyRentStart);
   // Last month with a negative after-tax cashflow, tracked in this same pass so
   // the optimizer (includeTimeline = false) gets it without materializing
   // 600 rows per candidate.
   let lastNegativeCashflowOffset = -1;
+  const viewMonths = (params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS) * 12;
+  let rentSumInView = 0;
   const timeline: RentTimelineRow[] = [];
   const delta558ByMonth = totalsByMonth(increases558, (item) => item.effectiveYyyymm, (item) => item.monthlyDelta);
   const indexedDelta558ByMonth = totalsByMonth(increases558WithRentIndex, (item) => item.effectiveYyyymm, (item) => item.monthlyDelta);
@@ -618,6 +670,7 @@ export function buildTimeline(
     const afa = roundCurrency(params.monthlyAfa);
     const income = rentalHasStarted ? rentTotal : 0;
     const indexedIncome = rentalHasStarted ? rentTotalWithRentIndex : 0;
+    if (offset < viewMonths) rentSumInView += income;
     const taxableIncome = roundCurrency(income - nonAllocableCosts - afa - interest);
     const taxResult = calculateTaxes(
       taxableIncome,
@@ -636,7 +689,7 @@ export function buildTimeline(
     cumulativeTaxes = roundCurrency(cumulativeTaxes + taxes);
     cumulativeCashflowBeforeTax = roundCurrency(cumulativeCashflowBeforeTax + monthlyDelta);
     cumulativeCashflow = roundCurrency(cumulativeCashflow + afterTaxCashflow);
-    if (!breakEven && cumulativeCashflow >= 0) breakEven = yyyymm;
+    if (cumulativeCashflow < 0) lastNegativeCumulativeOffset = offset;
 
     const indexedTaxResult = calculateTaxes(
       roundCurrency(indexedIncome - nonAllocableCosts - afa - interest),
@@ -646,7 +699,7 @@ export function buildTimeline(
     );
     indexedLossCarryforward = indexedTaxResult.lossCarryforward;
     runningWithRentIndex = roundCurrency(runningWithRentIndex + indexedIncome - expenses - indexedTaxResult.taxes);
-    if (!breakEvenWithRentIndex && runningWithRentIndex >= 0) breakEvenWithRentIndex = yyyymm;
+    if (runningWithRentIndex < 0) lastNegativeIndexedCumulativeOffset = offset;
 
     if (includeTimeline) {
       timeline.push({
@@ -677,6 +730,16 @@ export function buildTimeline(
     }
   }
 
+  // Break-even is the first month AFTER the last negative one — null if the
+  // cumulative cashflow is still negative in the last horizon month, and
+  // month 0 if it was never negative.
+  const breakEven = lastNegativeCumulativeOffset >= CALCULATION_HORIZON_MONTHS - 1
+    ? null
+    : addMonths(params.startYyyymm, lastNegativeCumulativeOffset + 1);
+  const breakEvenWithRentIndex = lastNegativeIndexedCumulativeOffset >= CALCULATION_HORIZON_MONTHS - 1
+    ? null
+    : addMonths(params.startYyyymm, lastNegativeIndexedCumulativeOffset + 1);
+
   return {
     timeline,
     breakEven,
@@ -685,6 +748,7 @@ export function buildTimeline(
     endingCashflowWithRentIndex: runningWithRentIndex,
     /** First month from which the monthly after-tax cashflow never turns negative again; CALCULATION_HORIZON_MONTHS = never. */
     sustainablyPositiveOffset: lastNegativeCashflowOffset + 1,
+    rentSumInView: roundCurrency(rentSumInView),
   };
 }
 
@@ -733,7 +797,7 @@ function optimizeKnownModernizations(
   let candidates: Candidate[] = [{
     placements: [],
     plan: [],
-    score: scoreOf({ breakEvenOffset: 9999, endingCashflow: -Infinity, sustainablyPositiveOffset: 9999 }),
+    score: scoreOf({ breakEvenOffset: 9999, endingCashflow: -Infinity, sustainablyPositiveOffset: 9999, rentSumInView: -Infinity }),
   }];
   const possibleOffsets = Array.from(
     { length: Math.floor((CALCULATION_HORIZON_MONTHS - 4) / 12) + 1 },
@@ -774,6 +838,9 @@ function optimizeKnownModernizations(
 }
 
 export function runRentCalculator(params: CalculatorParams, renovationCases: RenovationCase[]) {
+  if ((params.excludedModernizationIds ?? []).length > 0) {
+    params = { ...params, ...financingAfterExclusions(params, renovationCases) };
+  }
   const denseMarket = isDenseMarket(params.city);
   const capPercent = denseMarket ? 0.15 : 0.2;
   const rentPerM2 = params.livingAreaM2 > 0 ? params.monthlyRentStart / params.livingAreaM2 : 0;
@@ -794,7 +861,15 @@ export function runRentCalculator(params: CalculatorParams, renovationCases: Ren
   const modernizationPlan = params.placementMode === 'OPTIMIZED'
     && params.mode === 'KNOWN'
     && !params.modernizationPlacements
-    ? optimizeKnownModernizations(params, renovationCases, capAbs, capPercent, conservativeRentIndexPerM2, marketRentIndexPerM2)
+    ? optimizeKnownModernizations(
+      params,
+      renovationCases,
+      capAbs,
+      capPercent,
+      conservativeRentIndexPerM2,
+      marketRentIndexPerM2,
+      OBJECTIVES[params.optimizationObjective ?? 'EARLIEST_BREAK_EVEN'] ?? EARLIEST_BREAK_EVEN,
+    )
     : defaultPlan;
   const increases558 = applyRentIncreaseOverrides(
     params,

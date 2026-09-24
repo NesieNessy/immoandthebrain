@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { compareScores, EARLIEST_BREAK_EVEN, FASTEST_POSITIVE_CASHFLOW, OBJECTIVES, type ScoredPlan } from './objectives';
+import { compareScores, EARLIEST_BREAK_EVEN, FASTEST_POSITIVE_CASHFLOW, MAX_RENT_IN_VIEW, OBJECTIVES, type ScoredPlan } from './objectives';
 
 const plan = (breakEvenOffset: number, endingCashflow: number, sustainablyPositiveOffset: number): ScoredPlan =>
-  ({ breakEvenOffset, endingCashflow, sustainablyPositiveOffset });
+  ({ breakEvenOffset, endingCashflow, sustainablyPositiveOffset, rentSumInView: 0 });
 
 describe('compareScores', () => {
   it('decides on the first differing position', () => {
@@ -49,5 +49,19 @@ describe('FASTEST_POSITIVE_CASHFLOW', () => {
 describe('OBJECTIVES', () => {
   it('registers every objective under its own id', () => {
     for (const [id, objective] of Object.entries(OBJECTIVES)) expect(objective.id).toBe(id);
+  });
+
+  it('registers all three goals', () => {
+    expect(Object.keys(OBJECTIVES).sort()).toEqual(['EARLIEST_BREAK_EVEN', 'FASTEST_POSITIVE_CASHFLOW', 'MAX_RENT_IN_VIEW']);
+  });
+});
+
+describe('MAX_RENT_IN_VIEW', () => {
+  it('prefers more rent in the view period, then earlier break-even', () => {
+    const more = { breakEvenOffset: 50, endingCashflow: 0, sustainablyPositiveOffset: 0, rentSumInView: 200000 };
+    const less = { breakEvenOffset: 10, endingCashflow: 0, sustainablyPositiveOffset: 0, rentSumInView: 199000 };
+    expect(compareScores(MAX_RENT_IN_VIEW.score(more), MAX_RENT_IN_VIEW.score(less))).toBe(-1);
+    const tieEarlier = { ...more, breakEvenOffset: 40 };
+    expect(compareScores(MAX_RENT_IN_VIEW.score(tieEarlier), MAX_RENT_IN_VIEW.score(more))).toBe(-1);
   });
 });

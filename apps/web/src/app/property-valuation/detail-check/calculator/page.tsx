@@ -4,14 +4,15 @@ import { Button, CalculatedPanel, Dropdown, FixedOverlay, LoadingScreen, MetricC
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
-import { addMonths, runRentCalculator, CALCULATION_HORIZON_MONTHS, CALCULATION_HORIZON_YEARS, type CalculatorMode, type CalculatorParams, type ModernizationPlanRow, type PlacementMode, type RentIndexSource, type RentIncrease558Row, type RentTimelineRow } from '@/lib/detailCheck/rentCalculator';
-import { buildEffectiveCalculatorParams, overridesFromParams, type CalculatorOverrides, type CalculatorParameterFields } from '@/lib/detailCheck/calculatorParamNormalization';
+import { addMonths, runRentCalculator, CALCULATION_HORIZON_MONTHS, CALCULATION_HORIZON_YEARS, DEFAULT_VIEW_PERIOD_YEARS, type CalculatorMode, type CalculatorParams, type ModernizationPlanRow, type PlacementMode, type RentIndexSource, type RentIncrease558Row, type RentTimelineRow } from '@/lib/detailCheck/rentCalculator';
+import { buildEffectiveCalculatorParams, buildRestoreRequestBody, overridesFromParams, type CalculatorOverrides, type CalculatorParameterFields } from '@/lib/detailCheck/calculatorParamNormalization';
 import { costForCase, type RenovationCase, type RenovationTiming } from '@/lib/detailCheck/renovation';
-import { Check, ChevronDown, ChevronUp, LineChart, Loader2, Sparkles } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, LineChart, Loader2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
+import { AnalysisPanel } from './AnalysisPanel';
 
 /**
  * Renders a modal straight into `document.body`, bypassing every ancestor —
@@ -125,6 +126,9 @@ function parameterFieldsFromParams(params: CalculatorParams): CalculatorParamete
     rentIncreaseIntervalMonths: params.rentIncreaseIntervalMonths ?? 15,
     rentIncreaseUtilizationPercent: params.rentIncreaseUtilizationPercent ?? 100,
     mode: params.mode,
+    rentIndexGrowthPercent: valueString(params.rentIndexGrowthPercent),
+    last558RentBefore: valueString(params.last558RentBefore),
+    viewPeriodYears: params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS,
   };
 }
 
@@ -297,7 +301,7 @@ function TimelineRangeBar({
   );
 }
 
-function CalculatorChart({ rows, showRentIndex, viewport }: { rows: ChartRow[]; showRentIndex: boolean; viewport: TimelineViewport }) {
+function CalculatorChart({ rows, showRentIndex, viewport, breakEven }: { rows: ChartRow[]; showRentIndex: boolean; viewport: TimelineViewport; breakEven: string | null }) {
   const [chartMode, setChartMode] = useState<'monthly' | 'cumulative'>('monthly');
   const [hoveredEvent, setHoveredEvent] = useState<{ x: number; title: string; detail: string } | null>(null);
   const width = 1000;
@@ -331,7 +335,7 @@ function CalculatorChart({ rows, showRentIndex, viewport }: { rows: ChartRow[]; 
   const comparisonValues = chartMode === 'monthly' ? monthlyWithoutTax : cumulativeWithoutTax;
   const xAt = (index: number) => left + (visibleRows.length <= 1 ? 0 : (index / (visibleRows.length - 1)) * plotWidth);
   const yAt = (value: number) => top + height - ((value - domain.min) / (domain.max - domain.min || 1)) * height;
-  const breakEvenGlobalIndex = rows.findIndex((row) => row.afterTaxCumulative >= 0);
+  const breakEvenGlobalIndex = breakEven ? rows.findIndex((row) => row.yyyymm === breakEven) : -1;
   const breakEvenIndex = breakEvenGlobalIndex >= viewport.start && breakEvenGlobalIndex < viewport.start + viewport.span ? breakEvenGlobalIndex - viewport.start : -1;
   const eventRows = visibleRows.filter((row) => row.renovationPayment > 0 || row.delta558 > 0 || row.delta559 > 0);
   const zeroY = yAt(0);
@@ -381,13 +385,13 @@ function CalculatorChart({ rows, showRentIndex, viewport }: { rows: ChartRow[]; 
   );
 }
 
-function TimelineEventConnectors({ rows, viewport }: { rows: ChartRow[]; viewport: TimelineViewport }) {
+function TimelineEventConnectors({ rows, viewport, breakEven }: { rows: ChartRow[]; viewport: TimelineViewport; breakEven: string | null }) {
   const visibleRows = rows.slice(viewport.start, viewport.start + viewport.span);
   if (visibleRows.length === 0) return null;
   const events = visibleRows
     .map((row, index) => ({ row, index }))
     .filter(({ row }) => row.renovationPayment > 0 || row.delta558 > 0 || row.delta559 > 0);
-  const breakEvenIndex = visibleRows.findIndex((row) => row.afterTaxCumulative >= 0);
+  const breakEvenIndex = breakEven ? visibleRows.findIndex((row) => row.yyyymm === breakEven) : -1;
   const leftForIndex = (index: number) => 15 + (index / Math.max(1, visibleRows.length - 1)) * 85;
 
   return (
@@ -1500,8 +1504,11 @@ function CalculatorContent() {
   const [rentIndexPerM2, setRentIndexPerM2] = useState('');
   const [rentIndexSource, setRentIndexSource] = useState<RentIndexSource>('AUTOMATIC');
   const [last558Date, setLast558Date] = useState('');
+  const [last558RentBefore, setLast558RentBefore] = useState('');
   const [last559Date, setLast559Date] = useState('');
   const [last559MonthlyDelta, setLast559MonthlyDelta] = useState('');
+  const [rentIndexGrowthPercent, setRentIndexGrowthPercent] = useState('');
+  const [viewPeriodYears, setViewPeriodYears] = useState(DEFAULT_VIEW_PERIOD_YEARS);
   const [rentIncreaseIntervalMonths, setRentIncreaseIntervalMonths] = useState(15);
   const [rentIncreaseUtilizationPercent, setRentIncreaseUtilizationPercent] = useState(100);
   const [mode, setMode] = useState<CalculatorMode>('KNOWN');
@@ -1533,7 +1540,7 @@ function CalculatorContent() {
    * was already running or done. They ended up on the calculator with their
    * changes silently written to the earlier steps.
    */
-  const [applyPhase, setApplyPhase] = useState<'ASK' | 'SAVING'>('ASK');
+  const [applyPhase, setApplyPhase] = useState<'ASK' | 'SAVING' | 'DISCARDING'>('ASK');
   /**
    * Resolver for the "Änderungen übernehmen?" dialog, so a caller that must
    * decide whether navigation may proceed — `beforeStepChange` returns a
@@ -1549,6 +1556,17 @@ function CalculatorContent() {
   const applyDecisionRef = useRef<((proceed: boolean) => void) | null>(null);
   const [upstreamResetNotice, setUpstreamResetNotice] = useState(false);
   const lastLiveCalculationRef = useRef('');
+  /**
+   * The server-confirmed response from this visit's initial GET, captured
+   * once and never overwritten. `data` moves forward with every autosave
+   * (`recalc` with `apply: false` persists into the calculator's own row,
+   * not just the preview), so it can no longer answer "what did the
+   * calculator row look like when this visit started" once anything has
+   * been saved — that's exactly what "Änderungen verwerfen und weiter"
+   * needs restore to, without touching the upstream renovation/financing
+   * tables (see `discardAndProceed`).
+   */
+  const initialDataRef = useRef<CalculatorResponse | null>(null);
   const resetRentPlanRef = useRef(false);
   type RecalcCall = { nextMode: CalculatorMode; navigate: boolean; optimize: boolean; overrides?: Partial<CalculatorOverrides>; apply: boolean };
   /**
@@ -1625,7 +1643,10 @@ function CalculatorContent() {
     rentIncreaseIntervalMonths,
     rentIncreaseUtilizationPercent,
     mode,
-  }), [startYyyymm, last558Date, last559Date, last559MonthlyDelta, rentIndexPerM2, rentIndexSource, rentIncreaseIntervalMonths, rentIncreaseUtilizationPercent, mode]);
+    rentIndexGrowthPercent,
+    last558RentBefore,
+    viewPeriodYears,
+  }), [startYyyymm, last558Date, last559Date, last559MonthlyDelta, rentIndexPerM2, rentIndexSource, rentIncreaseIntervalMonths, rentIncreaseUtilizationPercent, mode, rentIndexGrowthPercent, last558RentBefore, viewPeriodYears]);
 
   /**
    * The live preview: recomputed with `runRentCalculator` on every render
@@ -1721,6 +1742,47 @@ function CalculatorContent() {
     setOpenTables((current) => ({ ...current, [table]: !current[table] }));
   };
 
+  /**
+   * Applies a server response's `params` to every piece of form/override
+   * state that mirrors it. Shared by the initial load and by
+   * `discardAndProceed`'s restore POST — both are "adopt this
+   * server-confirmed snapshot as the current state" and must stay in sync,
+   * or a field the load effect knows to reset could be missed on discard.
+   */
+  const applyServerSnapshot = (loaded: CalculatorResponse) => {
+    setData(loaded);
+    setStartYyyymm(loaded.params.startYyyymm);
+    setMonthlyRentStart(valueString(loaded.params.monthlyRentStart));
+    setRentIndexPerM2(valueString(loaded.params.rentIndexPerM2));
+    setRentIndexSource(loaded.params.rentIndexSource ?? loaded.rentIndexSource ?? 'AUTOMATIC');
+    setLast558Date(loaded.params.last558Date ?? '');
+    setLast558RentBefore(valueString(loaded.params.last558RentBefore));
+    setLast559Date(loaded.params.last559Date ?? '');
+    setLast559MonthlyDelta(valueString(loaded.params.last559MonthlyDelta));
+    setRentIndexGrowthPercent(valueString(loaded.params.rentIndexGrowthPercent));
+    setViewPeriodYears(loaded.params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS);
+    setRentIncreaseIntervalMonths(loaded.params.rentIncreaseIntervalMonths ?? 15);
+    setRentIncreaseUtilizationPercent(loaded.params.rentIncreaseUtilizationPercent ?? 100);
+    setMode(loaded.params.mode);
+    setPlacementMode(loaded.placementMode ?? loaded.params.placementMode ?? 'DEFAULT');
+    setEquityIncluded(loaded.params.equityIncluded === true);
+    setPendingOverrides(overridesFromParams(loaded.params));
+    lastLiveCalculationRef.current = JSON.stringify({
+      startYyyymm: loaded.params.startYyyymm,
+      monthlyRentStart: valueString(loaded.params.monthlyRentStart),
+      rentIndexPerM2: valueString(loaded.params.rentIndexPerM2),
+      rentIndexSource: loaded.params.rentIndexSource ?? loaded.rentIndexSource ?? 'AUTOMATIC',
+      last558Date: loaded.params.last558Date ?? '',
+      last558RentBefore: valueString(loaded.params.last558RentBefore),
+      last559Date: loaded.params.last559Date ?? '',
+      last559MonthlyDelta: valueString(loaded.params.last559MonthlyDelta),
+      rentIndexGrowthPercent: valueString(loaded.params.rentIndexGrowthPercent),
+      viewPeriodYears: loaded.params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS,
+      rentIncreaseIntervalMonths: loaded.params.rentIncreaseIntervalMonths ?? 15,
+      rentIncreaseUtilizationPercent: loaded.params.rentIncreaseUtilizationPercent ?? 100,
+    });
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1732,32 +1794,9 @@ function CalculatorContent() {
         if (!res.ok) throw new Error(await res.text());
         const loaded = await res.json() as CalculatorResponse;
         if (cancelled) return;
-        setData(loaded);
-        setStartYyyymm(loaded.params.startYyyymm);
-        setMonthlyRentStart(valueString(loaded.params.monthlyRentStart));
-        setRentIndexPerM2(valueString(loaded.params.rentIndexPerM2));
-        setRentIndexSource(loaded.params.rentIndexSource ?? loaded.rentIndexSource ?? 'AUTOMATIC');
-        setLast558Date(loaded.params.last558Date ?? '');
-        setLast559Date(loaded.params.last559Date ?? '');
-        setLast559MonthlyDelta(valueString(loaded.params.last559MonthlyDelta));
-        setRentIncreaseIntervalMonths(loaded.params.rentIncreaseIntervalMonths ?? 15);
-        setRentIncreaseUtilizationPercent(loaded.params.rentIncreaseUtilizationPercent ?? 100);
-        setMode(loaded.params.mode);
-        setPlacementMode(loaded.placementMode ?? loaded.params.placementMode ?? 'DEFAULT');
-        setEquityIncluded(loaded.params.equityIncluded === true);
-        setPendingOverrides(overridesFromParams(loaded.params));
+        applyServerSnapshot(loaded);
+        initialDataRef.current = loaded;
         setUpstreamResetNotice(loaded.overridesResetByUpstreamChange === true);
-        lastLiveCalculationRef.current = JSON.stringify({
-          startYyyymm: loaded.params.startYyyymm,
-          monthlyRentStart: valueString(loaded.params.monthlyRentStart),
-          rentIndexPerM2: valueString(loaded.params.rentIndexPerM2),
-          rentIndexSource: loaded.params.rentIndexSource ?? loaded.rentIndexSource ?? 'AUTOMATIC',
-          last558Date: loaded.params.last558Date ?? '',
-          last559Date: loaded.params.last559Date ?? '',
-          last559MonthlyDelta: valueString(loaded.params.last559MonthlyDelta),
-          rentIncreaseIntervalMonths: loaded.params.rentIncreaseIntervalMonths ?? 15,
-          rentIncreaseUtilizationPercent: loaded.params.rentIncreaseUtilizationPercent ?? 100,
-        });
       } catch (loadError) {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : 'Kalkulator konnte nicht geladen werden.');
       } finally {
@@ -1826,6 +1865,9 @@ function CalculatorContent() {
           rentIndexPerM2: rentIndexSource === 'AUTOMATIC' || rentIndexPerM2 === '' ? null : parseDecimalInput(rentIndexPerM2),
           rentIndexSource,
           last558Date: last558Date || null,
+          last558RentBefore: last558Date && last558RentBefore !== '' ? parseDecimalInput(last558RentBefore) : null,
+          rentIndexGrowthPercent: rentIndexGrowthPercent === '' ? null : parseDecimalInput(rentIndexGrowthPercent),
+          viewPeriodYears,
           last559Date: last559Date || null,
           last559MonthlyDelta: parseDecimalInput(last559MonthlyDelta),
           rentIncreaseIntervalMonths,
@@ -1840,6 +1882,7 @@ function CalculatorContent() {
           modernizationPlacements: effectiveOverrides.modernizationPlacements,
           modernizationCostOverrides: effectiveOverrides.modernizationCostOverrides,
           renovationTimingOverrides: effectiveOverrides.renovationTimingOverrides,
+          excludedModernizationIds: effectiveOverrides.excludedModernizationIds ?? [],
           resetRentIncreasePlan: optimize || resetRentPlanRef.current,
           rentIncreaseOverrides: optimize || resetRentPlanRef.current ? {} : effectiveOverrides.rentIncreaseOverrides,
           apply,
@@ -1899,7 +1942,7 @@ function CalculatorContent() {
   useEffect(() => {
     if (isLoading || isSaving || !data || startMonthError || last558Error || last559Error || !startYyyymm || monthlyRentStart === '') return;
 
-    const signature = JSON.stringify({ startYyyymm, monthlyRentStart, rentIndexPerM2, rentIndexSource, last558Date, last559Date, last559MonthlyDelta, rentIncreaseIntervalMonths, rentIncreaseUtilizationPercent });
+    const signature = JSON.stringify({ startYyyymm, monthlyRentStart, rentIndexPerM2, rentIndexSource, last558Date, last558RentBefore, last559Date, last559MonthlyDelta, rentIndexGrowthPercent, viewPeriodYears, rentIncreaseIntervalMonths, rentIncreaseUtilizationPercent });
     if (signature === lastLiveCalculationRef.current) return;
 
     const timer = window.setTimeout(() => {
@@ -1908,7 +1951,7 @@ function CalculatorContent() {
     }, PARAMETER_AUTOSAVE_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timer);
-  }, [data, isLoading, isSaving, last558Date, last558Error, last559Date, last559Error, last559MonthlyDelta, mode, monthlyRentStart, rentIndexPerM2, rentIndexSource, rentIncreaseIntervalMonths, rentIncreaseUtilizationPercent, startMonthError, startYyyymm]);
+  }, [data, isLoading, isSaving, last558Date, last558Error, last558RentBefore, last559Date, last559Error, last559MonthlyDelta, mode, monthlyRentStart, rentIndexGrowthPercent, rentIndexPerM2, rentIndexSource, rentIncreaseIntervalMonths, rentIncreaseUtilizationPercent, startMonthError, startYyyymm, viewPeriodYears]);
 
   const handleModeChange = (value: string) => {
     const nextMode = value === 'POTENTIAL' ? 'POTENTIAL' : 'KNOWN';
@@ -2012,6 +2055,62 @@ function CalculatorContent() {
   });
 
   /**
+   * "Änderungen verwerfen und weiter": the third way out of the apply dialog.
+   * Nothing from this visit's edits may survive — including whatever the
+   * debounced autosave already wrote into the calculator's own row, since
+   * `recalc` persists with `apply: false` on every ordinary edit, well
+   * before this dialog ever opens. Restoring means overwriting that row with
+   * the exact snapshot this visit started from (`initialDataRef`), sent
+   * through the same non-apply POST, so upstream renovation/financing tables
+   * are never touched — only "Übernehmen und weiter" is allowed to do that.
+   *
+   * Resolves the same way "Übernehmen und weiter" does: `true` tells
+   * whichever caller opened the dialog (`navigateWithConfirmation` or the
+   * stepper's `beforeStepChange`) that it may proceed to the target it
+   * already had in mind. This function never navigates itself.
+   */
+  const discardChangesAndProceed = async () => {
+    setApplyPhase('DISCARDING');
+    setError(null);
+    // Nothing scheduled or queued may fire after this point — it would
+    // reintroduce exactly what is being discarded.
+    cancelScheduledPersist();
+    queuedRecalcRef.current = null;
+    // Wait out a save already in flight rather than racing it: whichever
+    // POST lands second would win, and firing the restore concurrently with
+    // an autosave is the same double-transaction hazard `flushPendingSave`
+    // already guards against elsewhere.
+    while (isSavingRef.current) {
+      await new Promise((resolve) => window.setTimeout(resolve, 25));
+    }
+    queuedRecalcRef.current = null;
+    const initial = initialDataRef.current;
+    if (initial) {
+      overridesVersionRef.current += 1;
+      try {
+        const res = await authFetch('/api/detail-check/calculator', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildRestoreRequestBody(initial.params, quickCheckId, workflowId)),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const restored = await res.json() as CalculatorResponse;
+        applyServerSnapshot(restored);
+      } catch (discardError) {
+        setError(discardError instanceof Error ? discardError.message : 'Änderungen konnten nicht verworfen werden.');
+        setApplyPhase('ASK');
+        return;
+      }
+    }
+    resetRentPlanRef.current = false;
+    setHasPendingChanges(false);
+    hasPendingChangesRef.current = false;
+    setConfirmApplyOpen(false);
+    applyDecisionRef.current?.(true);
+    applyDecisionRef.current = null;
+  };
+
+  /**
    * The single gate every way of leaving this page goes through. Anything
    * that only saved — without applying — would leave "Sanierung" and
    * "Finanzierung" showing the values from before the calculator ran, since
@@ -2089,8 +2188,8 @@ function CalculatorContent() {
               </div>
               <div className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-6">
                 <div className="relative overflow-hidden">
-                  <TimelineEventConnectors rows={chartRows} viewport={timelineViewport} />
-                  <CalculatorChart rows={chartRows} showRentIndex={showRentIndexComparison} viewport={timelineViewport} />
+                  <TimelineEventConnectors rows={chartRows} viewport={timelineViewport} breakEven={presented.breakEven} />
+                  <CalculatorChart rows={chartRows} showRentIndex={showRentIndexComparison} viewport={timelineViewport} breakEven={presented.breakEven} />
                   <PlanEditor
                     data={presented}
                     startYyyymm={startYyyymm}
@@ -2112,9 +2211,11 @@ function CalculatorContent() {
               <div className="order-2 grid gap-4 pt-2 lg:grid-cols-4 md:grid-cols-2">
                 <MonthField label="Start in Jahr/Monat" value={startYyyymm} error={startMonthError} onChange={setStartYyyymm} />
                 <MonthField label="Letzte Mieterhöhung §558" value={last558Date} error={last558Error} optional years={LAST_558_YEARS} onChange={setLast558Date} />
+                <TextField label="Miete vor der letzten §558-Erhöhung" optional value={last558RentBefore} suffix="€/Monat" inputMode="decimal" disabled={!last558Date} onChange={(event) => setLast558RentBefore(event.target.value)} helperText="Die Erhöhung zählt dann im Dreijahresfenster der Kappungsgrenze mit." />
                 <MonthField label="Letzte §559-Erhöhung" value={last559Date} error={last559Error} optional years={LAST_559_YEARS} onChange={setLast559Date} />
                 <TextField label="Betrag der letzten §559-Erhöhung" optional value={last559MonthlyDelta} suffix="€/Monat" inputMode="decimal" disabled={!last559Date} onChange={(event) => setLast559MonthlyDelta(event.target.value)} helperText="Wird auf den gesetzlichen Sechsjahres-Deckel angerechnet." />
                 <TextField label="Mietspiegel Vergleichswert" optional value={rentIndexPerM2} suffix="€/m²" inputMode="decimal" onChange={(e) => { setRentIndexPerM2(e.target.value); setRentIndexSource('MANUAL'); }} helperText="Automatisch aus Baujahr/Fläche, solange nicht überschrieben." />
+                <TextField label="Mietspiegel-Entwicklung" optional value={rentIndexGrowthPercent} suffix="% p. a." inputMode="decimal" placeholder="2" onChange={(event) => setRentIndexGrowthPercent(event.target.value)} helperText="Leer = 2 % pro Jahr." />
               </div>
 
               <div className="order-3 mt-5 border-y border-border py-3">
@@ -2234,22 +2335,43 @@ function CalculatorContent() {
                   onClick={() => { cancelScheduledPersist(); resetRentPlanRef.current = true; void recalc(mode); }}
                   disabled={isSaving}
                 />
-                <Button
-                  label="Sanierungen und Mieterhöhungen optimieren"
-                  variant="outline"
-                  icon={<Sparkles />}
-                  onClick={() => { cancelScheduledPersist(); void recalc(mode, false, true); }}
-                  disabled={isSaving || mode === 'POTENTIAL'}
-                />
               </div>
               {placementMode === 'OPTIMIZED' && (
                 <p className="order-6 mt-3 text-sm text-muted-foreground">
-                  Sanierungen und daraus folgende §558-Mieterhöhungen sind anhand der Regler auf den frühestmöglichen Break-even optimiert.
+                  Sanierungszeitpunkte wurden auf den frühestmöglichen Break-even optimiert.
                 </p>
               )}
             </section>
 
-            <section className="order-3 space-y-4">
+            {presented && effectiveParams && localResult && (
+              <AnalysisPanel
+                result={localResult}
+                params={effectiveParams}
+                cases={data.renovationCases}
+                viewPeriodYears={viewPeriodYears}
+                onViewPeriodYearsChange={setViewPeriodYears}
+                mode={mode}
+                onApplyPlacements={(placements, excludedModernizationIds) => {
+                  // Same §558-plan reset the "Sanierungen und Mieterhöhungen
+                  // optimieren" button triggers (resetRentPlanRef.current = true
+                  // before recalc): a new set of modernization placements can
+                  // shift or invalidate previously chosen §558 increase months,
+                  // so the increase plan must be recomputed from scratch rather
+                  // than replayed onto the old placements. commitOverrides
+                  // updates the local preview synchronously (Gantt, top figures,
+                  // evaluation cards) and persists on its usual debounce, which
+                  // is what keeps the applied proposal after save + reload.
+                  resetRentPlanRef.current = true;
+                  commitOverrides({ modernizationPlacements: placements, excludedModernizationIds, rentIncreaseOverrides: {} });
+                }}
+                onResetExclusions={() => {
+                  resetRentPlanRef.current = true;
+                  commitOverrides({ excludedModernizationIds: [], modernizationPlacements: {} });
+                }}
+              />
+            )}
+
+            <section className="order-4 space-y-4">
               <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-lg font-medium text-foreground">Detailtabellen</h2>
                 <span className="text-sm text-muted-foreground">Standardmäßig eingeklappt</span>
@@ -2426,6 +2548,16 @@ function CalculatorContent() {
                   </p>
                 </div>
               </div>
+            ) : applyPhase === 'DISCARDING' ? (
+              <div className="flex items-start gap-3" aria-live="polite">
+                <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-primary" />
+                <div>
+                  <h2 className="text-lg font-medium">Änderungen werden verworfen…</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Der Kalkulator wird auf den letzten gespeicherten Stand zurückgesetzt. Gleich geht es weiter.
+                  </p>
+                </div>
+              </div>
             ) : (
               <>
                 <h2 className="text-lg font-medium">Änderungen übernehmen?</h2>
@@ -2443,7 +2575,7 @@ function CalculatorContent() {
                     Übernehmen fehlgeschlagen: {error}
                   </div>
                 )}
-                <div className="flex justify-end gap-2">
+                <div className="flex flex-wrap justify-end gap-2">
                   <button
                     className="rounded-md border border-border px-3 py-2"
                     onClick={() => {
@@ -2459,6 +2591,12 @@ function CalculatorContent() {
                     }}
                   >
                     Hier bleiben
+                  </button>
+                  <button
+                    className="rounded-md border border-border px-3 py-2 text-muted-foreground hover:text-foreground"
+                    onClick={() => void discardChangesAndProceed()}
+                  >
+                    Änderungen verwerfen und weiter
                   </button>
                   <button
                     className="rounded-md bg-primary px-3 py-2 font-medium text-primary-foreground"

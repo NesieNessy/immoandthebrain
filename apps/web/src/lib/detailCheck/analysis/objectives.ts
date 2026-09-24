@@ -19,9 +19,11 @@ export type ScoredPlan = {
   endingCashflow: number;
   /** First month from which the monthly after-tax cashflow never turns negative again. */
   sustainablyPositiveOffset: number;
+  /** Σ Monatsmiete über den Betrachtungszeitraum B. */
+  rentSumInView: number;
 };
 
-export type ObjectiveId = 'EARLIEST_BREAK_EVEN' | 'FASTEST_POSITIVE_CASHFLOW';
+export type ObjectiveId = 'EARLIEST_BREAK_EVEN' | 'FASTEST_POSITIVE_CASHFLOW' | 'MAX_RENT_IN_VIEW';
 
 export type OptimizationObjective = {
   id: ObjectiveId;
@@ -56,7 +58,14 @@ export const FASTEST_POSITIVE_CASHFLOW: OptimizationObjective = {
   score: (plan) => [plan.sustainablyPositiveOffset, -plan.endingCashflow],
 };
 
+/** Mieterhöhungsstrategie: höchste Mietsumme im Betrachtungszeitraum, bei Gleichstand früherer Break-even. */
+export const MAX_RENT_IN_VIEW: OptimizationObjective = {
+  id: 'MAX_RENT_IN_VIEW',
+  score: (plan) => [-plan.rentSumInView, plan.breakEvenOffset],
+};
+
 export const OBJECTIVES: Record<ObjectiveId, OptimizationObjective> = {
   EARLIEST_BREAK_EVEN,
   FASTEST_POSITIVE_CASHFLOW,
+  MAX_RENT_IN_VIEW,
 };
