@@ -1,4 +1,4 @@
-import { runRentCalculator, type CalculatorParams, type RentTimelineRow } from '../rentCalculator';
+import { DEFAULT_RENT_INDEX_GROWTH_PERCENT, runRentCalculator, type CalculatorParams, type RentTimelineRow } from '../rentCalculator';
 import type { RenovationCase } from '../renovation';
 
 /**
@@ -144,4 +144,80 @@ export function measureEconomics(
   viewPeriodYears: number,
 ): MeasureEconomics[] {
   return sliceMeasureEconomics(measureDeltas(result, params, cases), result, viewPeriodYears);
+}
+
+/** Restschuld = Darlehen − Σ(Annuität − Zins) über die ersten `months` Monate; nie negativ. */
+export function remainingDebt(result: RentCalculatorResult, months: number): number {
+  const loanAmount = result.params.loanAmount ?? 0;
+  const principal = result.timeline
+    .slice(0, months)
+    .reduce((sum, row) => sum + (row.debtService - row.interest), 0);
+  return Math.max(0, round2(loanAmount - principal));
+}
+
+/** Endwert am Ende von B: Kaufpreis mit g fortgeschrieben, abzüglich Restschuld. */
+export function terminalValue(result: RentCalculatorResult, viewPeriodYears: number): number {
+  const g = result.params.rentIndexGrowthPercent ?? DEFAULT_RENT_INDEX_GROWTH_PERCENT;
+  const purchasePrice = result.params.purchasePrice ?? 0;
+  const grownPrice = purchasePrice * Math.pow(1 + g / 100, viewPeriodYears);
+  const months = viewEndIndex(viewPeriodYears) + 1;
+  return round2(grownPrice - remainingDebt(result, months));
+}
+
+/**
+ * NPV der monatlichen Cashflows (inkl. Endwert im letzten Monat von B) bei
+ * gegebenem Monatszins `monthlyRate`, mit Einsatz von −equityAmount zu t=0.
+ */
+function npvAt(result: RentCalculatorResult, viewPeriodYears: number, equity: number, monthlyRate: number): number {
+  const end = viewEndIndex(viewPeriodYears);
+  const timeline = result.timeline.slice(0, end + 1);
+  const terminal = terminalValue(result, viewPeriodYears);
+  let npv = -equity;
+  timeline.forEach((row, index) => {
+    npv += row.afterTaxCashflow / Math.pow(1 + monthlyRate, index + 1);
+  });
+  npv += terminal / Math.pow(1 + monthlyRate, timeline.length);
+  return npv;
+}
+
+/**
+ * EK-Rendite (IRR p.a.) über B, unabhängig vom Schalter „Eigenkapital
+ * berücksichtigen": −equityAmount zu Beginn, monatliche afterTaxCashflow-
+ * Zahlungen, plus Endwert im letzten Monat von B. Bisektion auf den
+ * Monatszins in [-0.99, 1]; null wenn EK ≤ 0 oder kein Vorzeichenwechsel.
+ */
+export function equityIrr(result: RentCalculatorResult, viewPeriodYears: number): number | null {
+  const equity = result.params.equityAmount ?? 0;
+  if (equity <= 0) return null;
+
+  let low = -0.99;
+  let high = 1;
+  const npvLow = npvAt(result, viewPeriodYears, equity, low);
+  const npvHigh = npvAt(result, viewPeriodYears, equity, high);
+  if ((npvLow > 0 && npvHigh > 0) || (npvLow < 0 && npvHigh < 0)) return null;
+
+  let mid = 0;
+  let npvMid = npvAt(result, viewPeriodYears, equity, mid);
+  for (let i = 0; i < 200 && Math.abs(npvMid) >= 0.01; i += 1) {
+    mid = (low + high) / 2;
+    npvMid = npvAt(result, viewPeriodYears, equity, mid);
+    if ((npvMid > 0) === (npvLow > 0)) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+  return Math.pow(1 + mid, 12) - 1;
+}
+
+/**
+ * ROI = (CF_mit(B) − CF_ohne(B)) / Σ allocableCosts des Plans; null wenn die
+ * Investition 0 ist.
+ */
+export function planRoi(withPlan: RentCalculatorResult, withoutAny: RentCalculatorResult, viewPeriodYears: number): number | null {
+  const invest = withPlan.modernizationPlan.reduce((sum, item) => sum + item.allocableCosts, 0);
+  if (invest === 0) return null;
+  const end = viewEndIndex(viewPeriodYears);
+  const delta = withPlan.timeline[end].cumulativeCashflow - withoutAny.timeline[end].cumulativeCashflow;
+  return delta / invest;
 }

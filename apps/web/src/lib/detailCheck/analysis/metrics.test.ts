@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { runRentCalculator } from '../rentCalculator';
 import { calculatorParams, renovationCase } from '../testFixtures';
-import { breakEvenFacts, equityPayback, measureEconomics, totalPayback, viewEndIndex } from './metrics';
+import {
+  breakEvenFacts,
+  equityIrr,
+  equityPayback,
+  measureEconomics,
+  planRoi,
+  remainingDebt,
+  terminalValue,
+  totalPayback,
+  viewEndIndex,
+} from './metrics';
 
 describe('analysis metrics', () => {
   it('viewEndIndex is the last month of B', () => {
@@ -96,5 +106,62 @@ describe('analysis metrics', () => {
     const cases = [renovationCase('a', 10000)];
     const rows = measureEconomics(runRentCalculator(params, cases), params, cases, 15);
     expect(rows).toEqual([]);
+  });
+});
+
+describe('equity IRR and ROI', () => {
+  it('remainingDebt = loan − Σ(debtService − interest), not below zero', () => {
+    const result = runRentCalculator(
+      calculatorParams({ loanAmount: 100000, interestRate: 3, repaymentRate: 2, monthlyDebtService: (100000 * 0.05) / 12 }),
+      [],
+    );
+    const principal = result.timeline.slice(0, 120).reduce((sum, row) => sum + row.debtService - row.interest, 0);
+    expect(remainingDebt(result, 120)).toBeCloseTo(100000 - principal, 2);
+  });
+
+  it('remainingDebt does not go below zero once the loan is fully repaid', () => {
+    // A large monthlyDebtService relative to the loan pays it off well within
+    // 120 months; the fixture is tuned so Σ(debtService − interest) exceeds
+    // loanAmount, which is what exercises the Math.max(0, …) floor.
+    const result = runRentCalculator(
+      calculatorParams({ loanAmount: 100000, interestRate: 3, repaymentRate: 2, monthlyDebtService: 5000 }),
+      [],
+    );
+    expect(remainingDebt(result, 120)).toBe(0);
+  });
+
+  it('IRR solves NPV = 0 for the constructed cashflows', () => {
+    const params = calculatorParams({ equityAmount: 50000, purchasePrice: 300000, rentIndexGrowthPercent: 2 });
+    const result = runRentCalculator(params, []);
+    const irr = equityIrr(result, 15)!;
+    const monthly = Math.pow(1 + irr, 1 / 12) - 1;
+    let npv = -50000;
+    result.timeline.slice(0, 180).forEach((row, index) => {
+      npv += row.afterTaxCashflow / Math.pow(1 + monthly, index + 1);
+    });
+    npv += terminalValue(result, 15) / Math.pow(1 + monthly, 180);
+    expect(Math.abs(npv)).toBeLessThan(1);
+  });
+
+  it('terminal value uses purchase price grown by g minus remaining debt', () => {
+    const result = runRentCalculator(calculatorParams({ purchasePrice: 300000, rentIndexGrowthPercent: 2 }), []);
+    expect(terminalValue(result, 15)).toBeCloseTo(300000 * Math.pow(1.02, 15) - remainingDebt(result, 180), 2);
+  });
+
+  it('IRR is null without equity', () => {
+    expect(equityIrr(runRentCalculator(calculatorParams({ equityAmount: 0 }), []), 15)).toBeNull();
+  });
+
+  it('ROI = ΔCF(B) / investment, null without investment', () => {
+    const params = calculatorParams();
+    const cases = [renovationCase('a', 10000)];
+    const withPlan = runRentCalculator(params, cases);
+    const without = runRentCalculator({ ...params, excludedModernizationIds: ['a'] }, cases);
+    const invest = withPlan.modernizationPlan.reduce((sum, row) => sum + row.allocableCosts, 0);
+    expect(planRoi(withPlan, without, 15)).toBeCloseTo(
+      (withPlan.timeline[179].cumulativeCashflow - without.timeline[179].cumulativeCashflow) / invest,
+      6,
+    );
+    expect(planRoi(without, without, 15)).toBeNull();
   });
 });
