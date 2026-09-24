@@ -34,6 +34,27 @@ export function formatMonth(month: string | null): string {
   return `${mm}/${year}`;
 }
 
+/**
+ * Collapses repeated titles (two different measures can share the same
+ * `massnahme` text, e.g. two "Neue Bodenbeläge (Parkett/Vinyl)" rows) into a
+ * single entry with a `(2×)` suffix — used both for the recommendation's
+ * reasoning sentences and for the "Nicht durchführen:" list in the card
+ * (SCRUM-96 browser-fix). Order-preserving: first occurrence wins the slot.
+ */
+export function dedupeTitles(titles: string[]): string[] {
+  const counts = new Map<string, number>();
+  for (const title of titles) counts.set(title, (counts.get(title) ?? 0) + 1);
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const title of titles) {
+    if (seen.has(title)) continue;
+    seen.add(title);
+    const count = counts.get(title) ?? 1;
+    result.push(count > 1 ? `${title} (${count}×)` : title);
+  }
+  return result;
+}
+
 function formatPoint(point: MonthPoint): string {
   if (!point.month) return 'nicht erreicht';
   const years = decimal.format(point.years ?? 0);

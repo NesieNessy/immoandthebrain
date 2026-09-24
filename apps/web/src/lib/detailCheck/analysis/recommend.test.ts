@@ -46,6 +46,77 @@ describe('recommend', () => {
     }
   }, 30000);
 
+  it('never picks MAX_EQUITY_IRR when there is no equity, and improved reflects the recommendation\'s own criterion (browser-fix, SCRUM-96)', () => {
+    // Reproduces the browser workflow: several measures, equityAmount 0. The
+    // reported bugs were (a) MAX_EQUITY_IRR won anyway with an arbitrary,
+    // unimproved subset although equityIrr is "–" for both before/after, and
+    // (b) the card showed "Plan ist bereits optimal" / no "Übernehmen" even
+    // though the winning proposal clearly changed and improved the plan.
+    const cases = [
+      renovationCase('a', 8000),
+      renovationCase('b', 15000),
+      renovationCase('c', 25000),
+      renovationCase('d', 45000),
+      renovationCase('e', 500000), // deliberately uneconomical, should end up excluded
+    ];
+    const params = calculatorParams({ equityAmount: 0 });
+
+    const recommendation = recommend(params, cases);
+    expect(recommendation).not.toBeNull();
+    expect(recommendation!.chosenGoal).not.toBe('MAX_EQUITY_IRR');
+
+    const planChanged = recommendation!.changes.length > 0 || recommendation!.excludedModernizationIds.length > 0;
+    if (planChanged) {
+      const beforeScore: [number, number] = [
+        monthsFrom(params.startYyyymm, recommendation!.before.breakEven),
+        -recommendation!.before.endingCashflow,
+      ];
+      const afterScore: [number, number] = [
+        monthsFrom(params.startYyyymm, recommendation!.after.breakEven),
+        -recommendation!.after.endingCashflow,
+      ];
+      const strictlyBetter = afterScore[0] !== beforeScore[0] ? afterScore[0] < beforeScore[0] : afterScore[1] < beforeScore[1];
+      expect(recommendation!.improved).toBe(strictlyBetter);
+    } else {
+      expect(recommendation!.improved).toBe(false);
+    }
+  }, 60000);
+
+  it('reasoning always covers break-even, cumulative cashflow and (if present) EK-Rendite, plus one deduplicated sentence per excluded measure (browser-fix, SCRUM-96)', () => {
+    // Two measures share a title on purpose, to exercise the "(2×)" dedup —
+    // and there are enough excluded measures that the old 5-sentence cap
+    // would have swallowed the headline figures.
+    const cases = [
+      renovationCase('a', 8000, { massnahme: 'Neue Bodenbeläge (Parkett/Vinyl)' }),
+      renovationCase('b', 500000, { massnahme: 'Neue Bodenbeläge (Parkett/Vinyl)' }),
+      renovationCase('c', 600000),
+      renovationCase('d', 700000),
+      renovationCase('e', 800000),
+    ];
+    const params = calculatorParams({ equityAmount: 0 });
+
+    const recommendation = recommend(params, cases);
+    expect(recommendation).not.toBeNull();
+    expect(recommendation!.reasoning).toBeDefined();
+    const reasoning = recommendation!.reasoning!;
+
+    expect(reasoning.some((sentence) => sentence.startsWith('Break-even'))).toBe(true);
+    expect(reasoning.some((sentence) => sentence.startsWith('Kumulierter Cashflow'))).toBe(true);
+    // No equity ⇒ equityIrr is null ⇒ no EK-Rendite sentence anywhere.
+    expect(reasoning.some((sentence) => sentence.startsWith('Eigenkapitalrendite'))).toBe(false);
+
+    if (recommendation!.excludedTitles.length > 0) {
+      expect(reasoning.some((sentence) => sentence.includes('entfällt'))).toBe(true);
+    }
+    // Deduplication: two excluded measures with the same title must produce
+    // one "(2×)" sentence, not two identical ones.
+    const measureSentences = reasoning.filter((sentence) => sentence.includes('Neue Bodenbeläge (Parkett/Vinyl)'));
+    expect(measureSentences.length).toBeLessThanOrEqual(1);
+    if (measureSentences.length === 1 && recommendation!.excludedTitles.filter((t) => t === 'Neue Bodenbeläge (Parkett/Vinyl)').length === 2) {
+      expect(measureSentences[0]).toContain('(2×)');
+    }
+  }, 60000);
+
   it('measures recommend() runtime for 4 planned measures (report timing, no hard perf assertion beyond the timeout)', () => {
     const cases = [renovationCase('a', 8000), renovationCase('b', 15000), renovationCase('c', 25000), renovationCase('d', 45000)];
     const params = calculatorParams({ equityAmount: 30000 });

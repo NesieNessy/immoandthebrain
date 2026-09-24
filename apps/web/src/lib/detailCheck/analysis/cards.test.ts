@@ -1,8 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { runRentCalculator } from '../rentCalculator';
 import { calculatorParams, renovationCase } from '../testFixtures';
-import { buildAnalysisCards } from './cards';
+import { buildAnalysisCards, dedupeTitles } from './cards';
 import { viewEndIndex } from './metrics';
+
+describe('dedupeTitles', () => {
+  it('collapses repeated titles into one entry with a (N×) suffix, order-preserving', () => {
+    expect(dedupeTitles(['Neue Fenster', 'Neue Bodenbeläge (Parkett/Vinyl)', 'Neue Bodenbeläge (Parkett/Vinyl)'])).toEqual([
+      'Neue Fenster',
+      'Neue Bodenbeläge (Parkett/Vinyl) (2×)',
+    ]);
+  });
+
+  it('leaves unique titles untouched', () => {
+    expect(dedupeTitles(['Neue Fenster', 'Dämmung'])).toEqual(['Neue Fenster', 'Dämmung']);
+  });
+
+  it('is a no-op on an empty list', () => {
+    expect(dedupeTitles([])).toEqual([]);
+  });
+});
 
 const params = calculatorParams({ equityAmount: 12000, totalInvestment: 120000 });
 const cases = [renovationCase('a', 10000)];

@@ -37,6 +37,8 @@ export type OptimizationProposal = {
   reasoning?: string[];
   chosenGoal?: OptimizationGoal;
   tooMany?: boolean;
+  /** MAX_EQUITY_IRR only: `equityAmount` is 0 (or unset), so `equityIrr` is `null` for every candidate — there is nothing to optimize for and no subset should be picked arbitrarily (browser-fix, SCRUM-96). */
+  noEquity?: boolean;
 };
 
 type Result = ReturnType<typeof runRentCalculator>;
@@ -116,7 +118,9 @@ function runObjectiveGoal(params: CalculatorParams, cases: RenovationCase[], obj
       before,
       after,
       changes,
-      improved: compareScores(scoreOf(objective, after, replay, params.startYyyymm), scoreOf(objective, before, current, params.startYyyymm)) < 0,
+      // Same guard as the selection goals: no placement moved ⇒ never "improved",
+      // even if float noise made the score compare as strictly better (browser-fix, SCRUM-96).
+      improved: changes.length > 0 && compareScores(scoreOf(objective, after, replay, params.startYyyymm), scoreOf(objective, before, current, params.startYyyymm)) < 0,
       excludedModernizationIds: [],
       excludedTitles: [],
     };
@@ -146,6 +150,20 @@ function runSelectionGoal(params: CalculatorParams, cases: RenovationCase[], goa
       excludedModernizationIds: [],
       excludedTitles: [],
       tooMany: true,
+    };
+  }
+
+  if ('noEquity' in selection) {
+    return {
+      goal,
+      placements: {},
+      before,
+      after: before,
+      changes: [],
+      improved: false,
+      excludedModernizationIds: [],
+      excludedTitles: [],
+      noEquity: true,
     };
   }
 
@@ -182,7 +200,14 @@ function runSelectionGoal(params: CalculatorParams, cases: RenovationCase[], goa
 
   const beforeScore = goalMetric(current);
   const afterScore = goalMetric(replay);
-  const improved = beforeScore == null ? afterScore != null : afterScore != null && afterScore > beforeScore + 1e-9;
+  const changes = changesOf(current, replay);
+  // A proposal only counts as "improved" — and only then offers "Übernehmen"
+  // — when it actually changes the plan (placement or exclusion) AND is
+  // strictly better by the goal's own metric; an unchanged plan must never
+  // read as improved even if float noise nudges the score (browser-fix,
+  // SCRUM-96).
+  const planChanged = changes.length > 0 || selection.excludedModernizationIds.length > 0;
+  const improved = planChanged && (beforeScore == null ? afterScore != null : afterScore != null && afterScore > beforeScore + 1e-9);
 
   const titleById = new Map(cases.map((item) => [item.id, item.massnahme]));
   const excludedTitles = selection.excludedModernizationIds.map((id) => titleById.get(id) ?? id);
@@ -192,7 +217,7 @@ function runSelectionGoal(params: CalculatorParams, cases: RenovationCase[], goa
     placements: selection.placements,
     before: beforeWithMetric,
     after,
-    changes: changesOf(current, replay),
+    changes,
     improved,
     excludedModernizationIds: selection.excludedModernizationIds,
     excludedTitles,

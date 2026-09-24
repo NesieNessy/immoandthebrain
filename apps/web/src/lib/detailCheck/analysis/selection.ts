@@ -20,6 +20,7 @@ export const MAX_SELECTION_MEASURES = 10;
 export type SelectionResult =
   | { excludedModernizationIds: string[]; placements: Record<string, string>; score: number }
   | { tooMany: true }
+  | { noEquity: true }
   | null;
 
 function scoreFor(goal: SelectionGoal, result: Result, withoutAny: Result, viewPeriodYears: number): number {
@@ -58,6 +59,12 @@ export function optimizeSelection(
   goal: SelectionGoal,
   cache: AnalysisCache = createAnalysisCache(),
 ): SelectionResult {
+  // equityIrr is null for every candidate subset whenever there is no
+  // equity — the equity amount is a constant of `params`, not of the plan —
+  // so there is nothing to optimize for and no subset should be picked
+  // arbitrarily on an all-null tie (browser-fix, SCRUM-96).
+  if (goal === 'MAX_EQUITY_IRR' && (params.equityAmount ?? 0) <= 0) return { noEquity: true };
+
   const baseExcluded = params.excludedModernizationIds ?? [];
   const baseExcludedSet = new Set(baseExcluded);
   const planned = cases.filter((item) => item.selected && Boolean(item.ai) && !baseExcludedSet.has(item.id)).map((item) => item.id);

@@ -9,6 +9,23 @@ describe('optimizeSelection', () => {
     expect(optimizeSelection(calculatorParams(), [], 'MAX_ROI')).toBeNull();
   });
 
+  it('MAX_EQUITY_IRR reports noEquity instead of picking an arbitrary subset when equityAmount is 0 (browser-fix, SCRUM-96)', () => {
+    // Reproduces the browser workflow bug: with no equity, equityIrr is null
+    // for every candidate subset (it never depends on the plan), so stage 1's
+    // tie-break must not silently keep whichever subset happens to sort
+    // first.
+    const cases = [renovationCase('a', 10000), renovationCase('b', 20000), renovationCase('c', 30000)];
+    const params = calculatorParams({ equityAmount: 0 });
+    expect(optimizeSelection(params, cases, 'MAX_EQUITY_IRR')).toEqual({ noEquity: true });
+  });
+
+  it('MAX_EQUITY_IRR also reports noEquity when equityAmount is unset', () => {
+    const cases = [renovationCase('a', 10000)];
+    const params = calculatorParams();
+    expect(params.equityAmount).toBeUndefined();
+    expect(optimizeSelection(params, cases, 'MAX_EQUITY_IRR')).toEqual({ noEquity: true });
+  });
+
   it('reports tooMany above MAX_SELECTION_MEASURES planned measures', () => {
     const cases = Array.from({ length: MAX_SELECTION_MEASURES + 1 }, (_, index) => renovationCase(`m${index}`, 1000));
     expect(optimizeSelection(calculatorParams(), cases, 'MAX_ROI')).toEqual({ tooMany: true });
@@ -36,8 +53,11 @@ describe('optimizeSelection', () => {
   });
 
   it("stage 1's chosen score is at least the best of all seven non-empty subsets of three measures", () => {
+    // Needs actual equity — with equityAmount 0/unset, MAX_EQUITY_IRR now
+    // short-circuits to `{ noEquity: true }` (browser-fix, SCRUM-96; see the
+    // dedicated noEquity tests above) instead of comparing scores at all.
     const cases = [renovationCase('a', 8000), renovationCase('b', 15000), renovationCase('c', 500000)];
-    const params = calculatorParams();
+    const params = calculatorParams({ equityAmount: 40000 });
     const result = optimizeSelection(params, cases, 'MAX_EQUITY_IRR');
     expect(result).not.toBeNull();
     expect(result).not.toEqual({ tooMany: true });

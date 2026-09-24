@@ -5,7 +5,7 @@ import type { CalculatorMode, CalculatorParams } from '@/lib/detailCheck/rentCal
 import { DEFAULT_RENT_INDEX_GROWTH_PERCENT } from '@/lib/detailCheck/rentCalculator';
 import type { RenovationCase } from '@/lib/detailCheck/renovation';
 import { OPTIMIZATION_GOAL, USE_CASES, USE_CASE_GROUP_LABELS, isAvailable, type UseCase, type UseCaseGroup, type UseCaseId } from '@/lib/detailCheck/analysis/catalog';
-import { buildAnalysisCards, formatCurrency, formatMonth, type AnalysisCard, type CardSeries } from '@/lib/detailCheck/analysis/cards';
+import { buildAnalysisCards, dedupeTitles, formatCurrency, formatMonth, type AnalysisCard, type CardSeries } from '@/lib/detailCheck/analysis/cards';
 import { measureDeltas, type RentCalculatorResult } from '@/lib/detailCheck/analysis/metrics';
 import type { KeyFigures, OptimizationGoal, OptimizationProposal } from '@/lib/detailCheck/analysis/optimize';
 import { MAX_SELECTION_MEASURES } from '@/lib/detailCheck/analysis/selection';
@@ -120,7 +120,8 @@ function OptimizationCard({
         {mode === 'KNOWN' && state.status === 'error' && <Tag label="Fehler" variant="danger" />}
         {mode === 'KNOWN' && state.status === 'done' && state.proposal === null && <Tag label="Keine Maßnahme geplant" variant="muted" />}
         {mode === 'KNOWN' && state.status === 'done' && state.proposal?.tooMany && <Tag label="Zu viele Maßnahmen" variant="muted" />}
-        {mode === 'KNOWN' && state.status === 'done' && state.proposal !== null && !state.proposal.tooMany && (
+        {mode === 'KNOWN' && state.status === 'done' && state.proposal?.noEquity && <Tag label="Kein Eigenkapital hinterlegt" variant="muted" />}
+        {mode === 'KNOWN' && state.status === 'done' && state.proposal !== null && !state.proposal.tooMany && !state.proposal.noEquity && (
           <Tag label={state.proposal.improved ? 'Verbesserung' : 'Plan ist bereits optimal'} variant={state.proposal.improved ? 'success' : 'muted'} />
         )}
       </div>
@@ -149,7 +150,13 @@ function OptimizationCard({
         </p>
       )}
 
-      {mode === 'KNOWN' && state.status === 'done' && state.proposal && !state.proposal.tooMany && (
+      {mode === 'KNOWN' && state.status === 'done' && state.proposal?.noEquity && (
+        <p className="text-sm text-muted-foreground">
+          Für die Eigenkapitalrendite wird das Eigenkapital aus dem Finanzierungsschritt benötigt.
+        </p>
+      )}
+
+      {mode === 'KNOWN' && state.status === 'done' && state.proposal && !state.proposal.tooMany && !state.proposal.noEquity && (
         <div className="space-y-3">
           <OptimizationTable proposal={state.proposal} viewPeriodYears={viewPeriodYears} />
           <p className="text-sm text-muted-foreground">
@@ -158,7 +165,7 @@ function OptimizationCard({
               : state.proposal.changes.map((change) => `${change.title}: ${formatMonth(change.from)} → ${formatMonth(change.to)}`).join('; ')}
           </p>
           {state.proposal.excludedTitles.length > 0 && (
-            <p className="text-sm text-muted-foreground">Nicht durchführen: {state.proposal.excludedTitles.join(', ')}</p>
+            <p className="text-sm text-muted-foreground">Nicht durchführen: {dedupeTitles(state.proposal.excludedTitles).join(', ')}</p>
           )}
           {state.proposal.goal === 'RECOMMENDATION' && state.proposal.chosenGoal && (
             <div className="space-y-1">
@@ -466,7 +473,11 @@ export function AnalysisPanel({
       </div>
       {GROUPS.map((group) => (
         <div key={group} className="flex flex-wrap items-center gap-2">
-          <span className="w-28 text-xs uppercase tracking-wide text-muted-foreground">{USE_CASE_GROUP_LABELS[group]}</span>
+          {/* "Auswertungen" is already the SectionLabel above this chip grid — repeating it as a row
+              label reads as a duplicated heading, so only groups with a distinct label get one (browser-fix, SCRUM-96). */}
+          {USE_CASE_GROUP_LABELS[group] !== 'Auswertungen' && (
+            <span className="w-28 text-xs uppercase tracking-wide text-muted-foreground">{USE_CASE_GROUP_LABELS[group]}</span>
+          )}
           {USE_CASES.filter((item) => item.group === group).map((item) => {
             const available = isAvailable(item);
             const active = available && selected.includes(item.id);
