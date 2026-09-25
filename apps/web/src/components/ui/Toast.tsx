@@ -121,10 +121,10 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => vo
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20">
           <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
         </span>
-        <p className="flex-1 text-sm font-medium leading-snug">
-          <span className="sr-only">{label}: </span>
-          {toast.message}
-        </p>
+        {/* Kept outside the <p> so the message element's text is exactly
+            the message (e2e matches toasts by full text, e.g. anchored regexes). */}
+        <span className="sr-only">{label}: </span>
+        <p className="flex-1 text-sm font-medium leading-snug">{toast.message}</p>
         <button
           type="button"
           onClick={onDismiss}
