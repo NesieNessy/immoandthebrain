@@ -341,7 +341,8 @@ export default function TaxDocuments({ propertyId }: { propertyId: string }) {
                             label="Hochladen"
                             icon={<Icons.Upload className="w-4 h-4" />}
                             variant="primary"
-                            disabled={!uploadFile || Number(uploadAmount) <= 0 || isSubmittingUpload}
+                            disabled={!uploadFile || Number(uploadAmount) <= 0}
+                            loading={isSubmittingUpload}
                             onClick={() => void confirmUpload()}
                         />
                     </>

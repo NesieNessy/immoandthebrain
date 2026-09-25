@@ -447,6 +447,7 @@ function FinancingContent() {
         primaryLabel="Weiter"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving || !selectedVariant || Boolean(repaymentRateError)}
+        loading={isSaving}
         onPrimary={() => void saveAndNavigate('/property-valuation/detail-check/depreciation')}
       />
     </PropertyValuationLayout>

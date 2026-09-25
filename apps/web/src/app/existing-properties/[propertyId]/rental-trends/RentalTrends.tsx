@@ -254,7 +254,7 @@ function RentIncreaseCard({
                     <div className="w-40">
                         <NumberField label="Wert manuell anpassen" unit="€" value={draft} onChange={(e) => setDraft(e.target.value)} min={0} hideStepper />
                     </div>
-                    <Button label="Speichern" variant="primary" size="sm" onClick={() => void onSaveAmount(draft !== '' ? Number(draft) : null)} />
+                    <SaveAmountButton onSave={() => onSaveAmount(draft !== '' ? Number(draft) : null)} />
                     <Button label="Abbrechen" variant="outline" size="sm" onClick={onCancelEdit} />
                 </div>
             ) : (
@@ -267,6 +267,19 @@ function RentIncreaseCard({
             )}
         </ProposalCardShell>
     );
+}
+
+function SaveAmountButton({ onSave }: { onSave: () => Promise<void> }) {
+    const [isSaving, setIsSaving] = useState(false);
+    const handleClick = async () => {
+        setIsSaving(true);
+        try {
+            await onSave();
+        } finally {
+            setIsSaving(false);
+        }
+    };
+    return <Button label="Speichern" variant="primary" size="sm" loading={isSaving} onClick={() => void handleClick()} />;
 }
 
 function RenovationCard({
@@ -337,7 +350,7 @@ function RenovationCard({
                     <div className="w-40">
                         <NumberField label="Wert manuell anpassen" unit="€" value={draft} onChange={(e) => setDraft(e.target.value)} min={0} hideStepper />
                     </div>
-                    <Button label="Speichern" variant="primary" size="sm" onClick={() => void onSaveAmount(draft !== '' ? Number(draft) : null)} />
+                    <SaveAmountButton onSave={() => onSaveAmount(draft !== '' ? Number(draft) : null)} />
                     <Button label="Abbrechen" variant="outline" size="sm" onClick={onCancelEdit} />
                 </div>
             ) : (

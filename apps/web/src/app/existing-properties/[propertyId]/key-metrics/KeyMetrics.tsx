@@ -479,6 +479,7 @@ export default function KeyMetrics({ propertyId }: { propertyId: string }) {
                 ghostIcon={<BUTTON_DETAILS.Back.icon />}
                 primaryIcon={<BUTTON_DETAILS.Save.icon />}
                 primaryDisabled={!isEditing || data.isSaving}
+                loading={data.isSaving}
             />
 
             <UnsavedChangesModal

@@ -494,6 +494,7 @@ function PropertyDataContent() {
         primaryLabel="Weiter"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving || !isValid}
+        loading={isSaving}
         onPrimary={handleNext}
       />
     </PropertyValuationLayout>

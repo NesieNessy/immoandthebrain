@@ -438,6 +438,7 @@ export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUni
                 primaryLabel="Mietvertrag speichern"
                 primaryIcon={<BUTTON_DETAILS.Save.icon />}
                 primaryDisabled={!data.isEditing || data.isSaving || !data.isPrimaryPersonValid}
+                loading={data.isSaving}
             />
 
             <ConfirmDeleteModal

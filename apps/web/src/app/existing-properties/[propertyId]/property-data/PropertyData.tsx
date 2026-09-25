@@ -395,6 +395,7 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                 ghostIcon={<BUTTON_DETAILS.Back.icon />}
                 primaryIcon={<BUTTON_DETAILS.Save.icon />}
                 primaryDisabled={!isEditing || !isValid || isSaving}
+                loading={isSaving}
             />
 
             <UnsavedChangesModal

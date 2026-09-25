@@ -258,6 +258,7 @@ export default function AdjustRnd({ propertyId }: { propertyId: string }) {
                 ghostIcon={<BUTTON_DETAILS.Back.icon />}
                 primaryIcon={<BUTTON_DETAILS.Save.icon />}
                 primaryDisabled={!isEditing || isSaving}
+                loading={isSaving}
             />
 
             <UnsavedChangesModal

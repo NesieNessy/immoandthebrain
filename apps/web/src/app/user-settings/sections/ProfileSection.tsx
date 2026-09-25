@@ -207,10 +207,11 @@ export function ProfileSection({ userId, personalData, onSaved }: {
                     <Button label="Verwerfen" variant="outline" onClick={handleCancel} disabled={!isEditing || isSaving} />
                     <Button
                         label={isSaving ? 'Speichert…' : 'Speichern'}
-                        icon={isSaving ? <Icons.Loader2 className="w-4 h-4 animate-spin" /> : <Icons.Check className="w-4 h-4" />}
+                        icon={<Icons.Check className="w-4 h-4" />}
                         variant="primary"
                         onClick={() => void handleSave()}
-                        disabled={!isEditing || !isValid || isSaving}
+                        disabled={!isEditing || !isValid}
+                        loading={isSaving}
                     />
                 </div>
             </Tile>

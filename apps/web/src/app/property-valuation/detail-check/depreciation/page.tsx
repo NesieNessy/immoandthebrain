@@ -370,6 +370,7 @@ function DepreciationContent() {
         primaryLabel="Weiter"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving}
+        loading={isSaving}
         onPrimary={() => void saveAndNavigate('/property-valuation/detail-check/renovation')}
       />
     </PropertyValuationLayout>

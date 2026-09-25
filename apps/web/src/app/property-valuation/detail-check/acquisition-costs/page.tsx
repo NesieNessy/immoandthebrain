@@ -357,6 +357,7 @@ function AcquisitionCostsContent() {
         primaryLabel="Weiter"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={!isValid || isSaving || isLoading}
+        loading={isSaving}
         onPrimary={handleSaveAndNext}
       />
     </PropertyValuationLayout>

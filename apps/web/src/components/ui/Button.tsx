@@ -25,6 +25,11 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
    * `iconOnly` is set (that's icon-only at every size).
    */
   hideLabelOnMobile?: boolean;
+  /**
+   * Shows a spinner in place of the icon (or before the label when there is
+   * no icon) and disables the button — use while a save/submit is in flight.
+   */
+  loading?: boolean;
   menuItems?: MenuItem[];
   children?: React.ReactNode;
 }
@@ -37,9 +42,11 @@ export function Button({
   iconPosition = "left",
   iconOnly = false,
   hideLabelOnMobile = false,
+  loading = false,
   menuItems,
   className,
   children,
+  disabled,
   "aria-label": ariaLabel,
   ...props
 }: ButtonProps) {
@@ -83,10 +90,13 @@ export function Button({
     lg: 24,
   };
 
-  // Clone icon and add size prop if it's a React element
-  const iconWithSize = icon && React.isValidElement(icon)
-    ? React.cloneElement(icon as React.ReactElement<{ size?: number }>, { size: iconSizes[size] })
-    : icon;
+  // Clone icon and add size prop if it's a React element; while loading, a
+  // spinner takes the icon's slot (or leads the label if there's no icon).
+  const iconWithSize = loading
+    ? <Icons.Loader2 size={iconSizes[size]} className="animate-spin" aria-hidden="true" />
+    : icon && React.isValidElement(icon)
+      ? React.cloneElement(icon as React.ReactElement<{ size?: number }>, { size: iconSizes[size] })
+      : icon;
 
   // Determine content based on props
   let content;
@@ -96,11 +106,12 @@ export function Button({
   } else if (label) {
     // Button with label and optional icon
     const labelNode = hideLabelOnMobile ? <span className="hidden sm:inline">{label}</span> : label;
+    const iconOnRight = iconPosition === "right" && !(loading && !icon);
     content = (
       <>
-        {iconWithSize && iconPosition === "left" && iconWithSize}
+        {iconWithSize && !iconOnRight && iconWithSize}
         {labelNode}
-        {iconWithSize && iconPosition === "right" && iconWithSize}
+        {iconWithSize && iconOnRight && iconWithSize}
         {menuItems && <Icons.ChevronDown size={iconSizes[size]} className="ml-1" />}
       </>
     );
@@ -118,6 +129,8 @@ export function Button({
             type="button"
             className={cn(baseStyles, variants[variant], sizes[size], className)}
             aria-label={resolvedAriaLabel}
+            aria-busy={loading || undefined}
+            disabled={disabled || loading}
             {...props}
           >
             {content}
@@ -163,6 +176,8 @@ export function Button({
       type="button"
       className={cn(baseStyles, variants[variant], sizes[size], className)}
       aria-label={resolvedAriaLabel}
+      aria-busy={loading || undefined}
+      disabled={disabled || loading}
       {...props}
     >
       {content}
