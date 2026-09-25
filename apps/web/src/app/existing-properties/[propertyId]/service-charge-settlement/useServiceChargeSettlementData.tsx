@@ -477,6 +477,18 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     // value) can never propagate into "übernehmen" writing a negative
     // miscRent onto the tenancy.
     const newMonthlyPrepayment = totalBudgetAllocable > 0 ? Math.max(0, Math.round((unitBudgetShare / 12) * 100) / 100) : null;
+    // What the new rate would total over this same settlement period — the
+    // "Neue NK-Vorauszahlung" card's own footnote, directly comparable to
+    // annualPrepayment (the "Bisherige" card's footnote) since both use the
+    // same period/tenancy-overlap proration. No history is passed in: this
+    // is a hypothetical flat rate for comparison, not a reconstruction of
+    // what was actually billed.
+    const newAnnualPrepayment = useMemo(() => {
+        if (newMonthlyPrepayment == null || !periodStart || !periodEnd) return null;
+        const tenancyStart = tenancy?.tenancyStartDate ? new Date(tenancy.tenancyStartDate) : null;
+        const tenancyEnd = tenancy?.tenancyEndDate ? new Date(tenancy.tenancyEndDate) : null;
+        return prorateAnnualPrepayment(newMonthlyPrepayment, [], periodStart, periodEnd, tenancyStart, tenancyEnd);
+    }, [newMonthlyPrepayment, periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate]);
     // Drives the "übernehmen" button: compared against the LIVE tenancy rate,
     // since that's the value the button actually writes to (a no-op, and
     // therefore disabled, once they already match).
@@ -1318,7 +1330,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         unitActualShareNonAllocable, unitBudgetShareNonAllocable,
         actualShareForItem, budgetShareForItem,
         annualPrepayment, currentMonthlyPrepayment, overUnderCoverage, settlementCoverage, budgetCoverage, budgetOverUnderCoverage,
-        newMonthlyPrepayment, prepaymentDelta, prepaymentUntilSettlement, newTotalRent, settlementYear, tenantLabel,
+        newMonthlyPrepayment, newAnnualPrepayment, prepaymentDelta, prepaymentUntilSettlement, newTotalRent, settlementYear, tenantLabel,
         displayedPrepaymentDelta, displayedPrepaymentDeltaPercent, nextPrepaymentEffectiveDate,
         canGeneratePdf, canGenerateAdjustmentDocx, canApplyPrepayment,
         // handlers

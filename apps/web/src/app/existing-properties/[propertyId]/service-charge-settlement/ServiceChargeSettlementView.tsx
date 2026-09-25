@@ -751,6 +751,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                         label="Bisherige NK-Vorauszahlung"
                                         value={`${euro(data.prepaymentUntilSettlement)}`}
                                         detail="/Monat"
+                                        footnote={`Summe im Zeitraum: ${euro(data.annualPrepayment)}`}
                                     />
                                     <MetricCard
                                         label="Neue NK-Vorauszahlung"
@@ -766,6 +767,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                             : data.displayedPrepaymentDelta === 0
                                                 ? 'entspricht der aktuellen Vorauszahlung'
                                                 : `${data.displayedPrepaymentDelta > 0 ? '+' : '−'}${euro(Math.abs(data.displayedPrepaymentDelta))}${data.displayedPrepaymentDeltaPercent != null ? ` (${data.displayedPrepaymentDeltaPercent > 0 ? '+' : '−'}${Math.abs(data.displayedPrepaymentDeltaPercent).toFixed(1).replace('.', ',')} %)` : ''}`}
+                                        footnote={data.newAnnualPrepayment != null ? `Summe im Zeitraum: ${euro(data.newAnnualPrepayment)}` : undefined}
                                         tone={data.displayedPrepaymentDelta == null || data.displayedPrepaymentDelta === 0
                                             ? 'neutral'
                                             : data.displayedPrepaymentDelta > 0 ? 'warning' : 'positive'}
