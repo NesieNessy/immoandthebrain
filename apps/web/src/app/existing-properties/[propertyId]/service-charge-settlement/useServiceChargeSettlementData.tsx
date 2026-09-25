@@ -62,7 +62,7 @@ import type {
     TenancyDocument,
     TenancyPerson,
 } from '@immoandthebrain/types';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -313,8 +313,10 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     };
 
     const applyTenancyPeriodSuggestion = (suggestion: { startDateStr: string; endDateStr: string }) => {
-        setPeriodStart(new Date(suggestion.startDateStr));
-        setPeriodEnd(new Date(suggestion.endDateStr));
+        // parseISO, not new Date(): a bare 'yyyy-MM-dd' string passed to the
+        // Date constructor is UTC midnight, i.e. 01:00/02:00 local here.
+        setPeriodStart(parseISO(suggestion.startDateStr));
+        setPeriodEnd(parseISO(suggestion.endDateStr));
     };
     // Replaces periodStart/periodEnd, costItems and settlement wholesale (see
     // `load`'s explicitPeriod branch), so it's guarded like other unsaved-edit navigation.
@@ -430,7 +432,19 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const budgetOverUnderCoverage = unitBudgetShare - annualPrepayment;
 
     // Budget plan (3) divided by 12, compared against the current monthly NK-Vorauszahlung.
-    const newMonthlyPrepayment = totalBudgetAllocable > 0 ? Math.round((unitBudgetShare / 12) * 100) / 100 : null;
+    // Floored at 0: a monthly prepayment is never negative, so bad input
+    // (e.g. a mistyped Anteil Wohnung) can't make "übernehmen" write a
+    // negative miscRent onto the tenancy.
+    const newMonthlyPrepayment = totalBudgetAllocable > 0 ? Math.max(0, Math.round((unitBudgetShare / 12) * 100) / 100) : null;
+    // The new rate totalled over this same period — the "Neue" card's
+    // footnote, comparable to annualPrepayment (same proration). A
+    // hypothetical flat rate, so no history is passed in.
+    const newAnnualPrepayment = useMemo(() => {
+        if (newMonthlyPrepayment == null || !periodStart || !periodEnd) return null;
+        const tenancyStart = tenancy?.tenancyStartDate ? new Date(tenancy.tenancyStartDate) : null;
+        const tenancyEnd = tenancy?.tenancyEndDate ? new Date(tenancy.tenancyEndDate) : null;
+        return prorateAnnualPrepayment(newMonthlyPrepayment, [], periodStart, periodEnd, tenancyStart, tenancyEnd);
+    }, [newMonthlyPrepayment, periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate]);
     // Drives the "übernehmen" button; compared against the live tenancy rate
     // since that's what the button writes to (disabled once they match).
     const prepaymentDelta = newMonthlyPrepayment != null ? newMonthlyPrepayment - currentMonthlyPrepayment : null;
@@ -640,6 +654,10 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             // belong to it, so every item must be (re)created, and
             // deletedCostItemIds (which target the OTHER settlement) must not apply.
             let isNewSettlementForThisSave = false;
+            // The loaded settlement's own period was edited — the saved-
+            // settlements menu labels need refreshing, but the cost items
+            // still belong to this same row.
+            let periodChangedInPlace = false;
 
             if (!activeSettlement) {
                 activeSettlement = await createSettlement({
@@ -662,24 +680,23 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 format(new Date(activeSettlement.periodStart), 'yyyy-MM-dd') !== periodStartStr
                 || format(new Date(activeSettlement.periodEnd), 'yyyy-MM-dd') !== periodEndStr
             ) {
-                // Period changed away from the loaded settlement. That settlement
-                // must not be overwritten by renaming its period (the old bug);
-                // this edit belongs to a settlement for the new target period.
-                // Check for an existing one there first to avoid duplicating it.
+                // The loaded settlement's period was edited — update it in place
+                // (keeping its cost items and source document). Browsing to
+                // another period goes through switchToPeriod, which reloads, so
+                // reaching here always means "edit this one". Refuse only when
+                // a *different* settlement already occupies the new period.
                 const conflict = await getSettlementByPeriod(property.propertyId, unit.propertyUnitId, periodStartStr, periodEndStr);
-                if (conflict) throw new Error('PERIOD_CONFLICT');
-                const created = await createSettlement({
-                    propertyId: property.propertyId,
-                    propertyUnitId: unit.propertyUnitId,
+                if (conflict && conflict.serviceChargeSettlementId !== activeSettlement.serviceChargeSettlementId) {
+                    throw new Error('PERIOD_CONFLICT');
+                }
+                const updated = await updateSettlement(activeSettlement.serviceChargeSettlementId, {
                     periodStart: periodStartStr,
                     periodEnd: periodEndStr,
-                    sourceDocumentName: null,
-                    sourceDocumentPath: null,
                 });
-                if (!created) throw new Error('createSettlement failed');
-                activeSettlement = created;
-                setSettlement(created);
-                isNewSettlementForThisSave = true;
+                if (!updated) throw new Error('updateSettlement failed');
+                activeSettlement = updated;
+                setSettlement(updated);
+                periodChangedInPlace = true;
             }
 
             const deleteResults = isNewSettlementForThisSave
@@ -714,9 +731,10 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             setCostItems(savedItems);
             setDeletedCostItemIds([]);
             setOriginalSnapshot(serializeCostItems(savedItems, periodStart, periodEnd));
-            if (isNewSettlementForThisSave) void refreshSavedSettlements();
+            if (isNewSettlementForThisSave || periodChangedInPlace) void refreshSavedSettlements();
             showToast('Nebenkostenabrechnung gespeichert.', 'success');
         } catch (err) {
+            console.error('Nebenkostenabrechnung speichern fehlgeschlagen', err);
             const code = err instanceof Error ? err.message : null;
             const [errorKey, shareLabel, shareColumn] = code?.split('|') ?? [];
             setError(
@@ -866,8 +884,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     const applyExtractedData = (extracted: ExtractedSettlementData) => {
         if (extracted.periodStart && extracted.periodEnd) {
-            const start = new Date(extracted.periodStart);
-            const end = new Date(extracted.periodEnd);
+            // 'yyyy-MM-dd' from the extraction — see applyTenancyPeriodSuggestion.
+            const start = parseISO(extracted.periodStart);
+            const end = parseISO(extracted.periodEnd);
             if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
                 setPeriodStart(start);
                 setPeriodEnd(end);
@@ -1197,7 +1216,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         unitActualShareNonAllocable, unitBudgetShareNonAllocable,
         actualShareForItem, budgetShareForItem,
         annualPrepayment, currentMonthlyPrepayment, overUnderCoverage, settlementCoverage, budgetCoverage, budgetOverUnderCoverage,
-        newMonthlyPrepayment, prepaymentDelta, prepaymentUntilSettlement, newTotalRent, settlementYear, tenantLabel,
+        newMonthlyPrepayment, newAnnualPrepayment, prepaymentDelta, prepaymentUntilSettlement, newTotalRent, settlementYear, tenantLabel,
         displayedPrepaymentDelta, displayedPrepaymentDeltaPercent, nextPrepaymentEffectiveDate,
         canGeneratePdf, canGenerateAdjustmentDocx, canApplyPrepayment,
         // handlers

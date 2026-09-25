@@ -15,10 +15,13 @@ export function isFullCalendarYear(start: Date, end: Date): boolean {
  * period at all, regardless of what the underlying proration math would
  * otherwise happily compute for an arbitrarily long span (e.g. mistakenly
  * covering a tenant's entire multi-year tenancy instead of one year of it).
+ * Compares calendar days only — a time-of-day on `end` (e.g. 01:00 from a
+ * 'yyyy-MM-dd' string parsed as UTC) must not tip Dec 31 into "too long".
  */
 export function isPeriodTooLong(start: Date, end: Date): boolean {
     const maxEnd = new Date(start.getFullYear() + 1, start.getMonth(), start.getDate() - 1);
-    return end > maxEnd;
+    const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    return endDay > maxEnd;
 }
 
 /**
@@ -181,12 +184,22 @@ export function suggestShareForCostItem(
 ): SuggestedShare | null {
     const normalizedLabel = label.trim().toLowerCase();
     if (!normalizedLabel) return null;
+    // `amount` (that row's Gesamt Objekt) is sanitized against negative
+    // input at every manual entry point, but a bypass path like AI document
+    // extraction writes it directly — floored here so an otherwise-valid,
+    // non-negative ratio can never still yield a negative suggested Anteil
+    // Wohnung.
+    const safeAmount = Math.max(0, amount);
 
+    // A Verteilerschlüssel is an ownership/consumption ratio — it can never
+    // legitimately be negative, so a corrupt key (bad data predating input
+    // sanitization, or written directly via the API) must never produce a
+    // suggestion rather than a nonsensical negative Anteil Wohnung.
     const explicitKey = allocationKeys.find((k) => k.label.trim().toLowerCase() === normalizedLabel);
-    if (explicitKey && explicitKey.denominator !== 0) {
+    if (explicitKey && explicitKey.numerator >= 0 && explicitKey.denominator > 0) {
         const rate = explicitKey.numerator / explicitKey.denominator;
         return {
-            value: Math.round(amount * rate * 100) / 100,
+            value: Math.round(safeAmount * rate * 100) / 100,
             rate,
             source: 'explicit',
             explanation: `${explicitKey.allocationType?.trim() || 'Verteilerschlüssel'}: ${explicitKey.numerator}/${explicitKey.denominator} (${formatPercent(rate)})`,
@@ -194,10 +207,10 @@ export function suggestShareForCostItem(
     }
 
     const previous = previousCostItems.find((p) => p.label.trim().toLowerCase() === normalizedLabel);
-    if (previous && previous.actualAmount != null && previous.actualAmount !== 0 && previous.actualShareOverride != null) {
+    if (previous && previous.actualAmount != null && previous.actualAmount > 0 && previous.actualShareOverride != null && previous.actualShareOverride >= 0) {
         const rate = previous.actualShareOverride / previous.actualAmount;
         return {
-            value: Math.round(amount * rate * 100) / 100,
+            value: Math.round(safeAmount * rate * 100) / 100,
             rate,
             source: 'history',
             explanation: `Verteilerschlüssel aus letzter Abrechnung: ${formatPercent(rate)}`,
@@ -378,7 +391,8 @@ export function computeUnitSettlementSummary(params: {
     const annualPrepayment = prorateAnnualPrepayment(currentMonthlyPrepayment, miscRentHistory, periodStart, periodEnd, tenancyStart, tenancyEnd);
     const overUnderCoverage = unitActualShare - annualPrepayment;
     const budgetOverUnderCoverage = unitBudgetShare - annualPrepayment;
-    const newMonthlyPrepayment = totalBudgetAllocable > 0 ? Math.round((unitBudgetShare / 12) * 100) / 100 : null;
+    // Floored at 0 — see useServiceChargeSettlementData.tsx's own copy of this calculation.
+    const newMonthlyPrepayment = totalBudgetAllocable > 0 ? Math.max(0, Math.round((unitBudgetShare / 12) * 100) / 100) : null;
 
     return {
         unitShare,
