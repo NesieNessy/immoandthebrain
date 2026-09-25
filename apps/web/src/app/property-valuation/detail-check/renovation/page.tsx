@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Dropdown, LoadingScreen, ReadOnlyField, SectionLabel, StickyActionBar, TextArea, TextField } from '@/components/ui';
+import { Button, Dropdown, Icons, LoadingScreen, ReadOnlyField, SectionLabel, StickyActionBar, Table, TextArea, TextField, type TableColumn } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { authFetch } from '@/lib/api/authFetch';
@@ -23,10 +23,14 @@ import {
 import { getDocumentsByUser, getDocumentUrl, uploadDocument } from '@/lib/supabase/document.supabase';
 import type { UserDocument } from '@immoandthebrain/types';
 import { format } from 'date-fns';
-import { AlertTriangle, Eye, FileText, Upload } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
+
+interface CaseRow extends Record<string, unknown> {
+  key: string;
+  item: RenovationCase;
+}
 
 type Stage = 'ENTRY' | 'PRICING';
 
@@ -374,6 +378,154 @@ function RenovationContent() {
   const selectedCases = cases.filter((item) => item.selected);
   const primaryLabel = stage === 'ENTRY' ? 'Weiter zur Auswertung' : 'Weiter';
 
+  const casesRows: CaseRow[] = cases.map((item) => ({ key: item.id, item }));
+  const selectedRows: CaseRow[] = selectedCases.map((item) => ({ key: item.id, item }));
+
+  const casesColumns: TableColumn<CaseRow>[] = [
+    { key: 'kategorie', label: 'Kategorie', renderCell: (_v, row) => categoryLabel(row.item.kategorie) },
+    { key: 'massnahme', label: 'Maßnahme', renderCell: (_v, row) => row.item.massnahme },
+    { key: 'beschreibung', label: 'Beschreibung', renderCell: (_v, row) => <span className="text-muted-foreground">{row.item.beschreibung || '-'}</span> },
+    {
+      key: 'uploads',
+      label: 'Bilder und Unterlagen',
+      renderCell: (_v, row) => (
+        row.item.uploads?.length ? (
+          <div className="flex flex-wrap gap-2">
+            {row.item.uploads.map((reference) => {
+              const documentId = reference.startsWith('document:') ? Number(reference.slice('document:'.length)) : 0;
+              const document = documentsById[documentId];
+              const previewUrl = previewUrls[documentId];
+              return (
+                <button
+                  key={reference}
+                  type="button"
+                  onClick={() => void openUpload(reference)}
+                  disabled={!document}
+                  className="group flex max-w-48 items-center gap-2 rounded-md border border-border bg-card p-1.5 text-left text-xs hover:border-primary disabled:cursor-default"
+                  title={document ? `${document.fileName} öffnen` : uploadLabel(reference)}
+                >
+                  {previewUrl ? (
+                    <img src={previewUrl} alt="" className="h-10 w-12 rounded object-cover" />
+                  ) : document?.contentType?.startsWith('image/') ? (
+                    <div className="flex h-10 w-12 items-center justify-center rounded bg-muted">
+                      <Icons.AlertTriangle className="w-4 h-4 text-warning" />
+                    </div>
+                  ) : (
+                    <Icons.FileText className="w-[18px] h-[18px]" />
+                  )}
+                  <span className="min-w-0 truncate">{uploadLabel(reference)}</span>
+                  {document && <Icons.Eye className="w-3.5 h-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />}
+                </button>
+              );
+            })}
+          </div>
+        ) : '-'
+      ),
+    },
+    {
+      key: 'actions',
+      label: 'Aktion',
+      renderCell: (_v, row) => (
+        <button
+          type="button"
+          className="text-sm text-destructive cursor-pointer"
+          onClick={() => setCases((prev) => prev.filter((current) => current.id !== row.item.id))}
+        >
+          Entfernen
+        </button>
+      ),
+    },
+  ];
+
+  const pricingColumns: TableColumn<CaseRow>[] = [
+    {
+      key: 'selected',
+      label: 'Auswahl',
+      width: '80px',
+      renderCell: (_v, row) => (
+        <input
+          type="checkbox"
+          checked={row.item.selected}
+          onChange={(event) => updateCase(row.item.id, { selected: event.target.checked })}
+          aria-label={`${row.item.massnahme} auswählen`}
+        />
+      ),
+    },
+    { key: 'massnahme', label: 'Maßnahme', renderCell: (_v, row) => <span className="font-medium text-foreground">{row.item.massnahme}</span> },
+    { key: 'indikation', label: 'Indikation', renderCell: (_v, row) => <span className="text-muted-foreground">{row.item.ai?.summary ?? '-'}</span> },
+    { key: 'von', label: 'Von', align: 'right', renderCell: (_v, row) => formatCurrency(row.item.ai?.price_min ?? 0) },
+    { key: 'bis', label: 'Bis', align: 'right', renderCell: (_v, row) => formatCurrency(row.item.ai?.price_max ?? 0) },
+    {
+      key: 'angesetzt',
+      label: 'Angesetzt',
+      renderCell: (_v, row) => (
+        <TextField
+          inputMode="decimal"
+          suffix="€"
+          className="text-right"
+          aria-label={`Angesetzte Kosten für ${row.item.massnahme}`}
+          disabled={!row.item.selected || !row.item.ai}
+          value={costInputs[row.item.id] ?? formatDecimalInput(String(costForCase(row.item)))}
+          onChange={(event) => setCostInputs((prev) => ({ ...prev, [row.item.id]: event.target.value }))}
+          onBlur={() => commitCostInput(row.item.id)}
+        />
+      ),
+    },
+  ];
+
+  const summaryColumns: TableColumn<CaseRow>[] = [
+    {
+      key: 'massnahme',
+      label: 'Maßnahme',
+      renderCell: (_v, row) => (
+        <>
+          <div className="font-medium">{row.item.massnahme}</div>
+          <div className="text-xs text-muted-foreground">{categoryLabel(row.item.kategorie)}</div>
+        </>
+      ),
+    },
+    {
+      key: 'kosten',
+      label: 'Kosten',
+      align: 'right',
+      renderCell: (_v, row) => (
+        <>
+          <div>{formatCurrency(costForCase(row.item))}</div>
+          <div className="text-xs font-normal text-muted-foreground">In der Preisindikation angesetzt</div>
+        </>
+      ),
+    },
+    {
+      key: 'zeitpunkt',
+      label: 'Zeitpunkt',
+      renderCell: (_v, row) => (
+        <Dropdown
+          aria-label={`${row.item.massnahme} Zeitpunkt`}
+          value={row.item.zeitpunkt}
+          onChange={(event) => updateCase(row.item.id, { zeitpunkt: event.target.value as RenovationTiming })}
+          options={[
+            { value: 'SOFORT', label: 'Sofort' },
+            { value: 'FLEXIBEL', label: 'Flexibel' },
+          ]}
+        />
+      ),
+    },
+    {
+      key: 'publish',
+      label: 'Auftrag veröffentlichen',
+      renderCell: (_v, row) => (
+        <label className="inline-flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={row.item.publish_order}
+            onChange={(event) => updateCase(row.item.id, { publish_order: event.target.checked })}
+          />
+          Ja
+        </label>
+      ),
+    },
+  ];
+
   return (
     <PropertyValuationLayout
       currentStep={5}
@@ -392,6 +544,30 @@ function RenovationContent() {
           <LoadingScreen message="Sanierung wird geladen…" fullScreen={false} />
         ) : (
           <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-3">
+              <SectionLabel>Übersicht</SectionLabel>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Modernisierungen</p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">{cases.length}</p>
+                </div>
+                <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Kostenspanne</p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">{stage === 'PRICING' ? `${formatCurrency(totals.sum_min)} – ${formatCurrency(totals.sum_max)}` : '–'}</p>
+                </div>
+                <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Ausgewählt</p>
+                  <p className="mt-2 text-2xl font-semibold text-primary">{stage === 'PRICING' ? formatCurrency(sumSelected) : '–'}</p>
+                </div>
+                <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Finanzierung</p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">
+                    {financingMode === 'FREMD' ? 'Fremdfinanziert' : financingMode === 'EIGEN' ? 'Eigen finanziert' : 'Teilweise'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="flex flex-col gap-2">
               <SectionLabel>Aufnahme der Modernisierungen</SectionLabel>
 
@@ -422,11 +598,10 @@ function RenovationContent() {
                   onChange={(event) => setDescription(event.target.value)}
                   maxLength={1500}
                   helperText="Optional: Schaden oder Modernisierungswunsch beschreiben. Bilder und Text können kombiniert werden."
-                  className="md:col-span-2"
                 />
                 <div className="rounded-lg border border-dashed border-border bg-card px-4 py-3">
                     <div className="mb-3 flex items-start gap-3">
-                      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><Upload size={18} /></span>
+                      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><Icons.Upload className="w-[18px] h-[18px]" /></span>
                       <div>
                         <h3 className="font-medium text-foreground">Bilder und Unterlagen hochladen</h3>
                         <p className="text-xs text-muted-foreground">Exposé, Besichtigungsfotos oder vorhandene Kostendokumente</p>
@@ -451,127 +626,31 @@ function RenovationContent() {
                   {isUploadingFiles && <p className="mt-1 text-xs text-muted-foreground">Lädt hoch…</p>}
                   {uploadFilesError && <p className="mt-1 text-xs text-destructive">{uploadFilesError}</p>}
                 </div>
-                <div className="flex items-end justify-start md:justify-end">
-                  <Button label="Modernisierung hinzufügen" onClick={addCase} />
+                <div className="flex items-end justify-start md:col-start-2 md:justify-end">
+                  <Button label="Modernisierung hinzufügen" icon={<Icons.Plus className="w-4 h-4" />} onClick={addCase} />
                 </div>
               </div>
 
-              {cases.length > 0 && (
-                <div className="mt-6 overflow-hidden rounded-lg border border-border">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-primary/8">
-                      <tr>
-                        <th className="px-4 py-3 font-medium">Kategorie</th>
-                        <th className="px-4 py-3 font-medium">Maßnahme</th>
-                        <th className="px-4 py-3 font-medium">Beschreibung</th>
-                        <th className="px-4 py-3 font-medium">Bilder und Unterlagen</th>
-                        <th className="px-4 py-3 font-medium">Aktion</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cases.map((item) => (
-                        <tr key={item.id} className="border-t border-border">
-                          <td className="px-4 py-3">{categoryLabel(item.kategorie)}</td>
-                          <td className="px-4 py-3">{item.massnahme}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{item.beschreibung || '-'}</td>
-                          <td className="px-4 py-3">
-                            {item.uploads?.length ? (
-                              <div className="flex flex-wrap gap-2">
-                                {item.uploads.map((reference) => {
-                                  const documentId = reference.startsWith('document:') ? Number(reference.slice('document:'.length)) : 0;
-                                  const document = documentsById[documentId];
-                                  const previewUrl = previewUrls[documentId];
-                                  return (
-                                    <button
-                                      key={reference}
-                                      type="button"
-                                      onClick={() => void openUpload(reference)}
-                                      disabled={!document}
-                                      className="group flex max-w-48 items-center gap-2 rounded-md border border-border bg-card p-1.5 text-left text-xs hover:border-primary disabled:cursor-default"
-                                      title={document ? `${document.fileName} öffnen` : uploadLabel(reference)}
-                                    >
-                                      {previewUrl ? (
-                                        <img src={previewUrl} alt="" className="h-10 w-12 rounded object-cover" />
-                                      ) : document?.contentType?.startsWith('image/') ? (
-                                        <div className="flex h-10 w-12 items-center justify-center rounded bg-muted">
-                                          <AlertTriangle size={16} className="text-warning" />
-                                        </div>
-                                      ) : (
-                                        <FileText size={18} />
-                                      )}
-                                      <span className="min-w-0 truncate">{uploadLabel(reference)}</span>
-                                      {document && <Eye size={14} className="shrink-0 text-muted-foreground group-hover:text-primary" />}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            ) : '-'}
-                          </td>
-                          <td className="px-4 py-3">
-                            <button
-                              type="button"
-                              className="text-sm text-destructive"
-                              onClick={() => setCases((prev) => prev.filter((current) => current.id !== item.id))}
-                            >
-                              Entfernen
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <div className="mt-6">
+                <Table
+                  columns={casesColumns}
+                  data={casesRows}
+                  emptyMessage="Noch keine Modernisierungen erfasst."
+                  footerLeft={`${cases.length} Einträge`}
+                />
+              </div>
             </div>
 
             {stage === 'PRICING' && (
               <>
                 <div className="flex flex-col gap-2">
                   <SectionLabel>Preisindikation</SectionLabel>
-                  <div className="overflow-hidden rounded-lg border border-border">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-primary/8">
-                        <tr>
-                          <th className="px-4 py-3 font-medium">Auswahl</th>
-                          <th className="px-4 py-3 font-medium">Maßnahme</th>
-                          <th className="px-4 py-3 font-medium">Indikation</th>
-                          <th className="px-4 py-3 text-right font-medium">Von</th>
-                          <th className="px-4 py-3 text-right font-medium">Bis</th>
-                          <th className="px-4 py-3 text-right font-medium">Angesetzt</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {cases.map((item) => (
-                          <tr key={item.id} className="border-t border-border">
-                            <td className="px-4 py-3">
-                              <input
-                                type="checkbox"
-                                checked={item.selected}
-                                onChange={(event) => updateCase(item.id, { selected: event.target.checked })}
-                                aria-label={`${item.massnahme} auswählen`}
-                              />
-                            </td>
-                            <td className="px-4 py-3 font-medium">{item.massnahme}</td>
-                            <td className="px-4 py-3 text-muted-foreground">{item.ai?.summary ?? '-'}</td>
-                            <td className="px-4 py-3 text-right">{formatCurrency(item.ai?.price_min ?? 0)}</td>
-                            <td className="px-4 py-3 text-right">{formatCurrency(item.ai?.price_max ?? 0)}</td>
-                            <td className="px-4 py-3">
-                              <TextField
-                                inputMode="decimal"
-                                suffix="€"
-                                className="text-right"
-                                aria-label={`Angesetzte Kosten für ${item.massnahme}`}
-                                disabled={!item.selected || !item.ai}
-                                value={costInputs[item.id] ?? formatDecimalInput(String(costForCase(item)))}
-                                onChange={(event) => setCostInputs((prev) => ({ ...prev, [item.id]: event.target.value }))}
-                                onBlur={() => commitCostInput(item.id)}
-                              />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <Table
+                    columns={pricingColumns}
+                    data={casesRows}
+                    emptyMessage="Noch keine Modernisierungen erfasst."
+                    footerLeft={`${cases.length} Einträge`}
+                  />
 
                   <div className="mt-6 max-w-3xl">
                     <p className="mb-3 text-lg font-medium">Mit welchem Preis wollen Sie weiterrechnen?</p>
@@ -597,81 +676,44 @@ function RenovationContent() {
 
                 <div className="flex flex-col gap-2">
                   <SectionLabel>Zusammenfassung</SectionLabel>
-                  <div className="overflow-hidden rounded-lg border border-border">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-primary/8">
-                        <tr>
-                          <th className="px-4 py-3 font-medium">Maßnahme</th>
-                          <th className="px-4 py-3 text-right font-medium">Kosten</th>
-                          <th className="px-4 py-3 font-medium">Zeitpunkt</th>
-                          <th className="px-4 py-3 font-medium">Auftrag veröffentlichen</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedCases.map((item) => (
-                          <tr key={item.id} className="border-t border-border even:bg-muted/40">
-                            <td className="px-4 py-3">
-                              <div className="font-medium">{item.massnahme}</div>
-                              <div className="text-xs text-muted-foreground">{categoryLabel(item.kategorie)}</div>
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <div>{formatCurrency(costForCase(item))}</div>
-                              <div className="text-xs font-normal text-muted-foreground">In der Preisindikation angesetzt</div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <Dropdown
-                                aria-label={`${item.massnahme} Zeitpunkt`}
-                                value={item.zeitpunkt}
-                                onChange={(event) => updateCase(item.id, { zeitpunkt: event.target.value as RenovationTiming })}
-                                options={[
-                                  { value: 'SOFORT', label: 'Sofort' },
-                                  { value: 'FLEXIBEL', label: 'Flexibel' },
-                                ]}
-                              />
-                            </td>
-                            <td className="px-4 py-3">
-                              <label className="inline-flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={item.publish_order}
-                                  onChange={(event) => updateCase(item.id, { publish_order: event.target.checked })}
-                                />
-                                Ja
-                              </label>
-                            </td>
-                          </tr>
-                        ))}
-                        <tr className="border-t border-border bg-card font-semibold">
-                          <td className="px-4 py-3">Gesamtsumme</td>
-                          <td className="px-4 py-3 text-right">{formatCurrency(sumSelected)}</td>
-                          <td className="px-4 py-3" colSpan={2}>
-                            <div className="grid gap-3 md:grid-cols-[minmax(0,240px)_minmax(0,220px)]">
-                              <Dropdown
-                                value={financingMode}
-                                onChange={(event) => setFinancingMode(event.target.value as RenovationFinancingMode)}
-                                options={[
-                                  { value: 'FREMD', label: 'Fremdfinanziert' },
-                                  { value: 'EIGEN', label: 'Eigen finanziert' },
-                                  { value: 'TEILWEISE', label: 'Teilweise' },
-                                ]}
-                              />
-                              {financingMode === 'TEILWEISE' && (
-                                <TextField
-                                  label="Fremdkapitalanteil"
-                                  optional
-                                  value={financedAmount}
-                                  onChange={(event) => setFinancedAmount(event.target.value)}
-                                  inputMode="decimal"
-                                  suffix="€"
-                                  aria-label="Fremdfinanzierter Anteil"
-                                  helperText="Der verbleibende Betrag wird als Eigenkapital behandelt."
-                                />
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  <Table
+                    columns={summaryColumns}
+                    data={selectedRows}
+                    emptyMessage="Keine Modernisierungen ausgewählt."
+                    footerLeft={`${selectedCases.length} Einträge`}
+                    footerRight={`Gesamtsumme: ${formatCurrency(sumSelected)}`}
+                  />
+                  <div className="rounded-lg border border-border bg-card p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide">Gesamtsumme</p>
+                        <p className="mt-1 text-2xl font-semibold text-foreground">{formatCurrency(sumSelected)}</p>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-[minmax(0,240px)_minmax(0,220px)]">
+                        <Dropdown
+                          label="Finanzierung"
+                          value={financingMode}
+                          onChange={(event) => setFinancingMode(event.target.value as RenovationFinancingMode)}
+                          options={[
+                            { value: 'FREMD', label: 'Fremdfinanziert' },
+                            { value: 'EIGEN', label: 'Eigen finanziert' },
+                            { value: 'TEILWEISE', label: 'Teilweise' },
+                          ]}
+                        />
+                        {financingMode === 'TEILWEISE' && (
+                          <TextField
+                            label="Fremdkapitalanteil"
+                            optional
+                            value={financedAmount}
+                            onChange={(event) => setFinancedAmount(event.target.value)}
+                            inputMode="decimal"
+                            suffix="€"
+                            aria-label="Fremdfinanzierter Anteil"
+                            helperText="Der verbleibende Betrag wird als Eigenkapital behandelt."
+                          />
+                        )}
+                      </div>
+                    </div>
                   </div>
                   <p className="mt-3 text-xs text-muted-foreground">
                     Preisindikation aktuell per lokaler Fallback-Logik mit PLZ-Faktor{context?.postalCode ? ` (${context.postalCode})` : ''}; die KI- und Upload-Auswertung ist als nächster Integrationspunkt vorbereitet.
