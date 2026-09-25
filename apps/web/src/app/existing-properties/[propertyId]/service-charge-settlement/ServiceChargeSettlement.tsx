@@ -18,18 +18,15 @@ import { ServiceChargeSettlementView } from './ServiceChargeSettlementView';
 
 interface UnitRow {
     unit: PropertyUnit;
-    /** null = no settlement recorded yet for this unit, or it has no current
-     *  tenancy to compare a prepayment against. */
+    /** null = no settlement yet, or no current tenancy to compare against. */
     annualPrepayment: number | null;
     overUnderCoverage: number | null;
     settlementCoverage: CoverageDirection | null;
 }
 
-// Settlements are per unit, not shared across a building — each row loads
-// its own settlement + cost items instead of every unit reusing the same
-// property-wide fetch (the old behavior, which meant every unit's Anteil
-// Wohnung/coverage figures here were actually just whichever unit the
-// shared cost items happened to have been entered for).
+// Each row loads its own settlement + cost items rather than reusing one
+// property-wide fetch — previously all units showed whichever unit's cost
+// items happened to be entered.
 async function loadUnitRow(propertyId: number, unit: PropertyUnit): Promise<UnitRow> {
     const { settlement, costItems } = await getAggregatedSettlementData(propertyId, unit.propertyUnitId);
     if (!settlement) return { unit, annualPrepayment: null, overUnderCoverage: null, settlementCoverage: null };
@@ -100,9 +97,7 @@ export default function ServiceChargeSettlement({ propertyId }: { propertyId: st
     if (isLoading) return <PropertyLoadingPage />;
     if (!property) return <PropertyNotFoundPage />;
 
-    // Exactly one unit — skip the picker and go straight to it. The
-    // settlement's cost data is property-wide either way (see the data hook);
-    // this just decides whether a unit-picker step is needed first.
+    // Single unit: skip the picker and go straight to it.
     if (units.length <= 1) {
         const unit = units[0];
         if (!unit) return <PropertyNotFoundPage />;

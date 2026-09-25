@@ -8,21 +8,20 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { DataCard, DocumentBox, DocumentReplaceModal, Field, initials, Pill } from '../../../DocumentGeneratorParts';
-import { useMieterbescheinigungGenerator } from '../../../mieterbescheinigungGenerator';
-import { certificateBodyHtml, isPersonComplete } from '../../../mieterbescheinigungLetter';
+import { useTenantCertificateGenerator } from '../../../tenantCertificateGenerator';
+import { certificateBodyHtml, isPersonComplete } from '../../../tenantCertificateLetter';
 
 type View = 'review' | 'preview';
 
 export default function TenantCertificatePage({ propertyId, unitId }: { propertyId: string; unitId: string }) {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const data = useMieterbescheinigungGenerator(propertyId, unitId);
+    const data = useTenantCertificateGenerator(propertyId, unitId);
 
     const [view, setView] = useState<View>('review');
 
-    // The "Word-Dokument generieren" shortcut on the tenant-unit page can
-    // link here with ?autoGenerate=1 to skip the extra click — waits for the
-    // generator's own data load (canGenerate) before firing, and only once.
+    // ?autoGenerate=1 lets the tenant-unit page's "Word-Dokument generieren" shortcut
+    // skip the extra click; waits for canGenerate and fires only once.
     const didAutoGenerate = useRef(false);
     useEffect(() => {
         if (didAutoGenerate.current) return;

@@ -24,31 +24,24 @@ interface TenantAgreementPageProps {
     hasMultipleUnits: boolean;
 }
 
-/** The rental-agreement page: lease term, rent & service charges,
- *  adjustments and generated documents. An independent page/route — not
- *  nested under tenant-data either in the URL or in the breadcrumb, and
- *  not a tab of the current-tenant page — see ../tenant-data/CurrentTenantPage
- *  for that side. Only the data layer (useTenantUnitData) is shared. */
+/** Rental-agreement page: lease term, rent & service charges, adjustments and
+ *  generated documents. Independent route, not nested under tenant-data (see
+ *  ../tenant-data/CurrentTenantPage); only useTenantUnitData is shared. */
 export function TenantAgreementPage({ propertyId, property, unit, hasMultipleUnits }: TenantAgreementPageProps) {
     const data = useTenantUnitData(propertyId, property, unit, hasMultipleUnits);
-    // Own independent data load (see useRentalAgreementGenerator's doc
-    // comment) — lets "PDF generieren" run right here instead of navigating
-    // to the /rental-agreement review page first.
+    // Independent data load (see useRentalAgreementGenerator) so "PDF generieren" can run here directly.
     const rentalGen = useRentalAgreementGenerator(propertyId, String(unit.propertyUnitId));
 
-    // Blocks the whole form (not just Save) until the tenancy/persons/costs
-    // load resolves — rendering the fields interactive any earlier lets a
-    // user's input get silently clobbered when that load's setRentalForm
-    // lands afterward (see the isTenancyDataLoaded doc comment).
+    // Blocks the whole form until data loads resolve; otherwise a user's input
+    // can get silently clobbered when the load's setRentalForm lands later.
     if (!data.isTenancyDataLoaded) return <PropertyLoadingPage />;
 
     const currentTenantHref = hasMultipleUnits
         ? `/existing-properties/${propertyId}/tenant-data/${unit.propertyUnitId}`
         : `/existing-properties/${propertyId}/tenant-data`;
 
-    // No "Mieterdaten" crumb — the rental agreement is a sibling page, not
-    // nested under it. With several units the unit label still needs to
-    // show which unit this is, linking back to that unit's current-tenant page.
+    // No "Mieterdaten" crumb since this is a sibling page, not nested under it;
+    // the unit label is still needed with multiple units to show which unit this is.
     const breadcrumbItems: BreadcrumbItem[] = hasMultipleUnits
         ? [
             {

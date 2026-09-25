@@ -37,9 +37,7 @@ function toDateInput(date: Date | undefined): string | null {
     return date ? format(date, 'yyyy-MM-dd') : null;
 }
 
-/** Card shell matching the app's established icon+title header pattern
- *  (see DocumentGeneratorParts.tsx's DataCard / RentalTrends.tsx's
- *  ProposalCardShell) instead of a bare SectionLabel inside plain padding. */
+/** Card shell matching the app's icon+title header pattern (see DataCard / ProposalCardShell). */
 function MeasureCard({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
     return (
         <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -207,8 +205,7 @@ export default function MeasureDetail({ propertyId, measureId }: { propertyId: s
                                 value={toDate(measure.actualCompletionDate)}
                                 onChange={(date) => {
                                     const next = toDateInput(date);
-                                    // Clearing the completion date can't leave a stale
-                                    // customer confirmation behind it — matches Contractors.tsx.
+                                    // Clearing completion date must also clear stale customer confirmation.
                                     data.commitField(next ? { actualCompletionDate: next } : { actualCompletionDate: next, customerConfirmedCompleted: false });
                                 }}
                             />

@@ -810,6 +810,10 @@ export interface RenovationMeasure {
    *  RenovationMeasureQuote); its presence is what drives the "Angebot"
    *  status checkmark (no separate boolean for it). */
   quotedCost: number | null;
+  /** Budget von/bis — only meaningful once published to the Netzwerk >
+   *  Handwerker job board; both null shows "Preis auf Anfrage" there. */
+  budgetMin: number | null;
+  budgetMax: number | null;
   preferredStartDate: string | null;
   quotedStartDate: string | null;
   /** Abschluss ist — entered by the owner once the contractor reports the
@@ -880,6 +884,95 @@ export interface RenovationMeasurePhoto {
 }
 
 export type RenovationMeasurePhotoInsert = Omit<RenovationMeasurePhoto, 'renovationMeasurePhotoId' | 'createdAt'>;
+
+/** A property/unit's public listing on the Netzwerk > Handwerker job board —
+ *  not a DB row of its own, just RenovationMeasure joined to the property it
+ *  belongs to for the city/street display the board needs. Read-only. */
+export interface RenovationMeasureJobListing extends RenovationMeasure {
+  city: string;
+  street: string;
+}
+
+// ----------------------------------------------------------------------------
+// Netzwerk — WEGs directory (Wohnungseigentümergemeinschaften)
+// ----------------------------------------------------------------------------
+
+/** A property-management company/WEG, crowd-sourced via "WEG vorschlagen" —
+ *  the first genuinely cross-user, shared-visibility content in this app
+ *  (every other table is scoped to its owner). Average rating/review count
+ *  are derived from WegReview on read, not stored here. */
+export interface Weg {
+  wegId: number;
+  createdByUserId: string;
+  name: string;
+  foundedYear: number | null;
+  city: string;
+  unitCount: number | null;
+  /** Free text (e.g. "All-inklusiv", "Hausverwaltung", "HsVw. und NKA") —
+   *  no CHECK constraint, same convention as RenovationMeasure.category. */
+  serviceTier: string;
+  annualFeePerUnit: number | null;
+  responseTimeHours: number | null;
+  /** e.g. "Mo–Fr 8–18 Uhr" — free text. */
+  reachability: string | null;
+  website: string | null;
+  phone: string | null;
+  email: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WegInsert = Omit<Weg, 'wegId' | 'createdAt' | 'updatedAt'>;
+
+/** One user's rating + comment for a Weg — unique per (wegId, userId), so
+ *  submitting again edits the same review rather than adding a second one. */
+export interface WegReview {
+  wegReviewId: number;
+  wegId: number;
+  userId: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+}
+
+export type WegReviewInsert = Omit<WegReview, 'wegReviewId' | 'createdAt'>;
+
+/** Read-only aggregate attached to a Weg for display — computed by the API
+ *  from WegReview, never stored. */
+export interface WegWithRating extends Weg {
+  averageRating: number | null;
+  reviewCount: number;
+}
+
+// ----------------------------------------------------------------------------
+// Netzwerk — Forum
+// ----------------------------------------------------------------------------
+
+/** A community forum post — the other genuinely cross-user, shared-
+ *  visibility table (see Weg above). authorUserId is null for staff-
+ *  authored posts ("inb Expertenkommentar" — there's no staff/admin role in
+ *  this app, so that's represented as a sentinel null author rather than a
+ *  real user flag). No replies/comments yet — replyCount is always 0 until
+ *  that's built. */
+export interface ForumPost {
+  forumPostId: number;
+  authorUserId: string | null;
+  category: string;
+  title: string;
+  body: string;
+  viewCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ForumPostInsert = Omit<ForumPost, 'forumPostId' | 'viewCount' | 'createdAt' | 'updatedAt'>;
+
+/** Read-only shape the API returns — ForumPost plus the resolved author
+ *  display name (from personal_data, or "inb Expertenkommentar" when
+ *  authorUserId is null). */
+export interface ForumPostWithAuthor extends ForumPost {
+  authorName: string;
+}
 
 // ----------------------------------------------------------------------------
 // TaxExpenseCategory — Steuerunterlagen ("Angefallene Kosten")

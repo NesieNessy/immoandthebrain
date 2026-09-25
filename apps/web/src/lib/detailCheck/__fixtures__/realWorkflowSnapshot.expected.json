@@ -566,8 +566,8 @@
     "endingCashflow": 1086510.15,
     "endingCashflowWithRentIndex": 1086510.15
   },
-  "breakEven": "2026-08",
-  "breakEvenWithRentIndex": "2026-08",
+  "breakEven": "2030-07",
+  "breakEvenWithRentIndex": "2030-07",
   "capAbs": 360,
   "capPercent": 0.15,
   "capPerM2": 3,

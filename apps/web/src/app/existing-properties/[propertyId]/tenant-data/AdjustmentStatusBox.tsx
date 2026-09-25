@@ -51,13 +51,11 @@ interface AdjustmentStatusBoxProps {
 }
 
 /**
- * Shared status box for both adjustment cards (next rent adjustment and
- * renovation adjustment) — encapsulates all four states so the two cards stay
- * visually and behaviorally identical:
- *  - green: already accepted (a matching history entry exists for this cycle)
- *  - blue: informational, reminder date not reached yet
+ * Shared status box for both adjustment cards — four states:
+ *  - green: already accepted this cycle
+ *  - blue: reminder date not reached yet
  *  - yellow: reminder date reached, decision pending
- *  - red: within 3 months of the target date and still undecided
+ *  - red: within 3 months of target date, still undecided
  */
 export function AdjustmentStatusBox({
     adjustmentType,

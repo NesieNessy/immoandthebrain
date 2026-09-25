@@ -1,23 +1,16 @@
-// Pure status/calculation logic shared by the Handwerkerleistungen list page
-// (Contractors.tsx / useRenovationMeasuresData.ts) and the per-measure detail
-// page (MeasureDetail.tsx / useMeasureDetailData.ts) — kept JSX-free so it's
-// importable from .test.ts files and so both pages can't drift apart on what
-// these rules actually are.
+// Pure status/calculation logic shared by the list page and detail page,
+// kept JSX-free so both can't drift apart on these rules.
 
 import type { RenovationMeasure } from '@immoandthebrain/types';
 
-/** Once a quote is accepted, the measure's core fields become read-only —
- *  mirrors renovation_measure.quote_accepted's DB comment, and exactly the
- *  field set enforced server-side (lockedColumns on the renovation-measures
- *  resource in /api/property-resources/[resource]/route.ts). */
+/** Once a quote is accepted, core fields become read-only — mirrors the
+ *  server-side lockedColumns enforcement for this resource. */
 export function isLocked(measure: Pick<RenovationMeasure, 'quoteAccepted'>): boolean {
     return measure.quoteAccepted;
 }
 
-/** "Kunde bestätigt" is only togglable once the contractor's completion has
- *  been confirmed AND the owner has actually entered a completion date —
- *  matches the DB comment on customer_confirmed_completed ("only settable
- *  once actual_completion_date is set"). */
+/** "Kunde bestätigt" togglable only once craftsman confirmed AND a
+ *  completion date is set — matches the DB constraint. */
 export function canConfirmCustomerCompletion(
     measure: Pick<RenovationMeasure, 'craftsmanConfirmedCompleted' | 'actualCompletionDate'>,
 ): boolean {
@@ -28,11 +21,8 @@ export interface MeasuresSummary {
     totalEstimated: number;
     quotedCount: number;
     totalQuoted: number;
-    /** Sum of (quotedCost - estimatedCost) across every measure that has a
-     *  quotedCost — a measure with a quote but no estimate to compare
-     *  against contributes its full quotedCost here (no baseline = treated
-     *  as 0 estimated), which can read as a larger "over budget" figure than
-     *  a per-measure comparison would suggest. */
+    /** Sum of (quotedCost - estimatedCost) over quoted measures; a quote with
+     *  no estimate counts its full cost (missing baseline treated as 0). */
     deviation: number;
 }
 

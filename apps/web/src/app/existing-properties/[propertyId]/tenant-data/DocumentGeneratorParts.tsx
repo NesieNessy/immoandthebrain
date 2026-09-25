@@ -36,10 +36,8 @@ export function Field({ label, value }: { label: string; value: string }) {
     );
 }
 
-/** Card shell shared by the tenant-data feature: icon + title header (bar of
- *  "Quelle: X" or custom actions on the right), a body, and an optional
- *  footer bar for primary actions — keeps every card in this area visually
- *  consistent instead of each screen hand-rolling its own header/footer. */
+/** Shared card shell (icon+title header, body, optional footer) so every
+ *  tenant-data card looks consistent instead of each screen rolling its own. */
 export function DataCard({
     icon: Icon,
     title,
@@ -74,14 +72,10 @@ export function DataCard({
     );
 }
 
-// ── Shared "generated document" box ──────────────────────────────────────
-// Every "Generierbare Dokumente" card (Mieterbescheinigung, Mietvertrag,
-// Nebenkostenabrechnung, Anpassungsschreiben, ...) uses the same three
-// pieces below so a fix or design change in one place applies everywhere:
-// a ghost upload button, a box listing every stored document as its own
-// line (never just the latest — nothing is silently hidden), and a shared
-// ask-before-replace flow so uploading over an existing document never
-// deletes it without confirmation.
+// Shared "generated document" building blocks used by every document card
+// (Mieterbescheinigung, Mietvertrag, Nebenkostenabrechnung, ...): an upload
+// button, a box listing every stored doc (never hides older ones), and an
+// ask-before-replace flow.
 
 export interface DocumentBoxDoc {
     tenancyDocumentId: number;
@@ -149,10 +143,8 @@ function DocumentBoxLabel({ label }: { label: string }) {
     );
 }
 
-/** Lists every stored document as its own line — a second (or third) upload
- *  never hides an earlier one; each line has its own view/download/delete.
- *  Always renders as a bordered row (even with zero documents), matching
- *  the Mietvertrag row's look everywhere this box is used. */
+/** Lists every stored document as its own line — uploading again never hides
+ *  an earlier doc. Always renders as a bordered row, even when empty. */
 export function DocumentBox<TDoc extends DocumentBoxDoc>({
     docs,
     onView,
@@ -225,12 +217,9 @@ export function DocumentBox<TDoc extends DocumentBoxDoc>({
 }
 
 /**
- * State machine for "ask before replace": uploading while a document already
- * exists for the same slot pauses on a confirmation before proceeding — the
- * upload itself always archives the previous version rather than deleting
- * it (see the tenancy-documents API route), so nothing is ever lost; this
- * confirmation exists so a replace is a deliberate choice, not a surprise.
- * Uploading into an empty slot skips the prompt entirely.
+ * "Ask before replace" state machine: uploading over an existing doc pauses
+ * for confirmation (the upload always archives the old version, so nothing
+ * is lost). Uploading into an empty slot skips the prompt.
  */
 export function useDocumentReplaceFlow<TDoc>(options: {
     upload: (file: File) => Promise<void>;

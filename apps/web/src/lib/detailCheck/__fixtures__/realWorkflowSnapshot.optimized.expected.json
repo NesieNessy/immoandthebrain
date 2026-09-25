@@ -1,0 +1,51 @@
+{
+  "modernizationPlan": [
+    {
+      "id": "a6e8c396-87d6-4412-973a-553ff03c4e16",
+      "title": "Wassersparende Armaturen",
+      "source": "KNOWN",
+      "paymentYyyymm": "2034-03",
+      "effectiveYyyymm": "2034-05",
+      "monthlyDelta": 8.92,
+      "allocableCosts": 1337.27
+    },
+    {
+      "id": "5c7d71dd-ecce-429a-8c57-86e71d644392",
+      "title": "Neue Bodenbeläge (Parkett/Vinyl)",
+      "source": "KNOWN",
+      "paymentYyyymm": "2040-03",
+      "effectiveYyyymm": "2040-05",
+      "monthlyDelta": 129.38,
+      "allocableCosts": 19406.73
+    },
+    {
+      "id": "7e90e828-f17f-4149-9f18-008fa5008a49",
+      "title": "Neue Bodenbeläge (Parkett/Vinyl)",
+      "source": "KNOWN",
+      "paymentYyyymm": "2044-09",
+      "effectiveYyyymm": "2044-11",
+      "monthlyDelta": 84.67,
+      "allocableCosts": 12700
+    },
+    {
+      "id": "7dd2f981-8bcc-4a38-9960-703a34671460",
+      "title": "Schwellenfreie Übergänge",
+      "source": "KNOWN",
+      "paymentYyyymm": "2046-03",
+      "effectiveYyyymm": "2046-05",
+      "monthlyDelta": 8,
+      "allocableCosts": 1200
+    },
+    {
+      "id": "bd6615c9-6ce4-406b-92ed-840ab45e1658",
+      "title": "Abgehängte Decke + Spots",
+      "source": "KNOWN",
+      "paymentYyyymm": "2047-09",
+      "effectiveYyyymm": "2047-11",
+      "monthlyDelta": 72.33,
+      "allocableCosts": 10850
+    }
+  ],
+  "breakEven": "2026-08",
+  "endingCashflow": 1127104.33
+}

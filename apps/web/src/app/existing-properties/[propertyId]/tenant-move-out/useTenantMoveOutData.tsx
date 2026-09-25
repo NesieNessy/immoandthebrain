@@ -161,7 +161,6 @@ export function useTenantMoveOutData(propertyId: string, property: Property, uni
         ? `${primary.lastName ?? ''}, ${[primary.firstName, ...others.map((p) => p.firstName)].filter(Boolean).join(' & ')}`.trim()
         : '–';
 
-    // ── Meter readings ──────────────────────────────────────────────────────
     const addMeterReading = () => {
         setMeterReadings((prev) => [...prev, { id: idFor(), room: '', value: '' }]);
     };
@@ -172,7 +171,6 @@ export function useTenantMoveOutData(propertyId: string, property: Property, uni
         setMeterReadings((prev) => prev.filter((r) => r.id !== id));
     };
 
-    // ── Damages ──────────────────────────────────────────────────────────────
     const addDamage = () => {
         setDamages((prev) => [...prev, { id: idFor(), description: '', photos: [] }]);
     };
@@ -210,7 +208,6 @@ export function useTenantMoveOutData(propertyId: string, property: Property, uni
         setDamages((prev) => prev.map((d) => d.id === damageId ? { ...d, photos: d.photos.filter((p) => p.id !== photoId) } : d));
     };
 
-    // ── Save ─────────────────────────────────────────────────────────────────
     const handleSave = async () => {
         if (!tenancy) return;
         setIsSaving(true);
@@ -261,7 +258,6 @@ export function useTenantMoveOutData(propertyId: string, property: Property, uni
         }
     };
 
-    // ── Abnahmeprotokoll PDF ─────────────────────────────────────────────────
     const canGenerateProtocol = tenancy != null;
 
     const buildProtocolHtml = (): string | null => {
@@ -345,12 +341,9 @@ export function useTenantMoveOutData(propertyId: string, property: Property, uni
         if (url) window.open(url, '_blank', 'noopener,noreferrer');
     };
 
-    // The actual payout still routes through a partner (not yet wired up —
-    // see the "Weiterleitung zum Partner" note on the button) — this marks
-    // the deposit as settled on the tenancy record, the same way generating
-    // the Abnahmeprotokoll marks acceptanceProtocol, so the Mieterhistorie
-    // status columns reflect real actions taken here instead of being
-    // manually toggled.
+    // Payout still routes through a partner manually (see "Weiterleitung zum Partner" on the
+    // button); this just marks the deposit settled here, same as generating the Abnahmeprotokoll
+    // marks acceptanceProtocol, so Mieterhistorie reflects real actions rather than manual toggles.
     const handleReleaseDeposit = async () => {
         if (!tenancy) return;
         setIsReleasingDeposit(true);

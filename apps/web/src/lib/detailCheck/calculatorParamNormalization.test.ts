@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildEffectiveCalculatorParams,
+  buildRestoreRequestBody,
   clampInterestRate,
+  normalizeLast558RentBefore,
   normalizeRecentMonth,
   normalizeRentIncreaseIntervalMonths,
   normalizeRentIncreaseUtilizationPercent,
+  normalizeRentIndexGrowthPercent,
   normalizeTaxRate,
+  normalizeViewPeriodYears,
   overridesFromParams,
   recomputeMonthlyDebtService,
   safeCases,
@@ -180,6 +184,9 @@ function fieldsFromParams(params: CalculatorParams): CalculatorParameterFields {
     rentIncreaseIntervalMonths: params.rentIncreaseIntervalMonths,
     rentIncreaseUtilizationPercent: params.rentIncreaseUtilizationPercent,
     mode: params.mode,
+    rentIndexGrowthPercent: '',
+    last558RentBefore: '',
+    viewPeriodYears: 15,
   };
 }
 
@@ -201,7 +208,14 @@ describe('buildEffectiveCalculatorParams — parity with a real server response'
     // `undefined` both make every per-id lookup inside it resolve to
     // `undefined` — which the next test proves by comparing actual computed
     // output rather than raw param shape.
-    expect(rebuilt).toEqual({ ...fixtureParams, rentIncreaseOverrides: {} });
+    expect(rebuilt).toEqual({
+      ...fixtureParams,
+      rentIncreaseOverrides: {},
+      excludedModernizationIds: [],
+      rentIndexGrowthPercent: 2,
+      last558RentBefore: null,
+      viewPeriodYears: 15,
+    });
   });
 
   it('produces a result identical to what the server computed for its own saved state', () => {
@@ -356,11 +370,118 @@ describe('buildEffectiveCalculatorParams — parity with a real server response'
   });
 });
 
+describe('excludedModernizationIds round-trip', () => {
+  it('survives params → overrides → effective params', () => {
+    const params = { ...(fixture.params as unknown as CalculatorParams), excludedModernizationIds: ['x'] };
+    const overrides = overridesFromParams(params);
+    expect(overrides.excludedModernizationIds).toEqual(['x']);
+    const rebuilt = buildEffectiveCalculatorParams(params, fieldsFromParams(params), overrides, {
+      resetRentIncreasePlan: false,
+      storedRentIncreasePlan: params.rentIncreasePlan,
+    });
+    expect(rebuilt.excludedModernizationIds).toEqual(['x']);
+  });
+});
+
 describe('overridesFromParams', () => {
   it('round-trips through buildEffectiveCalculatorParams without altering the override fields', () => {
     const overrides = overridesFromParams(fixtureParams);
     expect(overrides.equityIncluded).toBe(fixtureParams.equityIncluded === true);
     expect(overrides.taxRate).toBe(fixtureParams.taxRate);
     expect(overrides.modernizationPlacements).toEqual(fixtureParams.modernizationPlacements ?? {});
+  });
+});
+
+describe('SCRUM-96 Schnitt 1 inputs', () => {
+  it('rent index growth: empty/invalid → 2, German decimal parsed, clamped to -5..10', () => {
+    expect(normalizeRentIndexGrowthPercent('')).toBe(2);
+    expect(normalizeRentIndexGrowthPercent(null)).toBe(2);
+    expect(normalizeRentIndexGrowthPercent('abc')).toBe(2);
+    expect(normalizeRentIndexGrowthPercent('1,5')).toBe(1.5);
+    expect(normalizeRentIndexGrowthPercent(3)).toBe(3);
+    expect(normalizeRentIndexGrowthPercent('0')).toBe(0);
+    expect(normalizeRentIndexGrowthPercent('25')).toBe(10);
+    expect(normalizeRentIndexGrowthPercent(-9)).toBe(-5);
+    expect(normalizeRentIndexGrowthPercent('-1,5')).toBe(-1.5);
+  });
+
+  it('rent before last §558: only with a valid last558Date and a positive amount', () => {
+    expect(normalizeLast558RentBefore('950', null)).toBeNull();
+    expect(normalizeLast558RentBefore('', '2025-11')).toBeNull();
+    expect(normalizeLast558RentBefore('0', '2025-11')).toBeNull();
+    expect(normalizeLast558RentBefore('1.234,50', '2025-11')).toBe(1234.5);
+    expect(normalizeLast558RentBefore(900, '2025-11')).toBe(900);
+  });
+
+  it('view period: integer 5..50, default 15', () => {
+    expect(normalizeViewPeriodYears(undefined)).toBe(15);
+    expect(normalizeViewPeriodYears('x')).toBe(15);
+    expect(normalizeViewPeriodYears(20)).toBe(20);
+    expect(normalizeViewPeriodYears(2)).toBe(5);
+    expect(normalizeViewPeriodYears(80)).toBe(50);
+    expect(normalizeViewPeriodYears(12.6)).toBe(13);
+  });
+
+  it('passes the three new inputs through', () => {
+    const last558Date = `${new Date().getFullYear() - 1}-11`;
+    const overrides = overridesFromParams(fixtureParams);
+    const fields: CalculatorParameterFields = {
+      ...fieldsFromParams(fixtureParams),
+      last558Date,
+      rentIndexGrowthPercent: '3,5',
+      last558RentBefore: '900',
+      viewPeriodYears: 20,
+    };
+
+    const result = buildEffectiveCalculatorParams(fixtureParams, fields, overrides, {
+      resetRentIncreasePlan: false,
+      storedRentIncreasePlan: fixtureParams.rentIncreasePlan,
+    });
+
+    expect(result.rentIndexGrowthPercent).toBe(3.5);
+    expect(result.last558RentBefore).toBe(900);
+    expect(result.viewPeriodYears).toBe(20);
+  });
+});
+
+describe('buildRestoreRequestBody', () => {
+  it('mirrors the snapshot params exactly, with apply/optimize/resetRentIncreasePlan forced off', () => {
+    const body = buildRestoreRequestBody(fixtureParams, 'qc-1', null);
+
+    expect(body).toMatchObject({
+      quickCheckId: 'qc-1',
+      workflowId: null,
+      startYyyymm: fixtureParams.startYyyymm,
+      monthlyRentStart: fixtureParams.monthlyRentStart,
+      rentIndexSource: fixtureParams.rentIndexSource,
+      mode: fixtureParams.mode,
+      rentIncreaseIntervalMonths: fixtureParams.rentIncreaseIntervalMonths,
+      rentIncreaseUtilizationPercent: fixtureParams.rentIncreaseUtilizationPercent,
+      optimize: false,
+      resetRentIncreasePlan: false,
+      apply: false,
+    });
+  });
+
+  it('nulls out rentIndexPerM2 when the snapshot was AUTOMATIC, even if a value happens to be stored', () => {
+    const params = { ...fixtureParams, rentIndexSource: 'AUTOMATIC' as const, rentIndexPerM2: 12.34 };
+    expect(buildRestoreRequestBody(params, null, null).rentIndexPerM2).toBeNull();
+  });
+
+  it('keeps rentIndexPerM2 when the snapshot was MANUAL', () => {
+    const params = { ...fixtureParams, rentIndexSource: 'MANUAL' as const, rentIndexPerM2: 12.34 };
+    expect(buildRestoreRequestBody(params, null, null).rentIndexPerM2).toBe(12.34);
+  });
+
+  it('nulls last558RentBefore whenever last558Date is absent, regardless of a stale stored value', () => {
+    const params = { ...fixtureParams, last558Date: null, last558RentBefore: 900 };
+    expect(buildRestoreRequestBody(params, null, null).last558RentBefore).toBeNull();
+  });
+
+  it('never sets apply to true', () => {
+    // Guards the whole point of the discard flow: this body must never write
+    // back into the renovation/financing tables.
+    const body = buildRestoreRequestBody(fixtureParams, null, null);
+    expect(body.apply).toBe(false);
   });
 });

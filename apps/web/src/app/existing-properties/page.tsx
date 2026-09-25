@@ -73,8 +73,7 @@ export default function ExistingPropertiesPage() {
   const [archivingId, setArchivingId] = useState<number | null>(null);
   const [propertyToDelete, setPropertyToDelete] = useState<PropertyOverview | null>(null);
   const [newPropertyModalOpen, setNewPropertyModalOpen] = useState(false);
-  // Archived properties are hidden by default — every "current" overview
-  // elsewhere in the app only ever shows active properties too.
+  // Hidden by default, like every other "current" overview in the app.
   const [showHistory, setShowHistory] = useState(false);
 
   const handlePropertyClick = (propertyId: number) => {
@@ -108,8 +107,7 @@ export default function ExistingPropertiesPage() {
       icon: <BUTTON_DETAILS.Edit.icon />,
       onClick: () => handlePropertyClick(property.propertyId),
     },
-    // Already-archived properties (shown via "Verlauf") have nothing left
-    // to archive — only current ones offer the action.
+    // Already-archived properties have nothing left to archive.
     ...(!property.archivedAt
       ? [{
           label: 'Archivieren',
@@ -146,8 +144,7 @@ export default function ExistingPropertiesPage() {
     setVermietung('');
   };
 
-  // A new filtered result set (or a page-size change) always starts back at
-  // page 1 — an out-of-range page would otherwise render nothing.
+  // Reset to page 1 on filter/pageSize change, else an out-of-range page renders nothing.
   useEffect(() => {
     setPage(1);
   }, [filtered, pageSize]);
@@ -270,9 +267,7 @@ export default function ExistingPropertiesPage() {
             {filtered.length > 0 && (
               <>
                 <div className="max-h-[700px] overflow-y-auto pr-1">
-                  {/* Mobile — always the card grid; the grid/list toggle only
-                      applies at md+, same md:hidden / hidden md:block split
-                      the quick-check overview uses for its mobile cards. */}
+                  {/* Mobile always uses the card grid; the grid/list toggle only applies at md+. */}
                   <div className="grid grid-cols-1 gap-4 md:hidden">
                     {pageItems.map((property, index) => (
                       <PropertyCard

@@ -1,4 +1,12 @@
-import { normalizeYyyymm, type CalculatorMode, type CalculatorParams, type PlacementMode, type RentIndexSource } from './rentCalculator';
+import {
+  DEFAULT_RENT_INDEX_GROWTH_PERCENT,
+  DEFAULT_VIEW_PERIOD_YEARS,
+  normalizeYyyymm,
+  type CalculatorMode,
+  type CalculatorParams,
+  type PlacementMode,
+  type RentIndexSource,
+} from './rentCalculator';
 import type { RenovationCase, RenovationTiming } from './renovation';
 import type { InterestPeriodYears } from './financing';
 import { parseDecimalInput, roundCurrency } from './acquisitionCosts';
@@ -85,11 +93,42 @@ export function recomputeMonthlyDebtService(loanAmount: number, interestRate: nu
   return roundCurrency(loanAmount * ((interestRate + repaymentRate) / 100) / 12);
 }
 
+/** Parses a stored number or German-locale input text; NaN when empty or unreadable. */
+function parseLooseNumber(value: unknown): number {
+  if (typeof value === 'number') return value;
+  if (typeof value !== 'string' || value.trim() === '') return Number.NaN;
+  if (!/^-?[\d.]*,?\d*$/.test(value.trim())) return Number.NaN;
+  return parseDecimalInput(value);
+}
+
+/** Mietspiegel-Entwicklung in % p. a.; leer oder unlesbar = Standard 2 %, begrenzt auf −5 … 10. */
+export function normalizeRentIndexGrowthPercent(value: unknown): number {
+  const parsed = parseLooseNumber(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_RENT_INDEX_GROWTH_PERCENT;
+  return Math.max(-5, Math.min(10, parsed));
+}
+
+/** Miete vor der letzten §558-Erhöhung — nur sinnvoll, wenn deren Datum gesetzt ist. */
+export function normalizeLast558RentBefore(value: unknown, last558Date: string | null): number | null {
+  if (!last558Date) return null;
+  const parsed = parseLooseNumber(value);
+  return Number.isFinite(parsed) && parsed > 0 ? roundCurrency(parsed) : null;
+}
+
+/** Betrachtungszeitraum in ganzen Jahren, 5 … 50, Standard 15. */
+export function normalizeViewPeriodYears(value: unknown): number {
+  const parsed = Number(value);
+  if (value == null || value === '' || !Number.isFinite(parsed)) return DEFAULT_VIEW_PERIOD_YEARS;
+  return Math.max(5, Math.min(50, Math.round(parsed)));
+}
+
 /** Every value the Mietkalkulator's Gantt/sliders can commit — the plan editor's payload shape. */
 export type CalculatorOverrides = {
   modernizationPlacements: Record<string, string>;
   modernizationCostOverrides: Record<string, number>;
   renovationTimingOverrides: Record<string, RenovationTiming>;
+  /** Optional so existing object literals in the calculator page stay valid. */
+  excludedModernizationIds?: string[];
   rentIncreaseOverrides: Record<string, { effectiveYyyymm?: string; monthlyDelta?: number }>;
   financingInterestRateOverride: number | null;
   interestRateOverride: number | null;
@@ -110,12 +149,64 @@ export function overridesFromParams(params: CalculatorParams): CalculatorOverrid
     modernizationPlacements: params.modernizationPlacements ?? {},
     modernizationCostOverrides: params.modernizationCostOverrides ?? {},
     renovationTimingOverrides: params.renovationTimingOverrides ?? {},
+    excludedModernizationIds: params.excludedModernizationIds ?? [],
     rentIncreaseOverrides: params.rentIncreaseOverrides ?? {},
     financingInterestRateOverride: params.financingInterestRateOverride ?? null,
     interestRateOverride: params.interestRateOverride ?? null,
     equityIncluded: params.equityIncluded === true,
     taxRate: params.taxRate,
     taxableLossesOffsettable: params.taxableLossesOffsettable === true,
+  };
+}
+
+/**
+ * Rebuilds the exact POST body the calculator page's `recalc` would send for
+ * a request whose every field equals the given (already server-normalized)
+ * `params` — used to restore the calculator row to a prior server-confirmed
+ * state (the "Änderungen verwerfen und weiter" flow) by writing that
+ * snapshot straight back, with `apply: false` so upstream renovation/
+ * financing tables are never touched.
+ *
+ * Reads only from `params` — never from any client-side form/override state —
+ * so the result is exactly what the server produced for that snapshot,
+ * regardless of what the user has typed since. `rentIndexPerM2` mirrors
+ * `recalc`'s own AUTOMATIC/MANUAL branch: null unless the snapshot was
+ * itself in MANUAL mode.
+ */
+export function buildRestoreRequestBody(
+  params: CalculatorParams,
+  quickCheckId: string | null,
+  workflowId: string | null,
+): Record<string, unknown> {
+  return {
+    quickCheckId,
+    workflowId,
+    startYyyymm: params.startYyyymm,
+    monthlyRentStart: params.monthlyRentStart,
+    rentIndexPerM2: params.rentIndexSource === 'AUTOMATIC' ? null : params.rentIndexPerM2,
+    rentIndexSource: params.rentIndexSource,
+    last558Date: params.last558Date ?? null,
+    last558RentBefore: params.last558Date ? params.last558RentBefore ?? null : null,
+    rentIndexGrowthPercent: params.rentIndexGrowthPercent ?? null,
+    viewPeriodYears: params.viewPeriodYears ?? DEFAULT_VIEW_PERIOD_YEARS,
+    last559Date: params.last559Date ?? null,
+    last559MonthlyDelta: params.last559MonthlyDelta,
+    rentIncreaseIntervalMonths: params.rentIncreaseIntervalMonths,
+    rentIncreaseUtilizationPercent: params.rentIncreaseUtilizationPercent,
+    mode: params.mode,
+    optimize: false,
+    financingInterestRateOverride: params.financingInterestRateOverride ?? null,
+    interestRateOverride: params.interestRateOverride ?? null,
+    equityIncluded: params.equityIncluded === true,
+    taxRate: params.taxRate ?? 0.42,
+    taxableLossesOffsettable: params.taxableLossesOffsettable === true,
+    modernizationPlacements: params.modernizationPlacements ?? {},
+    modernizationCostOverrides: params.modernizationCostOverrides ?? {},
+    renovationTimingOverrides: params.renovationTimingOverrides ?? {},
+    excludedModernizationIds: params.excludedModernizationIds ?? [],
+    resetRentIncreasePlan: false,
+    rentIncreaseOverrides: params.rentIncreaseOverrides ?? {},
+    apply: false,
   };
 }
 
@@ -132,6 +223,11 @@ export type CalculatorParameterFields = {
   rentIncreaseIntervalMonths: number;
   rentIncreaseUtilizationPercent: number;
   mode: CalculatorMode;
+  /** Raw decimal-input text, % p. a.; empty = default 2 %. */
+  rentIndexGrowthPercent: string;
+  /** Raw decimal-input text, €/Monat; ignored unless `last558Date` is set. */
+  last558RentBefore: string;
+  viewPeriodYears: number;
 };
 
 /**
@@ -177,6 +273,7 @@ export function buildEffectiveCalculatorParams(
     ? baseParams.monthlyDebtService
     : recomputeMonthlyDebtService(baseParams.loanAmount, interestRate, baseParams.repaymentRate);
   const last559Date = normalizeRecentMonth(fields.last559Date, 5);
+  const last558Date = normalizeRecentMonth(fields.last558Date, 1);
   const useManualRentIndex = fields.rentIndexSource === 'MANUAL' && fields.rentIndexPerM2 != null && fields.rentIndexPerM2 !== '';
 
   return {
@@ -191,7 +288,7 @@ export function buildEffectiveCalculatorParams(
     yearOfConstruction: baseParams.yearOfConstruction,
     city: baseParams.city,
     postalCode: baseParams.postalCode,
-    last558Date: normalizeRecentMonth(fields.last558Date, 1),
+    last558Date,
     last559Date,
     // `last559MonthlyDelta`/`rentIndexPerM2` are raw German-locale decimal
     // text ("1.234,56") straight from the input elements — parseDecimalInput
@@ -206,6 +303,9 @@ export function buildEffectiveCalculatorParams(
       ? parseDecimalInput(fields.rentIndexPerM2)
       : estimateRentIndexPerM2(baseParams.yearOfConstruction, baseParams.livingAreaM2),
     rentIndexSource: useManualRentIndex ? 'MANUAL' : 'AUTOMATIC',
+    last558RentBefore: normalizeLast558RentBefore(fields.last558RentBefore, last558Date),
+    rentIndexGrowthPercent: normalizeRentIndexGrowthPercent(fields.rentIndexGrowthPercent),
+    viewPeriodYears: normalizeViewPeriodYears(fields.viewPeriodYears),
     monthlyDebtService,
     loanAmount: baseParams.loanAmount,
     interestRate,
@@ -216,6 +316,7 @@ export function buildEffectiveCalculatorParams(
     serviceChargesNonAllocable: baseParams.serviceChargesNonAllocable,
     purchasePrice: baseParams.purchasePrice,
     totalInvestment: baseParams.totalInvestment,
+    renovationFinancedAmount: baseParams.renovationFinancedAmount,
     taxRate: normalizeTaxRate(overrides.taxRate),
     taxableLossesOffsettable: overrides.taxableLossesOffsettable === true,
     equityAmount: baseParams.equityAmount,
@@ -226,6 +327,7 @@ export function buildEffectiveCalculatorParams(
     modernizationPlacements: overrides.modernizationPlacements,
     modernizationCostOverrides: overrides.modernizationCostOverrides,
     renovationTimingOverrides: overrides.renovationTimingOverrides,
+    excludedModernizationIds: overrides.excludedModernizationIds ?? [],
     rentIncreasePlan: options.resetRentIncreasePlan ? undefined : options.storedRentIncreasePlan,
     rentIncreaseOverrides: options.resetRentIncreasePlan ? undefined : overrides.rentIncreaseOverrides,
     mode: fields.mode,

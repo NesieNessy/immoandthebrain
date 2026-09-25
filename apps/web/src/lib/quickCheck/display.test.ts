@@ -13,8 +13,7 @@ import {
   type QuickCheckFormFields,
 } from './display';
 
-// Base row shared by the toEntry/getPlaceholderPortalUrl tests below —
-// individual tests override only the fields they care about.
+// Shared by the toEntry/getPlaceholderPortalUrl tests; each overrides only what it needs.
 const baseRow: QuickCheckOverview = {
   quickCheckId: 1,
   userId: 'user-1',
@@ -83,9 +82,7 @@ describe('getPlaceholderPortalUrl', () => {
     expect(getPlaceholderPortalUrl({ ...entry, portalId: realUrl })).toBe(realUrl);
   });
 
-  // A domain the user typed without a scheme — real data has rows like this
-  // ("immobilienscout24.de"). The exact value (and any path) is preserved,
-  // not replaced with a generic portal homepage.
+  // Exact value (and path) is preserved, not replaced with a generic portal homepage.
   it('adds https:// to a bare domain the user typed, preserving it exactly', () => {
     expect(getPlaceholderPortalUrl({ ...entry, portalId: 'immobilienscout24.de' })).toBe('https://immobilienscout24.de');
   });
@@ -95,10 +92,8 @@ describe('getPlaceholderPortalUrl', () => {
       .toBe('https://www.kleinanzeigen.de/s-anzeige/wohnung-123');
   });
 
-  // Real quick_check.portal_id values are also plain-text labels with no
-  // domain in them at all (e.g. "Kleinanzeigen", "ImmoScout 428") — these
-  // link to the named portal's real homepage, not a fabricated per-row
-  // rotation, since there's no real link to preserve.
+  // Plain-text labels with no domain (e.g. "Kleinanzeigen") link to that
+  // portal's real homepage since there's no real link to preserve.
   it('links "Kleinanzeigen" to the real Kleinanzeigen site', () => {
     expect(getPlaceholderPortalUrl({ ...entry, portalId: 'Kleinanzeigen' })).toBe('https://www.kleinanzeigen.de');
   });

@@ -59,6 +59,7 @@ import {
   Mail,
   Map,
   MapPin,
+  MessageSquare,
   MoreVertical,
   Navigation,
   Network,
@@ -129,6 +130,7 @@ export const Icons = {
   // Communication
   Phone,
   Mail,
+  MessageSquare,
   Users,
   User,
   UserPlus,

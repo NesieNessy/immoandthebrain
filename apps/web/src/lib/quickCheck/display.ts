@@ -1,23 +1,18 @@
-// ---------------------------------------------------------------------------
-// Quick Check display/validation logic — row→entry mapping, condition/status
-// maps, and the create/edit form's validation rules. Re-exported from
-// components/features/QuickCheckDisplay.tsx (which adds the one JSX piece,
-// KpfBadge) so existing imports of that module keep working. Kept as plain
-// .ts (no JSX) so it's importable from .test.ts files — the app's vitest
-// config runs in a JSX-free node environment on purpose (see
-// vitest.config.mts).
-// ---------------------------------------------------------------------------
+// Row->entry mapping, condition/status maps, and create/edit form validation.
+// Re-exported from components/features/QuickCheckDisplay.tsx (which adds the
+// JSX KpfBadge piece). Kept as plain .ts (no JSX) so it stays importable from
+// .test.ts files under the JSX-free node vitest config.
 
 import type { TagVariant } from '@/components/ui';
+import { listingLinkHref } from '@/lib/listingUrl';
 import type { QuickCheckOverview } from '@/lib/supabase/quick_check.supabase';
 import { isValidConstructionYear } from './validation';
 import { PropertyCondition } from '@immoandthebrain/types';
 
 export interface QuickCheckEntry extends Record<string, unknown> {
   id: number;
-  /** Raw ISO timestamp — not displayed, only used as the default sort key
-   *  (ISO 8601 strings sort correctly lexicographically; a reformatted
-   *  dd.MM.yy string would not, across month/year boundaries). */
+  /** Raw ISO timestamp, used only as the sort key — ISO 8601 sorts correctly
+   *  lexicographically, unlike a reformatted dd.MM.yy string. */
   ingestDate: string;
   portalId: string;
   kpfMultiplier: number | null;
@@ -79,28 +74,16 @@ export const CONDITION_PILL_LABEL: Record<PropertyCondition, string> = {
   [PropertyCondition.Luxury]:             'Luxus',
 };
 
-// Portal import isn't implemented yet — quick_check.portal_id is a free-text
-// field the user fills in to note where a listing came from. Real data is a
-// mix of: a full domain they actually typed ("immobilienscout24.de"), or a
-// plain text label with no domain in it at all ("Kleinanzeigen",
-// "ImmoScout 428", "ImmoWelt"). This used to fabricate a link by cycling
-// through three hardcoded portal domains keyed off row.id % 3, so a
-// "Kleinanzeigen" row could link to immowelt.de purely by chance — the
-// destination had nothing to do with what was actually entered.
+// quick_check.portal_id is free text naming where a listing came from — either
+// a real domain/URL the user typed, or a plain label like "Kleinanzeigen".
+// Previously this fabricated a link by cycling through 3 hardcoded domains
+// keyed off row.id % 3, so the destination had no relation to what was entered.
 //
-// Priority order:
-//  1. Already a full URL (has a scheme) -> use it verbatim.
-//  2. Looks like a real domain, with or without a path ("immoscout24.de",
-//     "www.kleinanzeigen.de/s-anzeige/…") -> use exactly what the user typed,
-//     just adding the https:// scheme. This is the real link the user
-//     inserted — preserving it (path and all) beats replacing it with a
-//     generic homepage.
-//  3. Otherwise, a plain text label naming a known portal ("Kleinanzeigen",
-//     "ImmoScout 428") -> no real link was entered, so send the user to that
-//     portal's real homepage instead of a fabricated one.
-//  4. No known portal recognized -> no link at all, same as a manual entry.
-const DOMAIN_LIKE = /^(www\.)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i;
-
+// Priority: (1) already a full URL -> use verbatim; (2) looks like a real
+// domain -> keep what the user typed, just add https:// (steps 1-2 share the
+// rule in lib/listingUrl.ts, also used by Detailbewertung's Inserats-URL);
+// (3) plain label naming a known portal -> link to that portal's homepage;
+// (4) unrecognized -> no link, same as a manual entry.
 const KNOWN_PORTAL_DOMAINS: { pattern: RegExp; url: string }[] = [
   { pattern: /immobilienscout|immoscout/i, url: 'https://www.immobilienscout24.de' },
   { pattern: /immowelt/i, url: 'https://www.immowelt.de' },
@@ -111,9 +94,9 @@ const KNOWN_PORTAL_DOMAINS: { pattern: RegExp; url: string }[] = [
 export function getPlaceholderPortalUrl(row: QuickCheckEntry): string | null {
   if (row.portalId === MANUAL_ENTRY_LABEL || row.status === 'inaktiv') return null;
 
+  const link = listingLinkHref(row.portalId);
+  if (link) return link;
   const value = row.portalId.trim();
-  if (/^https?:\/\//i.test(value)) return value;
-  if (DOMAIN_LIKE.test(value)) return `https://${value}`;
   return KNOWN_PORTAL_DOMAINS.find((p) => p.pattern.test(value))?.url ?? null;
 }
 
@@ -130,10 +113,9 @@ export interface QuickCheckFormFields {
 }
 
 /**
- * Per-field validation messages — only populated once a field has been
- * touched (non-empty), so a fresh form doesn't show errors immediately.
- * `purchasePrice`/`coldRent` are passed pre-parsed since callers already
- * need the numeric values for the KPF calculation.
+ * Per-field validation messages, populated only once a field is touched so a
+ * fresh form shows no errors. purchasePrice/coldRent are pre-parsed since
+ * callers already need the numeric values for the KPF calculation.
  */
 export function getQuickCheckFieldErrors(
   fields: QuickCheckFormFields,

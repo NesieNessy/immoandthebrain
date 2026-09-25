@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { certificateBodyHtml, isPersonComplete, type CertificateContent } from './mieterbescheinigungLetter';
+import { certificateBodyHtml, isPersonComplete, type CertificateContent } from './tenantCertificateLetter';
 
 const baseContent: CertificateContent = {
     landlordName: 'Erika Musterfrau',

@@ -30,9 +30,8 @@ export default function RentalAgreementPage({ propertyId, unitId }: { propertyId
 
     const [view, setView] = useState<View>('review');
 
-    // The "PDF generieren" shortcut on the tenant-agreement page can link
-    // here with ?autoGenerate=1 to skip the extra click — waits for the
-    // generator's own data load (canGenerate) before firing, and only once.
+    // ?autoGenerate=1 lets the tenant-agreement page's "PDF generieren" shortcut
+    // skip the extra click; waits for canGenerate and fires only once.
     const didAutoGenerate = useRef(false);
     useEffect(() => {
         if (didAutoGenerate.current) return;
@@ -47,9 +46,8 @@ export default function RentalAgreementPage({ propertyId, unitId }: { propertyId
     if (data.isLoading || !data.property || !data.unit) return <PropertyLoadingPage />;
 
     const { property, unit, tenancy, landlord } = data;
-    // Only reachable from the rental-agreement page now (its "Daten prüfen &
-    // Vorschau" / "PDF generieren" buttons), so the back button and the
-    // breadcrumb both lead back there — not to tenant data.
+    // Only reachable from the rental-agreement page's own buttons now, so
+    // back/breadcrumb lead there, not to tenant data.
     const currentTenantHref = data.hasMultipleUnits
         ? `/existing-properties/${propertyId}/tenant-data/${unit.propertyUnitId}`
         : `/existing-properties/${propertyId}/tenant-data`;

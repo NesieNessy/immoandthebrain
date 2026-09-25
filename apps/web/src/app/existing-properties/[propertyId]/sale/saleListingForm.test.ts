@@ -145,9 +145,7 @@ describe('initialFormFromProperty', () => {
     it('carries over the parking space count when one exists', () => {
         const form = initialFormFromProperty(baseProperty, [], [baseParkingSpace]);
         expect(form.parkingSpaceCount).toBe('1');
-        // The sale-listing parking *type* is a separate, sale-only vocabulary
-        // (Garage/Duplex-Stellplatz/…) that doesn't map from ParkingSpaceType —
-        // it always starts blank for the owner to choose.
+        // Sale-listing parking type is a separate vocabulary from ParkingSpaceType; always starts blank.
         expect(form.parkingSpaceType).toBe('');
     });
 

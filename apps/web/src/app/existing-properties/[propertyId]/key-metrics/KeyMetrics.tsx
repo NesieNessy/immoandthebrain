@@ -38,9 +38,8 @@ function trendFromPercent(percent: number): 'up' | 'down' | 'flat' {
     return 'flat';
 }
 
-// A directional indicator, not a plotted history — the app doesn't keep a
-// month-by-month series for rent/value, only a before/after snapshot, so the
-// bars simply illustrate "trending up/down/flat" rather than real data points.
+// Directional indicator only, not a real history — there's no month-by-month
+// series for rent/value, just a before/after snapshot.
 function TrendBars({ direction }: { direction: 'up' | 'down' | 'flat' }) {
     const heights = direction === 'down'
         ? [90, 78, 66, 54, 44, 34]

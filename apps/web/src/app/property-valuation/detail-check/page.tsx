@@ -415,6 +415,11 @@ export default function DetailCheckOverviewPage() {
     {
       key: 'updatedAt',
       label: 'Zuletzt bearbeitet',
+      // The table uses table-fixed, which splits leftover width evenly across columns without a
+      // declared width; this header ("Zuletzt bearbeitet" + sort icon, whitespace-nowrap) needs
+      // about 142px but only received about 121px, causing overflow and a horizontal scrollbar.
+      // A fixed width reserves the room the header needs.
+      width: '160px',
       sortable: true,
       filterable: true,
       renderCell: (value) => new Date(String(value)).toLocaleDateString('de-DE'),

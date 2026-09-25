@@ -1,3 +1,4 @@
+import { isValidListingUrl, LISTING_URL_ERROR, normalizeListingReference } from '@/lib/listingUrl';
 import { requireUserId } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
 import { NextResponse } from 'next/server';
@@ -108,7 +109,10 @@ export async function POST(request: Request) {
   const yearOfConstruction = Number(input.yearOfConstruction);
   const kpfMultiplier = Number(input.kpfMultiplier);
   const postalCode = String(input.postalCode ?? '');
-  const dataEntrySource = input.dataEntrySource === 'PORTAL_IMPORT' || input.portalId
+  // Same listing-URL rule as the Detailbewertung's Inserats-URL, which this
+  // value is carried into (lib/listingUrl.ts); invalid links are rejected below.
+  const portalId = normalizeListingReference(input.portalId) || null;
+  const dataEntrySource = input.dataEntrySource === 'PORTAL_IMPORT' || portalId
     ? 'PORTAL_IMPORT'
     : 'MANUELL';
 
@@ -123,6 +127,9 @@ export async function POST(request: Request) {
     !input.condition
   ) {
     return NextResponse.json({ error: 'Invalid quick-check payload' }, { status: 400 });
+  }
+  if (portalId && !isValidListingUrl(portalId)) {
+    return NextResponse.json({ error: LISTING_URL_ERROR }, { status: 400 });
   }
 
   const { rows } = await db.query<QuickCheckRow>(
@@ -145,7 +152,7 @@ export async function POST(request: Request) {
     `,
     [
       userId,
-      input.portalId ?? null,
+      portalId,
       dataEntrySource,
       purchasePrice,
       coldRent,
@@ -201,6 +208,10 @@ export async function PATCH(request: Request) {
   ) {
     return NextResponse.json({ error: 'Invalid quick-check payload' }, { status: 400 });
   }
+  const portalId = normalizeListingReference(values.portalId) || null;
+  if (portalId && !isValidListingUrl(portalId)) {
+    return NextResponse.json({ error: LISTING_URL_ERROR }, { status: 400 });
+  }
   const { rows } = await db.query<QuickCheckRow>(
     `
       UPDATE quick_check SET
@@ -211,7 +222,7 @@ export async function PATCH(request: Request) {
       RETURNING *
     `,
     [
-      id, userId, values.portalId ?? null, purchasePrice, coldRent,
+      id, userId, portalId, purchasePrice, coldRent,
       String(values.street).trim(), postalCode,
       String(values.city).trim(), yearOfConstruction, values.condition, kpfMultiplier,
     ],

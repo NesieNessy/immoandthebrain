@@ -41,9 +41,7 @@ describe('computeProposal558', () => {
             rentIncreaseIntervalMonths: 6, // below the legal 15-month floor
             lastIncreaseDate: yesterday.toISOString().slice(0, 10),
         });
-        // Only 10 months have passed since the last increase — even the
-        // requested 6-month interval would allow it, but the legal 15-month
-        // floor pushes the earliest date out further than "10 months ago + 6".
+        // Legal 15-month floor overrides the requested 6-month interval.
         const earliest = new Date(result.earliestEffectiveDate);
         const monthsFromLast = (earliest.getFullYear() - yesterday.getFullYear()) * 12 + (earliest.getMonth() - yesterday.getMonth());
         expect(monthsFromLast).toBe(15);
@@ -166,8 +164,7 @@ describe('rolloverTargetDateIfDue', () => {
     });
 
     it('keeps carrying forward one month at a time even if several months have passed', () => {
-        // A single call only advances one month — the caller re-checks on
-        // next load, which is enough since this only runs lazily on view.
+        // One call advances one month only; caller re-checks on next load.
         const result = rolloverTargetDateIfDue('2026-01-15', new Date('2026-06-01'));
         expect(result).toBe('2026-02-15');
     });

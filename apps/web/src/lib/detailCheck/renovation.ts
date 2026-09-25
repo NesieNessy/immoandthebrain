@@ -158,22 +158,18 @@ export function categoryLabel(category: RenovationCategory): string {
   return RENOVATION_CATEGORIES.find((item) => item.value === category)?.label ?? category;
 }
 
-export function regionFactorFromPostalCode(postalCode?: string | null): number {
-  const plz = (postalCode ?? '').trim();
-  if (!/^\d{5}$/.test(plz)) return 1;
-  const prefix = Number(plz.slice(0, 2));
-  if ([10, 11, 20, 22, 80, 81, 82, 85, 60, 61, 65].includes(prefix)) return 1.12;
-  if ([70, 71, 72, 50, 51, 40, 41, 42, 43, 44, 45].includes(prefix)) return 1.06;
-  if ([1, 2, 3, 4, 5, 6, 7, 8, 9].includes(prefix)) return 1.03;
-  return 1;
-}
-
+/**
+ * `regionFactor` is resolved by the caller from the `renovation_region_factor`
+ * table (see lib/server/renovationRegionFactor.ts) and passed in as a plain
+ * number. That keeps this function pure: it also runs in the browser when a
+ * measure is added, where there is no database to ask.
+ */
 export function evaluateRenovationCases(args: {
   cases: RenovationCase[];
-  postalCode?: string | null;
+  regionFactor?: number | null;
   livingAreaM2?: number | null;
 }) {
-  const factor = regionFactorFromPostalCode(args.postalCode);
+  const factor = args.regionFactor && args.regionFactor > 0 ? args.regionFactor : 1;
   const areaFactor = args.livingAreaM2 && args.livingAreaM2 > 0
     ? Math.max(0.8, Math.min(1.45, args.livingAreaM2 / 80))
     : 1;

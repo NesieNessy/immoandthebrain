@@ -9,10 +9,13 @@ import { estimateRentIndexPerM2 } from '@/lib/detailCheck/rentIndex';
 import { roundCurrency } from '@/lib/detailCheck/acquisitionCosts';
 import {
   clampInterestRate,
+  normalizeLast558RentBefore,
   normalizeRecentMonth,
   normalizeRentIncreaseIntervalMonths,
   normalizeRentIncreaseUtilizationPercent,
+  normalizeRentIndexGrowthPercent,
   normalizeTaxRate,
+  normalizeViewPeriodYears,
   recomputeMonthlyDebtService,
   safeCases,
   toInterestYears,
@@ -313,6 +316,9 @@ async function loadContext(userId: string, workflowId: string, quickCheckId: str
     interestAdjustmentFactor: toNumber(financing?.interest_adjustment_factor ?? 1) || 1,
   });
   const selectedFinancing = selectedVariant === 'INDIVIDUAL' ? individualFinancing : offerFinancing;
+  const selectedRenovationFinancedAmount = selectedVariant === 'INDIVIDUAL'
+    ? toNumber(financing?.individual_renovation_costs ?? renovationFinancedAmount)
+    : toNumber(financing?.offer_renovation_costs ?? renovationFinancedAmount);
   const selectedEquity = selectedVariant === 'INDIVIDUAL'
     ? toNumber(financing?.individual_equity ?? 0)
     : toNumber(financing?.offer_equity ?? 0);
@@ -342,6 +348,7 @@ async function loadContext(userId: string, workflowId: string, quickCheckId: str
     monthlyAfa: buildingValue > 0 && afaPercent > 0 ? roundCurrency((buildingValue * (afaPercent / 100)) / 12) : 0,
     purchasePrice,
     totalInvestment: roundCurrency(selectedFinancing.totalCosts),
+    renovationFinancedAmount: selectedRenovationFinancedAmount,
     renovationCases,
   };
   // Derived from the values above rather than from `updated_at`: the wizard
@@ -358,6 +365,7 @@ function buildParams(
   const fallbackStart = new Date().toISOString().slice(0, 7);
   const livingAreaM2 = context.livingAreaM2;
   const rentStart = context.coldRent;
+  const last558Date = normalizeRecentMonth(saved?.last_558_date, 1);
   const savedFingerprint = typeof (saved?.result as Record<string, unknown> | undefined)?.contextFingerprint === 'string'
     ? String((saved!.result as Record<string, unknown>).contextFingerprint)
     : null;
@@ -402,6 +410,7 @@ function buildParams(
     || (savedParams.modernizationCostOverrides != null && Object.keys(savedParams.modernizationCostOverrides as object).length > 0)
     || (savedParams.renovationTimingOverrides != null && Object.keys(savedParams.renovationTimingOverrides as object).length > 0)
     || (savedParams.rentIncreaseOverrides != null && Object.keys(savedParams.rentIncreaseOverrides as object).length > 0)
+    || (Array.isArray(savedParams.excludedModernizationIds) && savedParams.excludedModernizationIds.length > 0)
   );
 
   return {
@@ -413,7 +422,10 @@ function buildParams(
     yearOfConstruction: context.yearOfConstruction,
     city: context.city,
     postalCode: context.postalCode,
-    last558Date: normalizeRecentMonth(saved?.last_558_date, 1),
+    last558Date,
+    last558RentBefore: normalizeLast558RentBefore(savedParams.last558RentBefore, last558Date),
+    rentIndexGrowthPercent: normalizeRentIndexGrowthPercent(savedParams.rentIndexGrowthPercent),
+    viewPeriodYears: normalizeViewPeriodYears(savedParams.viewPeriodYears),
     last559Date: normalizeRecentMonth(saved?.last_559_date, 5),
     last559MonthlyDelta: Math.max(0, toNumber(savedParams.last559MonthlyDelta)),
     rentIncreaseIntervalMonths: normalizeRentIncreaseIntervalMonths(savedParams.rentIncreaseIntervalMonths),
@@ -429,6 +441,12 @@ function buildParams(
     serviceChargesNonAllocable: context.serviceChargesNonAllocable,
     purchasePrice: context.purchasePrice,
     totalInvestment: context.totalInvestment,
+    renovationFinancedAmount: context.renovationFinancedAmount,
+    excludedModernizationIds: upstreamIsNewer
+      ? []
+      : (Array.isArray(savedParams.excludedModernizationIds)
+        ? savedParams.excludedModernizationIds.filter((id): id is string => typeof id === 'string')
+        : []),
     taxRate: normalizeTaxRate(savedParams.taxRate),
     taxableLossesOffsettable: savedParams.taxableLossesOffsettable === true,
     equityAmount: context.equityAmount,
@@ -504,6 +522,7 @@ export async function POST(request: Request) {
   const monthlyDebtService = requestedFinancingInterestRate == null
     ? context.monthlyDebtService
     : recomputeMonthlyDebtService(context.loanAmount, interestRate, context.repaymentRate);
+  const last558Date = normalizeRecentMonth(input.last558Date, 1);
   let params: CalculatorParams = {
     startYyyymm: normalizeYyyymm(input.startYyyymm, new Date().toISOString().slice(0, 7)),
     rentStartYyyymm: normalizeYyyymm(context.valuationDate, new Date().toISOString().slice(0, 7)),
@@ -512,7 +531,10 @@ export async function POST(request: Request) {
     yearOfConstruction: context.yearOfConstruction,
     city: context.city,
     postalCode: context.postalCode,
-    last558Date: normalizeRecentMonth(input.last558Date, 1),
+    last558Date,
+    last558RentBefore: normalizeLast558RentBefore(input.last558RentBefore, last558Date),
+    rentIndexGrowthPercent: normalizeRentIndexGrowthPercent(input.rentIndexGrowthPercent),
+    viewPeriodYears: normalizeViewPeriodYears(input.viewPeriodYears),
     last559Date: normalizeRecentMonth(input.last559Date, 5),
     last559MonthlyDelta: normalizeRecentMonth(input.last559Date, 5) ? Math.max(0, toNumber(input.last559MonthlyDelta)) : 0,
     rentIncreaseIntervalMonths: normalizeRentIncreaseIntervalMonths(input.rentIncreaseIntervalMonths),
@@ -533,6 +555,10 @@ export async function POST(request: Request) {
     serviceChargesNonAllocable: context.serviceChargesNonAllocable,
     purchasePrice: context.purchasePrice,
     totalInvestment: context.totalInvestment,
+    renovationFinancedAmount: context.renovationFinancedAmount,
+    excludedModernizationIds: Array.isArray(input.excludedModernizationIds)
+      ? input.excludedModernizationIds.filter((id: unknown): id is string => typeof id === 'string')
+      : [],
     taxRate: normalizeTaxRate(input.taxRate),
     taxableLossesOffsettable: input.taxableLossesOffsettable === true,
     equityAmount: context.equityAmount,

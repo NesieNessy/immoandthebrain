@@ -146,19 +146,9 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
         if (url) window.open(url, '_blank', 'noopener,noreferrer');
     };
 
-    // Clears the tenancy's move-out so it becomes the unit's current tenancy
-    // again — undoes an accidental tenant change/tenant move-out. If another
-    // tenancy is currently active on this unit, that one is ended (today)
-    // first so the unit doesn't end up with two open-ended tenancies.
-    //
-    // That truncation alone isn't enough in general, though: reactivating
-    // gives this tenancy no end date at all, and a tenancy with a past start
-    // date and no end date overlaps *any* other tenancy whose own start date
-    // falls after it — including ones that aren't "current" (e.g. an older,
-    // already-ended tenancy that started after this one). Simulating the
-    // truncation and checking every other tenancy for a genuine overlap
-    // before writing anything catches that case instead of silently leaving
-    // two tenants on record for the same period.
+    // Clears the tenancy's end date to make it current again, ending today any tenancy
+    // that's currently active. An open-ended reactivated tenancy can also overlap other,
+    // non-current tenancies, so we simulate the change and check all of them for overlap first.
     const handleConfirmReactivate = async () => {
         if (!reactivateRow) return;
         setIsReactivating(true);
@@ -215,9 +205,8 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
         }
     };
 
-    // Read-only — reflects whatever actually happened in the Mieterauszug use
-    // case (Abnahmeprotokoll erstellen / Mietkaution auflösen), not something
-    // to toggle by hand here.
+    // Read-only: reflects actions taken in the Mieterauszug flow (Abnahmeprotokoll
+    // erstellen / Mietkaution auflösen), not toggled by hand here.
     const statusIcon = (value: boolean, doneLabel: string, openLabel: string) => (
         <span
             title={value ? doneLabel : openLabel}

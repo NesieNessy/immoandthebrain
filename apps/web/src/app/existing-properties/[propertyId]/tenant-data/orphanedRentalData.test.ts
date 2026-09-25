@@ -2,12 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { hasOrphanedRentalData, type RentalDataGuardInput } from './orphanedRentalData';
 
 /**
- * Regression coverage for the bug found in review: entering rent/dates on
- * the Mietvertrag tab for a unit that has no tenancy yet and no named
- * tenant anywhere (this tab has no name field of its own) used to be
- * silently discarded by handleSave — neither the "create tenancy" nor the
- * "update tenancy" branch ran, yet the page still showed "Mieterdaten
- * gespeichert.". This function is what now drives a clear error instead.
+ * Regression coverage: entering rent/dates on the Mietvertrag tab with no
+ * tenancy and no named tenant used to be silently discarded by handleSave
+ * while still showing "Mieterdaten gespeichert.". This guard now errors instead.
  */
 
 const empty: RentalDataGuardInput = {

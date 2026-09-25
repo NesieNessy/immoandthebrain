@@ -33,9 +33,9 @@ describe('rentIncreaseLetterHtml', () => {
 
   it('shows the current rent, the increase, and their sum as the new rent', () => {
     const html = rentIncreaseLetterHtml(params);
-    expect(html).toContain('1.000 €'); // current
-    expect(html).toContain('100 €');   // increase
-    expect(html).toContain('1.100 €'); // 1000 + 100
+    expect(html).toContain('1.000 €');
+    expect(html).toContain('100 €');
+    expect(html).toContain('1.100 €');
   });
 
   it('formats the effective date German-style (dd.MM.yyyy)', () => {
@@ -45,8 +45,7 @@ describe('rentIncreaseLetterHtml', () => {
 
   it('falls back to "–" for the current rent (and thus the new rent) when unknown', () => {
     const html = rentIncreaseLetterHtml({ ...params, currentColdRent: null });
-    // "Bisherige Netto-Kaltmiete" and "Neue Netto-Kaltmiete" both render '–'
-    // since the new rent can't be computed without a starting value.
+    // New rent can't be computed without a starting value, so both old and new rent show '–'.
     expect((html.match(/–/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 

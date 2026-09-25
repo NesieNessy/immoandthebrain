@@ -111,8 +111,7 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
 
     const isEditing = JSON.stringify(form) !== JSON.stringify(original);
 
-    // Any navigation away from an unsaved edit is routed through here so it
-    // can be confirmed first (breadcrumb links, the cancel button, use-case menu).
+    // Routes navigation away from an unsaved edit through a confirm step.
     const goTo = (href: string) => {
         if (isEditing) {
             setPendingHref(href);
@@ -387,7 +386,6 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                 </div>
             </main>
 
-            {/* Sticky Action Bar */}
             <StickyActionBar
                 show={true}
                 onGhost={handleCancel}

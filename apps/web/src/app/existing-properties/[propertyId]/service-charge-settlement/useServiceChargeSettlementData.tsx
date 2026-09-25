@@ -78,10 +78,8 @@ export interface CostItemForm {
     allocable: boolean;
     actualAmount: string;
     budgetAmount: string;
-    /** Anteil Wohnung for this row — always a manual, independent entry.
-     *  Never derived from actualAmount (Gesamt Objekt is the whole
-     *  building's cost, not automatically this apartment's share of it).
-     *  Empty string means "not entered yet". */
+    /** Anteil Wohnung for this row — manual entry, never derived from
+     *  actualAmount. Empty string means "not entered yet". */
     actualShareOverride: string;
     /** Same as `actualShareOverride`, for the Wirtschaftsplan column. */
     budgetShareOverride: string;
@@ -129,9 +127,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const [tenancyPersons, setTenancyPersons] = useState<TenancyPerson[]>([]);
     const [miscRentHistory, setMiscRentHistory] = useState<TenancyAdjustmentHistoryEntry[]>([]);
     const [maintenanceCosts, setMaintenanceCosts] = useState<MaintenanceCosts | null>(null);
-    // Wert-vorschlagen inputs — explicit keys persist across periods (fetched
-    // by unit, not by settlement); previousCostItems is a label -> row lookup
-    // for whichever settlement immediately precedes the one currently loaded.
+    // "Wert vorschlagen" inputs: explicit keys persist across periods (fetched
+    // by unit); previousCostItems is a label -> row lookup for the settlement
+    // immediately preceding the one currently loaded.
     const [allocationKeys, setAllocationKeys] = useState<ServiceChargeAllocationKey[]>([]);
     const [previousCostItems, setPreviousCostItems] = useState<Record<string, PreviousCostItemInput>>({});
     const [landlord, setLandlord] = useState<PersonalData | null | undefined>(undefined);
@@ -153,19 +151,16 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const [isLoadingAdjustmentPreview, setIsLoadingAdjustmentPreview] = useState(false);
     const [error, setError] = useState<string | null>(null);
     // Every settlement ever saved for this unit — lets the picker reopen one
-    // whose period isn't reachable via the year chevron (a custom range, or
-    // a year other than the currently loaded one). Settlements are per unit,
-    // not shared across a building, so this must never mix in another
-    // unit's settlements.
+    // not reachable via the year chevron. Must never mix in another unit's
+    // settlements (they're per unit, not shared across a building).
     const [savedSettlements, setSavedSettlements] = useState<ServiceChargeSettlement[]>([]);
     const refreshSavedSettlements = useCallback(async () => {
         setSavedSettlements(await getSettlementsByUnit(property.propertyId, unit.propertyUnitId));
     }, [property.propertyId, unit.propertyUnitId]);
     useEffect(() => { void refreshSavedSettlements(); }, [refreshSavedSettlements]);
 
-    // `explicitPeriod` set means "load the settlement for exactly this
-    // period" (browsing settlement history via the year picker) rather than
-    // the initial "most recent settlement" load.
+    // `explicitPeriod` means "load the settlement for exactly this period"
+    // (browsing history via the year picker) vs. the initial "most recent" load.
     const load = useCallback(async (explicitPeriod?: { start: Date; end: Date }) => {
         setIsLoading(true);
         setError(null);
@@ -201,25 +196,19 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 setPeriodEnd(end);
                 setPeriodModeState(isFullCalendarYear(start, end) ? 'year' : 'custom');
                 const loadedItems = (loadedCostItems ?? []).map(toCostItemForm);
-                // The settlement row can exist with no saved cost items yet (e.g.
-                // it was created just by uploading a source document, before any
-                // amounts were entered/saved) — the table must still show the
-                // full standard BetrKV list to fill in, not an empty table.
+                // A settlement can exist with no saved cost items yet (e.g. created
+                // just by uploading a source document) — show the full standard
+                // BetrKV list to fill in, not an empty table.
                 const items = loadedItems.length > 0 ? loadedItems : defaultItems();
                 setCostItems(items);
-                // Snapshotting whatever was actually just loaded (including the
-                // default template when there are no saved items yet) — not an
-                // empty string — so isEditing correctly stays false until the
-                // user changes something, instead of an untouched page being
-                // permanently "dirty" (previously: navigating away via the
-                // breadcrumb always showed the discard-confirmation dialog,
-                // even with nothing edited).
+                // Snapshot what was actually loaded (including the default template),
+                // not an empty string, so isEditing stays false until something
+                // changes — previously an untouched page was always "dirty" and
+                // triggered the discard-confirmation dialog on every navigation.
                 setOriginalSnapshot(serializeCostItems(items, start, end));
             } else if (explicitPeriod) {
-                // Navigated (via the year picker) to a period that has no
-                // saved settlement yet — start a fresh draft for exactly
-                // that period rather than falling back to the "brand new
-                // settlement" defaulting logic below.
+                // Navigated to a period with no saved settlement yet — start a
+                // fresh draft for exactly that period.
                 resolvedStart = explicitPeriod.start;
                 setPeriodStart(explicitPeriod.start);
                 setPeriodEnd(explicitPeriod.end);
@@ -228,9 +217,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 setCostItems(items);
                 setOriginalSnapshot(serializeCostItems(items, explicitPeriod.start, explicitPeriod.end));
             } else {
-                // Default the period to the tenant's Mietauszug date when
-                // there is one — a settlement for a moved-out tenant almost
-                // always needs to end there, not run through Dec 31.
+                // Default period ends at the tenant's move-out date, if any.
                 const moveOutDate = currentTenancy?.tenancyEndDate ? new Date(currentTenancy.tenancyEndDate) : null;
                 const { start, end } = defaultSettlementPeriod(moveOutDate, new Date().getFullYear());
                 resolvedStart = start;
@@ -243,10 +230,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             }
             setDeletedCostItemIds([]);
 
-            // Wert-vorschlagen inputs: the explicit allocation keys for this
-            // unit (stable across periods), and a label -> row lookup of
-            // whichever settlement immediately precedes the one just resolved
-            // above (the "previous period" a ratio can be learned from).
+            // "Wert vorschlagen" inputs: this unit's explicit allocation keys,
+            // and a label -> row lookup for the settlement preceding this period.
             const [loadedAllocationKeys, previousSettlement] = await Promise.all([
                 getAllocationKeysByUnit(property.propertyId, unit.propertyUnitId),
                 getPreviousSettlementForUnit(property.propertyId, unit.propertyUnitId, format(resolvedStart, 'yyyy-MM-dd')),
@@ -274,13 +259,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     useEffect(() => { void load(); }, [load]);
 
     // ── Browsing a different billing period (per-period settlement history) ──
-    // Navigating years must never discard an unsaved edit silently — guard
-    // it the same way PropertyData.tsx guards route navigation. (Defined
-    // after `isEditing` below, which it closes over.)
+    // Guards against silently discarding an unsaved edit when switching years.
     const [pendingPeriod, setPendingPeriod] = useState<{ start: Date; end: Date } | null>(null);
-    // Leaving the page entirely (breadcrumbs, "Zurück", the use-case menu)
-    // must be guarded the same way — separate from pendingPeriod above,
-    // which only covers switching years/periods within this same page.
+    // Same guard, but for leaving the page entirely (breadcrumbs, back, use-case menu).
     const [pendingHref, setPendingHref] = useState<string | null>(null);
 
     useEffect(() => {
@@ -290,9 +271,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         return () => { cancelled = true; };
     }, [user]);
 
-    // Every tenancy this unit has ever had — backs the "Mietzeitraum
-    // übernehmen" menu below, so a landlord can pick a *past* tenant's
-    // period (not just the current one) when composing a settlement.
+    // Every tenancy this unit has ever had — backs "Mietzeitraum übernehmen"
+    // so a landlord can pick a past tenant's period, not just the current one.
     const [unitTenancies, setUnitTenancies] = useState<Tenancy[]>([]);
     useEffect(() => {
         let cancelled = false;
@@ -300,19 +280,13 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         return () => { cancelled = true; };
     }, [unit.propertyUnitId]);
 
-    // Purely a snapshot comparison now — originalSnapshot is always set to
-    // whatever was actually just loaded (a saved settlement's items, or the
-    // default template for a fresh/unsaved period), so this correctly stays
-    // false until the user changes something. It must NOT also force true
-    // whenever `settlement` is null: a fresh, untouched draft period has no
-    // settlement yet by definition, but that alone was making every such
-    // page permanently "dirty" — spuriously popping the discard-confirmation
-    // dialog on every navigation attempt and leaving "Abrechnung speichern"
-    // enabled with nothing to save.
+    // Pure snapshot comparison. Must NOT also force true when `settlement` is
+    // null — a fresh draft period has no settlement yet by definition, but
+    // treating that as "dirty" previously made every untouched draft
+    // spuriously trigger the discard-confirmation dialog.
     const isEditing = serializeCostItems(costItems, periodStart, periodEnd) !== originalSnapshot;
 
-    // Any navigation away from an unsaved edit is routed through here so it
-    // can be confirmed first (breadcrumb links, the back button, the use-case menu).
+    // Routes any navigation away from an unsaved edit through a confirm step.
     const goTo = (href: string) => {
         if (isEditing) {
             setPendingHref(href);
@@ -344,10 +318,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         setPeriodStart(parseISO(suggestion.startDateStr));
         setPeriodEnd(parseISO(suggestion.endDateStr));
     };
-    // Navigating to a different year means "load that year's settlement" —
-    // guarded the same way PropertyData.tsx guards route navigation away
-    // from an unsaved edit, since this replaces periodStart/periodEnd,
-    // costItems and settlement wholesale (see `load`'s explicitPeriod branch).
+    // Replaces periodStart/periodEnd, costItems and settlement wholesale (see
+    // `load`'s explicitPeriod branch), so it's guarded like other unsaved-edit navigation.
     const switchToPeriod = (start: Date, end: Date) => {
         if (isEditing) {
             setPendingPeriod({ start, end });
@@ -382,11 +354,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const totalActualAllocable = actualSplit.allocable;
     const totalBudgetAllocable = budgetSplit.allocable;
 
-    // Per-row Anteil Wohnung: always a manual entry. This must NOT be derived
-    // from actualAmount/budgetAmount (Gesamt Objekt) — the total cost of the
-    // whole property never automatically equals, or proportionally implies,
-    // a specific apartment's share of it, so there is no automatic fallback
-    // here to compute or fall back to.
+    // Per-row Anteil Wohnung: always manual, never derived from
+    // actualAmount/budgetAmount — total property cost never automatically
+    // implies one apartment's share of it.
     const actualShareForItem = useCallback((item: CostItemForm): number | null => {
         if (!item.allocable || item.actualShareOverride === '') return null;
         return Number(item.actualShareOverride) || 0;
@@ -406,12 +376,10 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         () => costItems.reduce((sum, item) => sum + (budgetShareForItem(item) ?? 0), 0),
         [costItems, budgetShareForItem],
     );
-    // Anteil Wohnung of the NICHT umlagefähig rows — kept separate from
-    // unitActualShare/unitBudgetShare above (which must only ever include
-    // allocable items, since those feed the Nachzahlung/Guthaben math), but
-    // still summed for display: the landlord can enter a value here too
-    // (e.g. for their own recordkeeping), and the footer must show that
-    // total instead of a "–" that would hide real, already-entered numbers.
+    // Anteil Wohnung of the non-allocable rows, kept separate from
+    // unitActualShare/unitBudgetShare (which must only include allocable
+    // items, since those feed the Nachzahlung/Guthaben math) but still
+    // summed for display so entered values aren't hidden behind a "–".
     const unitActualShareNonAllocable = useMemo(
         () => costItems.reduce((sum, item) => sum + (!item.allocable && item.actualShareOverride !== '' ? Number(item.actualShareOverride) || 0 : 0), 0),
         [costItems],
@@ -423,20 +391,15 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     const currentMonthlyPrepayment = tenancy?.miscRent ?? 0;
 
-    // "Wert vorschlagen" must never rely on a single ratio applied to every
-    // cost item — different items legitimately use different Verteilerschlüssel
-    // (ownership share, consumption, unit count, ...), so the ratio has to be
-    // derived per cost item label instead (see suggestShareForCostItem):
-    // an explicit, landlord-entered allocation key first, else the ratio
-    // implied by this same unit's own previous settlement for that label,
-    // else no suggestion at all. allocationKeys and previousCostItems are
-    // fetched once in `load` below and looked up per row from here.
+    // "Wert vorschlagen" resolves per cost item label (see
+    // suggestShareForCostItem), since different items use different
+    // allocation keys (ownership share, consumption, unit count, ...):
+    // explicit key first, else this unit's own previous-settlement ratio for
+    // that label, else no suggestion.
     // (2) Annual total from the tenant's NK-Vorauszahlung, prorated for any
-    // miscRent change that took effect during the settlement period, and
-    // clipped to the days the tenant actually occupied the unit — a
-    // settlement period that starts before the tenancy did (or extends past
-    // a move-out) must not charge/credit prepayment for months nobody was
-    // renting the unit.
+    // miscRent change during the period and clipped to days actually
+    // occupied — a period spanning before move-in or after move-out must not
+    // charge/credit prepayment for months nobody was renting.
     const annualPrepayment = useMemo(() => {
         if (!periodStart || !periodEnd) return currentMonthlyPrepayment * 12;
         const history = miscRentHistory
@@ -447,12 +410,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         return prorateAnnualPrepayment(currentMonthlyPrepayment, history, periodStart, periodEnd, tenancyStart, tenancyEnd);
     }, [currentMonthlyPrepayment, miscRentHistory, periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate]);
 
-    // The monthly rate this settlement was actually billed at — frozen to
-    // periodEnd, so applying a new rate for *next* year (handleApplyPrepayment,
-    // effective the following Jan 1) never pulls this figure along with it.
-    // Shown as "NK-Vorauszahlung bis zur Abrechnung"; unlike currentMonthlyPrepayment
-    // (the live, actionable rate the "übernehmen" button acts on), this one
-    // must never change once a settlement period is loaded.
+    // Monthly rate actually billed for this settlement, frozen to periodEnd —
+    // unlike currentMonthlyPrepayment (the live rate the "übernehmen" button
+    // acts on), this must never change once a period is loaded.
     const prepaymentUntilSettlement = useMemo(() => {
         if (!periodEnd) return currentMonthlyPrepayment;
         const history = miscRentHistory
@@ -467,69 +427,49 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     // (2) vs (3): shortfall = prepayment too low (increase), surplus = prepayment too high (decrease).
     const budgetCoverage = compareBudgetCoverage(annualPrepayment, unitBudgetShare);
-    // Same comparison as overUnderCoverage, but against next year's *budgeted*
-    // share instead of the actual settlement — an annual € figure, so it's
-    // the correct like-for-like counterpart to overUnderCoverage rather than
-    // prepaymentDelta (a monthly rate change, not directly comparable).
+    // Like-for-like annual € counterpart to overUnderCoverage, but against
+    // next year's budgeted share — not comparable to prepaymentDelta (a monthly rate change).
     const budgetOverUnderCoverage = unitBudgetShare - annualPrepayment;
 
     // Budget plan (3) divided by 12, compared against the current monthly NK-Vorauszahlung.
-    // A monthly prepayment can never be negative in reality — floored at 0 so
-    // bad input (e.g. a mistyped Anteil Wohnung, or an extracted document
-    // value) can never propagate into "übernehmen" writing a negative
-    // miscRent onto the tenancy.
+    // Floored at 0: a monthly prepayment is never negative, so bad input
+    // (e.g. a mistyped Anteil Wohnung) can't make "übernehmen" write a
+    // negative miscRent onto the tenancy.
     const newMonthlyPrepayment = totalBudgetAllocable > 0 ? Math.max(0, Math.round((unitBudgetShare / 12) * 100) / 100) : null;
-    // What the new rate would total over this same settlement period — the
-    // "Neue NK-Vorauszahlung" card's own footnote, directly comparable to
-    // annualPrepayment (the "Bisherige" card's footnote) since both use the
-    // same period/tenancy-overlap proration. No history is passed in: this
-    // is a hypothetical flat rate for comparison, not a reconstruction of
-    // what was actually billed.
+    // The new rate totalled over this same period — the "Neue" card's
+    // footnote, comparable to annualPrepayment (same proration). A
+    // hypothetical flat rate, so no history is passed in.
     const newAnnualPrepayment = useMemo(() => {
         if (newMonthlyPrepayment == null || !periodStart || !periodEnd) return null;
         const tenancyStart = tenancy?.tenancyStartDate ? new Date(tenancy.tenancyStartDate) : null;
         const tenancyEnd = tenancy?.tenancyEndDate ? new Date(tenancy.tenancyEndDate) : null;
         return prorateAnnualPrepayment(newMonthlyPrepayment, [], periodStart, periodEnd, tenancyStart, tenancyEnd);
     }, [newMonthlyPrepayment, periodStart, periodEnd, tenancy?.tenancyStartDate, tenancy?.tenancyEndDate]);
-    // Drives the "übernehmen" button: compared against the LIVE tenancy rate,
-    // since that's the value the button actually writes to (a no-op, and
-    // therefore disabled, once they already match).
+    // Drives the "übernehmen" button; compared against the live tenancy rate
+    // since that's what the button writes to (disabled once they match).
     const prepaymentDelta = newMonthlyPrepayment != null ? newMonthlyPrepayment - currentMonthlyPrepayment : null;
-    // Drives the two "Bisherige"/"Neue" cards' own prominent difference
-    // display instead — computed against prepaymentUntilSettlement (the
-    // frozen, as-billed rate those two cards actually show), not against
-    // currentMonthlyPrepayment. The two can differ: if some other change
-    // already took effect between this settlement's periodEnd and today,
-    // prepaymentDelta (vs. live) and this (vs. what's on screen) tell
-    // different, both-correct stories, and the display must match what the
-    // user can actually see and compare, not the button's own live target.
+    // Drives the "Bisherige"/"Neue" cards' difference display; computed
+    // against prepaymentUntilSettlement (the frozen, as-billed rate those
+    // cards show), not currentMonthlyPrepayment. Can legitimately differ from
+    // prepaymentDelta if another change took effect since this period ended.
     const displayedPrepaymentDelta = newMonthlyPrepayment != null ? Math.round((newMonthlyPrepayment - prepaymentUntilSettlement) * 100) / 100 : null;
     const displayedPrepaymentDeltaPercent = displayedPrepaymentDelta != null && prepaymentUntilSettlement > 0
         ? Math.round((displayedPrepaymentDelta / prepaymentUntilSettlement) * 1000) / 10
         : null;
     const newTotalRent = (tenancy?.coldRent ?? 0) + (newMonthlyPrepayment ?? currentMonthlyPrepayment) + (tenancy?.parkingSpaceRent ?? 0);
-    // The new rate takes effect the day after this settlement's own period
-    // ends — not always Jan 1, since a settlement can cover a custom
-    // ("Individueller Zeitraum") period that ends anywhere.
+    // Takes effect the day after this settlement's period ends — not always
+    // Jan 1, since "Individueller Zeitraum" can end anywhere.
     const nextPrepaymentEffectiveDate = periodEnd
         ? new Date(periodEnd.getFullYear(), periodEnd.getMonth(), periodEnd.getDate() + 1)
         : new Date(new Date().getFullYear() + 1, 0, 1);
 
     const settlementYear = periodEnd ? periodEnd.getFullYear() : new Date().getFullYear();
 
-    // Individueller Zeitraum's most common real use case is a final/partial
-    // settlement bounded to exactly how long a given tenant lived there
-    // DURING the year currently being viewed — surfaced as one-click
-    // starting points (one per tenant this unit has ever had, not just the
-    // current one — a landlord composing a settlement for a past tenant
-    // needs their period, not whoever rents the unit today) instead of
-    // leaving Von/Bis blank to type in by hand. Never applied automatically;
-    // only ever offered. Each is clipped to [settlementYear Jan 1,
-    // settlementYear Dec 31] rather than that tenancy's raw start/end: a
-    // long-standing tenant who moved in years ago must not turn into a
-    // multi-year "settlement" spanning their entire tenancy —
-    // Nebenkostenabrechnung is always a single calendar year (or the
-    // partial year of an actual move-in/move-out within it).
+    // One-click "Individueller Zeitraum" starting points, one per tenant this
+    // unit has ever had (not just current) — never applied automatically,
+    // only offered. Each is clipped to [settlementYear Jan 1, Dec 31] rather
+    // than the tenancy's raw start/end, since a Nebenkostenabrechnung is
+    // always a single calendar year (or the partial year of a move-in/out).
     const tenancyPeriodSuggestions = unitTenancies
         .map((t) => {
             if (!t.tenancyStartDate) return null;
@@ -551,13 +491,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         // Most relevant (current/most recently started) tenant first.
         .sort((a, b) => b.startDateStr.localeCompare(a.startDateStr));
 
-    // Shown as the avatar+name on the document box rows — same tenant(s) the
-    // generated Nebenkostenabrechnung/Anpassungsschreiben actually goes to.
-    // A tenancy can have more than one current tenant (a couple, roommates)
-    // recorded as separate tenancy_person rows — this must show all of them,
-    // not just tenancy.tenantFirstName/tenantLastName (the single primary
-    // tenant denormalized onto the tenancy row itself), or the document
-    // recipient shown here silently drops every non-primary tenant.
+    // Must include every tenancy_person (a couple, roommates), not just
+    // tenancy.tenantFirstName/tenantLastName (the single denormalized primary
+    // tenant) — otherwise the document recipient silently drops co-tenants.
     const tenantPersonNames = tenancyPersons
         .filter((p) => (p.lastName ?? '').trim() !== '' || (p.firstName ?? '').trim() !== '')
         .map((p) => `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim());
@@ -582,22 +518,15 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         });
     };
 
-    // Opt-in "Wert vorschlagen" — never runs on its own (e.g. when
-    // actualAmount/budgetAmount changes, or on load) and never overwrites a
-    // value the landlord already entered or previously accepted. The ratio
-    // itself is per cost item label (see suggestShareForCostItem): an
-    // explicit allocation key first, else a learned ratio for that label,
-    // else no suggestion — "Allocable" never enters the decision, it only
-    // governs what's later charged to the tenant, not what a landlord's own
-    // share of a cost item is.
+    // Opt-in "Wert vorschlagen" — never runs automatically and never
+    // overwrites an existing value. "Allocable" never enters the ratio
+    // decision; it only governs what's later charged to the tenant.
     //
-    // The "learned ratio" source differs by column: Wirtschaftsplan (budget)
-    // is next year's projection for THIS SAME settlement, so this settlement's
-    // own already-filled Abrechnung (actual) side for that label is the most
-    // relevant, most recent ratio available — checked before falling back to
-    // a genuinely earlier settlement. Abrechnung (actual) itself has no such
-    // same-settlement fallback (there's nothing more recent than "now" to
-    // learn from) and only ever looks at a truly previous settlement.
+    // Learned-ratio source differs by column: budget (Wirtschaftsplan) checks
+    // this same settlement's already-filled actual (Abrechnung) side for the
+    // label first, since that's more recent than any earlier settlement;
+    // actual has no such same-settlement fallback and only looks at a truly
+    // previous settlement.
     const historyCandidatesFor = useCallback((item: CostItemForm, column: 'actual' | 'budget'): PreviousCostItemInput[] => {
         const sameSettlementActual: PreviousCostItemInput[] = column === 'budget' && item.actualAmount !== '' && item.actualShareOverride !== ''
             ? [{ label: item.label, actualAmount: Number(item.actualAmount) || 0, actualShareOverride: Number(item.actualShareOverride) || 0 }]
@@ -613,12 +542,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         return suggestShareForCostItem(Number(amount) || 0, item.label, allocationKeys, historyCandidatesFor(item, column));
     }, [costItems, allocationKeys, historyCandidatesFor]);
 
-    // Each icon only touches its own column (Abrechnung vs. Wirtschaftsplan)
-    // — clicking one must never also change the already-reviewed value in
-    // the same row's other column. Always overwrites whatever was there
-    // before in that one field (an explicit per-row click is the landlord
-    // asking for a fresh number); the bulk action below is the "don't
-    // overwrite" one.
+    // Each icon only touches its own column; always overwrites that one
+    // field (an explicit click asks for a fresh number). The bulk action
+    // below is the "don't overwrite" counterpart.
     const applySuggestion = useCallback((index: number, column: 'actual' | 'budget') => {
         const suggestion = computeSuggestion(index, column);
         if (!suggestion) return;
@@ -627,14 +553,10 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             : it)));
     }, [computeSuggestion]);
 
-    // Bulk version — fills in every row's Anteil Wohnung at once, but
-    // (unlike the per-row buttons) only where it's still empty, and only
-    // where a suggestion actually exists; a row with neither an explicit
-    // key nor a usable prior-period ratio is left empty rather than
-    // fabricating a number.
-    // keysOverride lets a caller (setOverallAllocationKey below) run this
-    // immediately against keys it just created, without waiting for the
-    // setAllocationKeys state update to actually land in a re-render first.
+    // Bulk version — unlike the per-row buttons, only fills rows still empty
+    // and only where a suggestion exists; never fabricates a number.
+    // keysOverride lets setOverallAllocationKey run this against keys it just
+    // created, without waiting for the setAllocationKeys state update to land.
     const suggestAllShares = useCallback((keysOverride?: ServiceChargeAllocationKey[]) => {
         const keys = keysOverride ?? allocationKeys;
         setCostItems((prev) => prev.map((item) => {
@@ -652,10 +574,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         }));
     }, [allocationKeys, historyCandidatesFor]);
 
-    // Persists (creates or updates) an explicit Verteilerschlüssel for one
-    // cost item label on this unit — the landlord setting it once so future
-    // suggestions for that label never again depend on prior-period history
-    // existing at all.
+    // Persists an explicit allocation key for one cost item label, so future
+    // suggestions for it no longer depend on prior-period history existing.
     const saveAllocationKey = async (label: string, numerator: number, denominator: number, allocationType: string | null): Promise<void> => {
         const normalizedLabel = label.trim();
         if (!normalizedLabel || !Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return;
@@ -667,14 +587,10 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         setAllocationKeys((prev) => (existing ? prev.map((k) => (k.serviceChargeAllocationKeyId === saved.serviceChargeAllocationKeyId ? saved : k)) : [...prev, saved]));
     };
 
-    // "Verteilerschlüssel für alle festlegen" — a WEG almost always uses one
-    // dominant Miteigentumsanteil for most cost items, so this sets the same
-    // explicit key on every label in the table at once instead of making the
-    // landlord open each row's own popover in turn. Only labels that don't
-    // already have their own key are touched, so a label deliberately given
-    // a different key (e.g. a consumption-based one for heating) is never
-    // overwritten. Immediately runs the normal bulk suggestion afterwards so
-    // every still-empty field picks the new key up right away.
+    // "Verteilerschlüssel für alle festlegen" — sets the same key on every
+    // label at once, but only labels without their own key already (so e.g.
+    // a consumption-based heating key is never overwritten). Runs the bulk
+    // suggestion afterwards so empty fields pick the new key up immediately.
     const setOverallAllocationKey = async (numerator: number, denominator: number, allocationType: string | null): Promise<void> => {
         if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return;
         const labels = Array.from(new Set(costItems.map((item) => item.label.trim()).filter((label) => label !== '')));
@@ -705,12 +621,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             if (periodEndStr <= periodStartStr) throw new Error('INVALID_PERIOD');
             if (isPeriodTooLong(resolvedPeriodStart, resolvedPeriodEnd)) throw new Error('PERIOD_TOO_LONG');
 
-            // Anteil Wohnung is a single apartment's slice of Gesamtobjekt
-            // (the whole property's cost for that line) — it can never
-            // legitimately exceed it, so a value that does is always a typo
-            // (e.g. mixing up which column to type into), not a real figure.
-            // Checked per row, per column, since the two sides (Abrechnung /
-            // Wirtschaftsplan) are independent entries.
+            // Anteil Wohnung can never legitimately exceed Gesamtobjekt — a
+            // value that does is always a typo, not a real figure. Checked
+            // per row, per column (Abrechnung / Wirtschaftsplan are independent).
             const oversizedShareItem = costItems.find((item) =>
                 (item.actualAmount !== '' && item.actualShareOverride !== '' && Number(item.actualShareOverride) > Number(item.actualAmount))
                 || (item.budgetAmount !== '' && item.budgetShareOverride !== '' && Number(item.budgetShareOverride) > Number(item.budgetAmount)),
@@ -722,10 +635,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 throw new Error(`SHARE_EXCEEDS_TOTAL|${oversizedShareItem.label || 'einer Kostenposition'}|${column}`);
             }
 
-            // Gesamtobjekt and Anteil Wohnung form a pair, per column — one
-            // filled without the other is always an incomplete entry (either
-            // a total with no apartment share allocated yet, or a share with
-            // nothing behind it), never something that should silently save.
+            // Gesamtobjekt and Anteil Wohnung form a pair per column — one
+            // filled without the other is always incomplete and must not save silently.
             const incompletePairItem = costItems.find((item) =>
                 (item.actualAmount !== '') !== (item.actualShareOverride !== '')
                 || (item.budgetAmount !== '') !== (item.budgetShareOverride !== ''),
@@ -738,13 +649,10 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             }
 
             let activeSettlement = settlement;
-            // Once true, `activeSettlement` is a settlement row that didn't
-            // exist when this edit session started — none of the current
-            // cost-item rows' ids belong to it (they're either unset, or
-            // still carry ids from whatever settlement/period was loaded
-            // before), so every item must be (re)created there, and
-            // deletedCostItemIds — which target that OTHER settlement — must
-            // not be applied to this one.
+            // True once `activeSettlement` is a row that didn't exist when this
+            // edit session started — none of the current cost-item rows' ids
+            // belong to it, so every item must be (re)created, and
+            // deletedCostItemIds (which target the OTHER settlement) must not apply.
             let isNewSettlementForThisSave = false;
             // The loaded settlement's own period was edited — the saved-
             // settlements menu labels need refreshing, but the cost items
@@ -764,26 +672,19 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 setSettlement(activeSettlement);
                 isNewSettlementForThisSave = true;
             } else if (
-                // activeSettlement.periodStart/periodEnd come back from the API
-                // as full ISO datetime strings (pg parses a DATE column into a
-                // JS Date, which JSON.stringify renders as e.g.
-                // "2026-01-01T00:00:00.000Z"), never as a bare "yyyy-MM-dd" —
-                // comparing them against periodStartStr/periodEndStr directly
-                // always mismatched, so saving an *unchanged* existing
-                // settlement always took this "period changed" branch and hit
-                // itself as a PERIOD_CONFLICT, blocking every edit. Both sides
-                // must go through the same Date -> 'yyyy-MM-dd' formatting
-                // before comparing.
+                // periodStart/periodEnd come back from the API as full ISO
+                // datetime strings, not bare "yyyy-MM-dd" — comparing raw
+                // strings always mismatched, so saving an unchanged settlement
+                // wrongly took this branch and hit itself as PERIOD_CONFLICT.
+                // Both sides must go through the same formatting first.
                 format(new Date(activeSettlement.periodStart), 'yyyy-MM-dd') !== periodStartStr
                 || format(new Date(activeSettlement.periodEnd), 'yyyy-MM-dd') !== periodEndStr
             ) {
-                // The period of the loaded settlement was edited — correct it
-                // on that same settlement (keeping its cost items and source
-                // document) rather than spawning a second settlement next to
-                // it. Browsing to another period goes through switchToPeriod,
-                // which reloads, so reaching here always means "edit this one".
-                // Only refuse when a *different* settlement already occupies
-                // the new period, since two rows for one period would clash.
+                // The loaded settlement's period was edited — update it in place
+                // (keeping its cost items and source document). Browsing to
+                // another period goes through switchToPeriod, which reloads, so
+                // reaching here always means "edit this one". Refuse only when
+                // a *different* settlement already occupies the new period.
                 const conflict = await getSettlementByPeriod(property.propertyId, unit.propertyUnitId, periodStartStr, periodEndStr);
                 if (conflict && conflict.serviceChargeSettlementId !== activeSettlement.serviceChargeSettlementId) {
                     throw new Error('PERIOD_CONFLICT');
@@ -855,9 +756,7 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     };
 
     // ── Delete a saved settlement ────────────────────────────────────────────
-    // Deletes the settlement currently loaded (browse to any saved period via
-    // "Gespeicherte Abrechnungen" first, then delete that one) — its cost
-    // items cascade-delete with it at the DB level (ON DELETE CASCADE).
+    // Deletes the currently loaded settlement; cost items cascade-delete at the DB level.
     const requestDeleteSettlement = () => setPendingDeleteSettlement(true);
     const cancelDeleteSettlement = () => setPendingDeleteSettlement(false);
     const confirmDeleteSettlement = async () => {
@@ -879,10 +778,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     };
 
     // ── Apply new NK-Vorauszahlung ──────────────────────────────────────────
-    // Commits the recommended monthly prepayment (budget plan / 12) to the
-    // tenancy, logs it to the adjustment history so future settlements can
-    // prorate for the change, and writes the apportionable/non-apportionable
-    // split of the budget plan into the tenancy's maintenance_costs record.
+    // Commits the recommended monthly prepayment to the tenancy, logs it to
+    // adjustment history for future proration, and writes the allocable/non-
+    // allocable split into the tenancy's maintenance_costs record.
     const canApplyPrepayment = tenancy != null && newMonthlyPrepayment != null && prepaymentDelta !== 0;
 
     const handleApplyPrepayment = async () => {
@@ -890,10 +788,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         setIsApplyingPrepayment(true);
         setError(null);
         try {
-            // warmRent is persisted (not just derived on the fly) because the
-            // generated Mietvertrag document reads tenancy.warmRent directly —
-            // without updating it here it would still show the old total rent
-            // after applying a new NK-Vorauszahlung.
+            // warmRent is persisted because the generated Mietvertrag reads
+            // tenancy.warmRent directly, not a derived value.
             const newWarmRent = Math.round(((tenancy.coldRent ?? 0) + newMonthlyPrepayment + (tenancy.parkingSpaceRent ?? 0)) * 100) / 100;
             const updatedTenancy = await updateTenancy(tenancy.tenancyId, { miscRent: newMonthlyPrepayment, warmRent: newWarmRent });
             if (!updatedTenancy) throw new Error('updateTenancy failed');
@@ -911,12 +807,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             if (!historyEntry) throw new Error('addAdjustmentHistoryEntry failed');
             setMiscRentHistory((prev) => [historyEntry, ...prev]);
 
-            // This maintenance_costs record is displayed as *this tenant's own*
-            // Nebenkosten breakdown (see "Nebenkosten" on the Vertragsdaten
-            // page, whose "Detailerfassung" button links back to this exact
-            // settlement) — it must hold the unit's share, not the whole
-            // building's totals, or a multi-unit property would show every
-            // tenant the full building's costs instead of their own portion.
+            // Must hold this unit's share, not the whole building's totals —
+            // shown as this tenant's own Nebenkosten breakdown on Vertragsdaten.
             const nonAllocableShare = Math.round(budgetSplit.nonAllocable * unitShare * 100) / 100;
             const mcPayload = {
                 costBreakdown: true,
@@ -958,9 +850,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     // ── Source document upload ──────────────────────────────────────────────
     // Upload is the primary entry point on a fresh settlement, so it can't
-    // wait for an explicit "Speichern" (save) first — it lazily creates the
-    // settlement row (with the current/default period) the same way Save
-    // does, just without touching the period fields.
+    // wait for an explicit save — lazily creates the settlement row the same
+    // way handleSave does, without touching the period fields.
     const ensureSettlement = async (): Promise<ServiceChargeSettlement | null> => {
         if (settlement) return settlement;
         const currentYear = new Date().getFullYear();
@@ -977,12 +868,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     };
 
     // ── Automatic data takeover from the uploaded source document ───────────
-    // Documents vary wildly in layout (scan, photo, export from any property
-    // management tool), so a fixed template parser can't handle them — the
-    // file is sent to Claude with a structured-output tool call instead. The
-    // result only pre-fills the (still editable, still unsaved) form state;
-    // nothing is persisted until the user reviews it and hits "Abrechnung
-    // speichern", same as manual entry.
+    // Documents vary too widely in layout for a fixed parser, so the file is
+    // sent to Claude with a structured-output tool call instead. Result only
+    // pre-fills the still-editable form state; nothing persists until save.
     const extractSettlementDocument = async (file: File): Promise<ExtractedSettlementData | null> => {
         const fileDataUrl = await readFileAsDataUrl(file);
         const response = await authFetch('/api/settlement-extract', {
@@ -1071,17 +959,13 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     };
 
     // ── Documents (Nebenkostenabrechnung PDF + Anpassungsschreiben Word) ────
-    // Every generated or manually uploaded file is its own row — a second
-    // upload never silently hides the first. Uploading over an existing
-    // document pauses on a confirm (see useDocumentReplaceFlow) instead of
-    // deleting it automatically; declining adds the new file as another line.
+    // Every file is its own row. Uploading over an existing document pauses
+    // on a confirm (see useDocumentReplaceFlow) rather than deleting it automatically.
     const statementDocs = useMemo(() => documents.filter((d) => d.documentType === 'Nebenkostenabrechnung' && !d.supersededAt), [documents]);
     const adjustmentDocs = useMemo(() => documents.filter((d) => d.documentType === 'Nebenkosten-Anpassungsschreiben' && !d.supersededAt), [documents]);
 
-    // The server upserts by (tenancy, documentType, tenancyPersonId) — a
-    // second upload into an already-occupied slot returns the *same*
-    // tenancy_document_id with fresh contents, not a new row. Replacing by id
-    // (not blindly appending) keeps the box from showing a stale duplicate.
+    // Server upserts by (tenancy, documentType, tenancyPersonId), returning
+    // the same id with fresh contents — replace by id to avoid a stale duplicate.
     const uploadDoc = useCallback(async (file: File, documentType: TenancyDocument['documentType']) => {
         if (!user || !tenancy) return;
         try {
@@ -1129,8 +1013,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
         if (url) window.open(url, '_blank', 'noopener,noreferrer');
     };
 
-    // Signed URLs are cross-origin, so a plain <a download> doesn't force a
-    // download in every browser — fetch the bytes and save them locally.
+    // Signed URLs are cross-origin, so <a download> doesn't force a download
+    // in every browser — fetch the bytes and save them locally instead.
     const handleDownloadDocument = async (doc: TenancyDocument) => {
         const url = await getTenancyDocumentUrl(doc.storagePath);
         if (!url) return;
@@ -1160,9 +1044,8 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     };
 
     // ── PDF generation ───────────────────────────────────────────────────────
-    // landlord is required too (matches the Mieterbescheinigung generator's
-    // own gate) — without it landlordName/-Street/-City below all fall back
-    // to '', producing a Nebenkostenabrechnung with a blank sender.
+    // landlord is required too — without it, landlordName/-Street/-City below
+    // fall back to '', producing a document with a blank sender.
     const canGeneratePdf = tenancy != null && settlement != null && landlord != null;
 
     const buildStatementHtml = async (): Promise<string | null> => {
@@ -1234,13 +1117,10 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     };
 
     // ── Anpassungsschreiben (Word) ───────────────────────────────────────────
-    // Informs the tenant of the settlement outcome (Nachzahlung/Erstattung)
-    // and the new NK-Vorauszahlung — as an editable .docx (not a PDF), so the
-    // landlord can still adjust wording before sending it.
+    // Generated as an editable .docx (not a PDF) so the landlord can adjust wording.
     const canGenerateAdjustmentDocx = tenancy != null && settlement != null && landlord != null;
 
-    // Shared field-gathering for both the .docx builder and the HTML preview
-    // (adjustmentLetterHtml) — same content, two different renderers.
+    // Shared field-gathering for the .docx builder and the HTML preview — same content, two renderers.
     const buildAdjustmentContentParams = async () => {
         if (!tenancy || !settlement) return null;
         const persons = await getTenancyPersonsByTenancy(tenancy.tenancyId);
