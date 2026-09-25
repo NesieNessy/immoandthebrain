@@ -1,31 +1,30 @@
 "use client";
 
-import { Button, Checkbox, Dropdown, Icons, LoadingScreen, SectionLabel, StickyActionBar, Table, Tag, TextArea, TextField, type TableColumn } from '@/components/ui';
-import { cn } from '@/lib/utils';
+import { PriceRangeSlider } from '@/components/features/PriceRangeSlider';
+import { RenovationMeasurePicker } from '@/components/features/RenovationMeasurePicker';
+import { Button, Checkbox, Dropdown, Icons, LoadingScreen, SectionLabel, StatTile, StickyActionBar, Table, Tag, TextArea, TextField, type TableColumn } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { authFetch } from '@/lib/api/authFetch';
 import { formatDecimalInput, parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
 import {
   aggregateRenovationPricing,
-  categoryLabel,
   costForCase,
   distributeTotalAcrossCases,
   evaluateRenovationCases,
   sumSelectedCosts,
   withDefaultSelectedCosts,
-  RENOVATION_CATEGORIES,
-  RENOVATION_MEASURES,
   type RenovationCase,
-  type RenovationCategory,
   type RenovationFinancingMode,
   type RenovationTiming,
 } from '@/lib/detailCheck/renovation';
+import { categoryLabel, type RenovationCategory } from '@/lib/renovation/catalog';
 import { getDocumentsByUser, getDocumentUrl, uploadDocument } from '@/lib/supabase/document.supabase';
+import { cn, formatEuro } from '@/lib/utils';
 import type { UserDocument } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
 
 interface CaseRow extends Record<string, unknown> {
@@ -58,12 +57,6 @@ type RenovationResponse = {
   };
 };
 
-// Whole euros unless an entered amount actually has cents.
-const currencyFormatter = new Intl.NumberFormat('de-DE', {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
-
 const FINANCING_OPTIONS: { value: RenovationFinancingMode; label: string }[] = [
   { value: 'FREMD', label: 'Fremdfinanziert' },
   { value: 'EIGEN', label: 'Eigen finanziert' },
@@ -72,52 +65,9 @@ const FINANCING_OPTIONS: { value: RenovationFinancingMode; label: string }[] = [
 
 const UPLOAD_ACCEPT = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx';
 
-function formatCurrency(value: number): string {
-  return `${currencyFormatter.format(value)} €`;
-}
-
 function idForCase() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function measureOptions(category: RenovationCategory | '') {
-  return [
-    { value: '', label: category ? 'Bitte wählen…' : 'Erst Kategorie wählen…' },
-    ...((category ? RENOVATION_MEASURES[category] : []) ?? []).map((measure) => ({
-      value: measure,
-      label: measure,
-    })),
-  ];
-}
-
-function StatCell({ label, value, caption, valueClassName, captionClassName }: {
-  label: string;
-  value: ReactNode;
-  caption: string;
-  valueClassName?: string;
-  captionClassName?: string;
-}) {
-  return (
-    <div className="min-w-0 bg-card px-4 py-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className={cn('mt-1.5 truncate text-xl font-semibold text-foreground', valueClassName)}>{value}</p>
-      <p className={cn('mt-0.5 text-xs text-muted-foreground', captionClassName)}>{caption}</p>
-    </div>
-  );
-}
-
-/** The fixed ends of the price slider — read-only, hence the lock. */
-function BoundBox({ value, caption }: { value: string; caption: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-center">
-      <p className="text-sm font-semibold text-foreground">{value}</p>
-      <p className="mt-0.5 flex items-center justify-center gap-1 text-xs text-muted-foreground">
-        {caption}
-        <Icons.Lock className="h-3 w-3" aria-hidden="true" />
-      </p>
-    </div>
-  );
 }
 
 function RenovationContent() {
@@ -454,7 +404,7 @@ function RenovationContent() {
     ? 'über Darlehen'
     : financingMode === 'EIGEN'
       ? 'aus Eigenkapital'
-      : `${formatCurrency(parseDecimalInput(financedAmount))} fremdfinanziert`;
+      : `${formatEuro(parseDecimalInput(financedAmount))} fremdfinanziert`;
 
   const casesRows: CaseRow[] = cases.map((item) => ({ key: item.id, item }));
   const summaryRows: SummaryRow[] = [
@@ -535,8 +485,8 @@ function RenovationContent() {
       label: 'KI-Indikation',
       renderCell: (_v, row) => <span className="block truncate text-muted-foreground" title={row.item.ai?.summary}>{row.item.ai?.summary ?? '–'}</span>,
     },
-    { key: 'von', label: 'Von', align: 'right', width: '110px', renderCell: (_v, row) => <span className="text-muted-foreground">{formatCurrency(row.item.ai?.price_min ?? 0)}</span> },
-    { key: 'bis', label: 'Bis', align: 'right', width: '110px', renderCell: (_v, row) => <span className="text-muted-foreground">{formatCurrency(row.item.ai?.price_max ?? 0)}</span> },
+    { key: 'von', label: 'Von', align: 'right', width: '110px', renderCell: (_v, row) => <span className="text-muted-foreground">{formatEuro(row.item.ai?.price_min ?? 0)}</span> },
+    { key: 'bis', label: 'Bis', align: 'right', width: '110px', renderCell: (_v, row) => <span className="text-muted-foreground">{formatEuro(row.item.ai?.price_max ?? 0)}</span> },
     {
       key: 'angesetzt',
       label: 'Angesetzt',
@@ -575,10 +525,10 @@ function RenovationContent() {
       width: '140px',
       renderCell: (_v, row) => row.item ? (
         <>
-          <div className="font-medium">{formatCurrency(costForCase(row.item))}</div>
+          <div className="font-medium">{formatEuro(costForCase(row.item))}</div>
           <div className="text-xs text-muted-foreground">Angesetzt</div>
         </>
-      ) : <span className="text-base font-semibold text-primary">{formatCurrency(sumSelected)}</span>,
+      ) : <span className="text-base font-semibold text-primary">{formatEuro(sumSelected)}</span>,
     },
     {
       key: 'zeitpunkt',
@@ -627,7 +577,6 @@ function RenovationContent() {
     },
   ];
 
-  const sliderMax = Math.max(totals.sum_max, totals.sum_min);
 
   return (
     <PropertyValuationLayout
@@ -648,30 +597,27 @@ function RenovationContent() {
         ) : (
           <div className="flex flex-col gap-8">
             {/* ── Übersicht ─────────────────────────────────────────────── */}
-            {/* gap-px over a border-coloured background draws the dividers,
-                for both the 2×2 (mobile) and 1×4 layout. */}
-            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
-              <StatCell label="Modernisierungen" value={cases.length} caption="erfasst" />
-              <StatCell
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatTile label="Modernisierungen" value={cases.length} caption="erfasst" />
+              <StatTile
                 label="Angesetzte Kosten"
-                value={stage === 'PRICING' ? formatCurrency(sumSelected) : '–'}
+                value={stage === 'PRICING' ? formatEuro(sumSelected) : '–'}
                 valueClassName="text-primary"
                 caption={stage === 'PRICING' ? 'nach Auswertung' : 'nach Auswertung verfügbar'}
               />
-              <StatCell
+              <StatTile
                 label="Ausgewählt"
                 value={`${selectedCases.length} / ${cases.length}`}
                 valueClassName={selectedCases.length > 0 ? 'text-success' : undefined}
                 caption="für Kalkulation"
               />
-              <StatCell label="Finanzierung" value={financingLabel} caption={financingCaption} captionClassName="text-accent-text" />
+              <StatTile label="Finanzierung" value={financingLabel} caption={financingCaption} captionClassName="text-accent-text" />
             </div>
 
             {/* ── Erfasste Modernisierungen ─────────────────────────────── */}
             <section className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Erfasste Modernisierungen</h3>
-                <div className="flex flex-wrap items-center gap-2">
+              <SectionLabel>Erfasste Modernisierungen</SectionLabel>
+              <div className="flex flex-wrap items-center justify-end gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -689,7 +635,6 @@ function RenovationContent() {
                     aria-controls="new-renovation-form"
                     onClick={() => setIsFormOpen((open) => !open)}
                   />
-                </div>
               </div>
 
               {isFormOpen && (
@@ -710,24 +655,11 @@ function RenovationContent() {
                   </div>
 
                   <div className="grid gap-4 p-4 md:grid-cols-2">
-                    <Dropdown
-                      label="Kategorie"
-                      value={category}
-                      onChange={(event) => {
-                        setCategory(event.target.value as RenovationCategory);
-                        setMeasure('');
-                      }}
-                      options={[
-                        { value: '', label: 'Bitte wählen…' },
-                        ...RENOVATION_CATEGORIES,
-                      ]}
-                    />
-                    <Dropdown
-                      label="Maßnahme"
-                      value={measure}
-                      onChange={(event) => setMeasure(event.target.value)}
-                      disabled={!category}
-                      options={measureOptions(category)}
+                    <RenovationMeasurePicker
+                      category={category}
+                      measure={measure}
+                      onCategoryChange={setCategory}
+                      onMeasureChange={setMeasure}
                     />
                     <div className="md:col-span-2">
                       <TextArea
@@ -838,32 +770,15 @@ function RenovationContent() {
                 </section>
 
                 <section className="flex flex-col gap-3">
-                  <SectionLabel>Mit welchem Preis weiterrechnen?</SectionLabel>
-                  <div className="rounded-lg border border-border bg-card p-4">
-                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[120px_1fr_120px]">
-                      <div className="order-1"><BoundBox value={formatCurrency(totals.sum_min)} caption="Minimum" /></div>
-                      <input
-                        type="range"
-                        min={totals.sum_min}
-                        max={sliderMax}
-                        step="100"
-                        value={Math.max(totals.sum_min, Math.min(totals.sum_max, sumSelected))}
-                        disabled={totals.sum_max <= totals.sum_min}
-                        onChange={(event) => setCases((prev) => distributeTotalAcrossCases(prev, Number(event.target.value)))}
-                        aria-label="Preis für weitere Berechnung"
-                        className="order-3 col-span-2 w-full cursor-pointer accent-primary disabled:cursor-not-allowed sm:order-2 sm:col-span-1"
-                      />
-                      <div className="order-2 sm:order-3"><BoundBox value={formatCurrency(totals.sum_max)} caption="Maximum" /></div>
-                    </div>
-                    <div className="mt-4 flex flex-wrap items-center gap-3">
-                      <span className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm">
-                        <Icons.Lock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                        <span className="font-medium text-foreground">Ausgewählt:</span>
-                        <span className="font-semibold text-primary">{formatCurrency(sumSelected)}</span>
-                      </span>
-                      <span className="text-xs text-muted-foreground">Dieser Wert fließt in die Renditeberechnung ein.</span>
-                    </div>
-                  </div>
+                  <SectionLabel>Mit welchem Preis möchtest du weiterrechnen?</SectionLabel>
+                  <PriceRangeSlider
+                    min={totals.sum_min}
+                    max={totals.sum_max}
+                    value={sumSelected}
+                    onChange={(value) => setCases((prev) => distributeTotalAcrossCases(prev, value))}
+                    format={formatEuro}
+                    hint="Dieser Wert fließt in die Renditeberechnung ein."
+                  />
                 </section>
 
                 {/* ── Zusammenfassung ─────────────────────────────────────── */}

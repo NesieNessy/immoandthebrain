@@ -2,6 +2,8 @@
 
 import { useToast } from '@/components/ui';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
+import { getPropertyPricingContext, type PropertyPricingContext } from '@/lib/api/renovationPricing';
+import { indicatePriceRange, normalizeRenovationCategory } from '@/lib/renovation/catalog';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
 import {
     getRenovationMeasureById,
@@ -51,6 +53,7 @@ export function useMeasureDetailData(propertyId: string, measureId: string) {
     const [photos, setPhotos] = useState<RenovationMeasurePhoto[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
+    const [pricingContext, setPricingContext] = useState<PropertyPricingContext | null>(null);
 
     useEffect(() => {
         const propId = parseInt(propertyId, 10);
@@ -72,10 +75,22 @@ export function useMeasureDetailData(propertyId: string, measureId: string) {
             setNotFound(!loadedMeasure);
             setIsLoading(false);
         });
+        // Only feeds the price indication — the page works without it.
+        getPropertyPricingContext(propId).then((context) => { if (!cancelled) setPricingContext(context); });
         return () => { cancelled = true; };
     }, [propertyId, measureId]);
 
     const isLocked = measure ? isMeasureLocked(measure) : false;
+
+    // The range stored when the measure was added wins; older measures (or
+    // ones added before this was stored) are priced from the catalog now.
+    const priceRange = !measure
+        ? null
+        : measure.budgetMin != null && measure.budgetMax != null
+            ? { min: measure.budgetMin, max: measure.budgetMax }
+            : normalizeRenovationCategory(measure.category)
+                ? indicatePriceRange(measure.category, measure.title, pricingContext ?? {})
+                : null;
 
     // ── Measure fields ──────────────────────────────────────────────────
     const updateLocalField = (patch: Partial<RenovationMeasure>) => {
@@ -212,6 +227,7 @@ export function useMeasureDetailData(propertyId: string, measureId: string) {
         isLoading,
         notFound,
         isLocked,
+        priceRange,
         updateLocalField,
         commitField,
         togglePublished,

@@ -1,6 +1,9 @@
 "use client";
 
+import { CUSTOM_MEASURE } from '@/components/features/RenovationMeasurePicker';
 import { useToast } from '@/components/ui';
+import { getPropertyPricingContext, type PropertyPricingContext } from '@/lib/api/renovationPricing';
+import { indicatePriceRange, type RenovationCategory } from '@/lib/renovation/catalog';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
 import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
 import {
@@ -15,13 +18,26 @@ import { useEffect, useState } from 'react';
 import { canConfirmCustomerCompletion } from './measureStatus';
 
 export interface NewMeasureForm {
-    title: string;
-    category: string;
+    category: RenovationCategory | '';
+    /** A catalog measure, or CUSTOM_MEASURE for a free-text `customTitle`. */
+    measure: string;
+    customTitle: string;
     estimatedCost: string;
     preferredStartDate: Date | undefined;
 }
 
-export const EMPTY_NEW_MEASURE: NewMeasureForm = { title: '', category: '', estimatedCost: '', preferredStartDate: undefined };
+export const EMPTY_NEW_MEASURE: NewMeasureForm = { category: '', measure: '', customTitle: '', estimatedCost: '', preferredStartDate: undefined };
+
+/** The title the new measure will be saved under ('' while none is chosen yet). */
+export function newMeasureTitle(form: NewMeasureForm): string {
+    return (form.measure === CUSTOM_MEASURE ? form.customTitle : form.measure).trim();
+}
+
+/** Catalog price range for the form's measure — null for a free-text one. */
+export function newMeasurePriceRange(form: NewMeasureForm, context: PropertyPricingContext | null) {
+    if (!form.category || !form.measure || form.measure === CUSTOM_MEASURE) return null;
+    return indicatePriceRange(form.category, form.measure, context ?? {});
+}
 
 /**
  * No craftsperson-facing portal — owner enters quote/completion state
@@ -36,6 +52,7 @@ export function useRenovationMeasuresData(propertyId: string) {
     const [property, setProperty] = useState<Property | null>(null);
     const [measures, setMeasures] = useState<RenovationMeasure[]>([]);
     const [units, setUnits] = useState<PropertyUnit[]>([]);
+    const [pricingContext, setPricingContext] = useState<PropertyPricingContext | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [measurePendingDelete, setMeasurePendingDelete] = useState<RenovationMeasure | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -50,6 +67,8 @@ export function useRenovationMeasuresData(propertyId: string) {
             setUnits(loadedUnits);
             setIsLoading(false);
         });
+        // Only feeds the price indication — the page works without it.
+        getPropertyPricingContext(id).then((context) => { if (!cancelled) setPricingContext(context); });
         return () => { cancelled = true; };
     }, [propertyId]);
 
@@ -76,17 +95,22 @@ export function useRenovationMeasuresData(propertyId: string) {
     };
 
     const addMeasure = async (form: NewMeasureForm) => {
-        if (!property || form.title.trim() === '') return false;
+        const title = newMeasureTitle(form);
+        if (!property || title === '') return false;
+        // The indicated range is stored with the measure: it is what the
+        // detail page's price slider spans, and what a published job shows
+        // craftspeople as budget in the network.
+        const range = newMeasurePriceRange(form, pricingContext);
         const created = await createRenovationMeasure({
             propertyId: property.propertyId,
             sortOrder: measures.length,
-            title: form.title.trim(),
+            title,
             category: form.category !== '' ? form.category : null,
             description: null,
             estimatedCost: form.estimatedCost !== '' ? Number(form.estimatedCost) : null,
             quotedCost: null,
-            budgetMin: null,
-            budgetMax: null,
+            budgetMin: range?.min ?? null,
+            budgetMax: range?.max ?? null,
             preferredStartDate: form.preferredStartDate ? form.preferredStartDate.toISOString().slice(0, 10) : null,
             quotedStartDate: null,
             actualCompletionDate: null,
@@ -156,6 +180,7 @@ export function useRenovationMeasuresData(propertyId: string) {
         isLoading,
         hasMultipleUnits,
         contextUnit,
+        pricingContext,
         updateLocalField,
         persistField,
         addMeasure,

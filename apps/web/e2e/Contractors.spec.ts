@@ -1,5 +1,5 @@
 import { Client } from 'pg';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 
 /**
  * Handwerkerleistungen (existing-properties/[propertyId]/contractors) — the
@@ -29,6 +29,17 @@ function requireDatabaseUrl(): string {
 
 let propertyId: number;
 
+/**
+ * Fills the add-measure dialog with a free-text measure ("Andere Maßnahme…")
+ * rather than a catalog one — the tests key their rows off a unique title,
+ * which catalog names can't provide.
+ */
+async function fillCustomMeasure(dialog: Locator, title: string) {
+    await dialog.getByLabel('Kategorie').selectOption({ label: 'Sonstiges' });
+    await dialog.getByLabel('Maßnahme').selectOption({ label: 'Andere Maßnahme…' });
+    await dialog.getByLabel('Bezeichnung').fill(title);
+}
+
 test.beforeAll(async () => {
     const client = new Client({ connectionString: requireDatabaseUrl() });
     await client.connect();
@@ -57,7 +68,7 @@ test.afterAll(async () => {
     }
 });
 
-test('adding a measure requires a title, and cost summary tiles reflect estimated/quoted/deviation', async ({ page }) => {
+test('adding a measure requires a Maßnahme, and cost summary tiles reflect estimated/quoted/deviation', async ({ page }) => {
     await page.goto(`/existing-properties/${propertyId}/contractors`);
     await expect(page.getByText('Noch keine Sanierungsmaßnahmen erfasst.')).toBeVisible();
 
@@ -67,7 +78,7 @@ test('adding a measure requires a title, and cost summary tiles reflect estimate
     await expect(addButton).toBeDisabled();
 
     const titleA = `E2E Badsanierung ${Date.now()}`;
-    await addDialog.getByLabel('Maßnahme').fill(titleA);
+    await fillCustomMeasure(addDialog, titleA);
     await addDialog.getByLabel('Kosten veranschlagt (optional)').fill('3000');
     await expect(addButton).toBeEnabled();
     await addButton.click();
@@ -80,7 +91,7 @@ test('adding a measure requires a title, and cost summary tiles reflect estimate
     // while totalQuoted/deviation only count quoted ones.
     await page.getByRole('button', { name: 'Maßnahme hinzufügen' }).click();
     const titleB = `E2E Fenstersanierung ${Date.now()}`;
-    await addDialog.getByLabel('Maßnahme').fill(titleB);
+    await fillCustomMeasure(addDialog, titleB);
     await addDialog.getByLabel('Kosten veranschlagt (optional)').fill('2000');
     await addButton.click();
     await expect(addDialog).not.toBeVisible();
@@ -101,7 +112,7 @@ test('quote acceptance locks the measure and syncs quotedCost; switching quotes 
     await page.getByRole('button', { name: 'Maßnahme hinzufügen' }).click();
     const title = `E2E Dachsanierung ${Date.now()}`;
     const addDialog = page.getByRole('dialog', { name: 'Maßnahme hinzufügen' });
-    await addDialog.getByLabel('Maßnahme').fill(title);
+    await fillCustomMeasure(addDialog, title);
     await addDialog.getByRole('button', { name: 'Hinzufügen' }).click();
     await expect(addDialog).not.toBeVisible();
 
@@ -196,7 +207,7 @@ test('customer confirmation requires a completion date too, and clearing the dat
     await page.getByRole('button', { name: 'Maßnahme hinzufügen' }).click();
     const title = `E2E Elektrik ${Date.now()}`;
     const addDialog = page.getByRole('dialog', { name: 'Maßnahme hinzufügen' });
-    await addDialog.getByLabel('Maßnahme').fill(title);
+    await fillCustomMeasure(addDialog, title);
     await addDialog.getByRole('button', { name: 'Hinzufügen' }).click();
     await expect(addDialog).not.toBeVisible();
 

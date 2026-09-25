@@ -27,6 +27,7 @@ export { RadioButton } from "./RadioButton";
 export { Rating } from "./Rating";
 export { RatingScale } from "./RatingScale";
 export { SectionLabel } from "./SectionLabel";
+export { StatTile } from "./StatTile";
 export { Stepper } from "./Stepper";
 export { StickyActionBar } from "./StickyActionBar";
 export { Switch } from "./Switch";

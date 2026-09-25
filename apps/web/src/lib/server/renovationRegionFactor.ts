@@ -1,4 +1,4 @@
-import { postalCodePrefixes, resolveRegionFactor } from '@/lib/detailCheck/regionFactor';
+import { postalCodePrefixes, resolveRegionFactor } from '@/lib/renovation/regionFactor';
 import { db } from './db';
 
 /** Postgres "undefined_table" — the migration has not been applied to this database yet. */

@@ -12,6 +12,11 @@ export const deNumberFormatter = new Intl.NumberFormat('de-DE', { minimumFractio
 /** Whole-euro amount, German locale (e.g. "1.200") — pair with a trailing "€". */
 export const deCurrencyFormatter = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
+/** "8.250 €" (cents only when present), "–" for null/undefined. */
+export function formatEuro(value: number | null | undefined): string {
+  return value != null ? `${deNumberFormatter.format(value)} €` : '–';
+}
+
 /** "dd.MM.yyyy", falling back to "–" for null/undefined. */
 export function formatDeDate(value: string | null | undefined): string {
   if (!value) return '–';
