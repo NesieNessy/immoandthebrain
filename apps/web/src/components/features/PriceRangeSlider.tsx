@@ -1,6 +1,8 @@
 "use client";
 
-import { Icons } from '@/components/ui';
+import { TextField } from '@/components/ui';
+import { formatDecimalInput, parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
+import { useState } from 'react';
 
 interface PriceRangeSliderProps {
   min: number;
@@ -11,59 +13,78 @@ interface PriceRangeSliderProps {
   onCommit?: (value: number) => void;
   disabled?: boolean;
   format: (value: number) => string;
-  /** Explains where the chosen value goes, shown next to it. */
+  /** Explains where the chosen value goes, shown under it. */
   hint?: string;
-}
-
-/** The fixed ends of the range — read-only, hence the lock. */
-function BoundBox({ value, caption }: { value: string; caption: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-center">
-      <p className="text-sm font-semibold text-foreground">{value}</p>
-      <p className="mt-0.5 flex items-center justify-center gap-1 text-xs text-muted-foreground">
-        {caption}
-        <Icons.Lock className="h-3 w-3" aria-hidden="true" />
-      </p>
-    </div>
-  );
 }
 
 /**
  * "Mit welchem Preis möchtest du weiterrechnen?" — picks one amount within an
- * indicated price range, between locked Minimum/Maximum boxes.
+ * indicated price range: the range's ends on either side of the slider, the
+ * chosen amount centred underneath. The amount can also be typed in; it is
+ * kept within the range, same as the slider.
  */
 export function PriceRangeSlider({ min, max, value, onChange, onCommit, disabled, format, hint }: PriceRangeSliderProps) {
   const upper = Math.max(min, max);
-  const clamped = Math.max(min, Math.min(upper, value));
+  const clamp = (amount: number) => Math.max(min, Math.min(upper, amount));
+  const clamped = clamp(value);
+  const isDisabled = disabled || upper <= min;
+  /** Raw text while the amount field is being typed in; null otherwise. */
+  const [draft, setDraft] = useState<string | null>(null);
+
+  const commitDraft = () => {
+    if (draft === null) return;
+    setDraft(null);
+    if (draft.trim() === '') return;
+    const parsed = parseDecimalInput(draft);
+    if (!Number.isFinite(parsed)) return;
+    const next = clamp(parsed);
+    onChange(next);
+    onCommit?.(next);
+  };
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[120px_1fr_120px]">
-        <div className="order-1"><BoundBox value={format(min)} caption="Minimum" /></div>
+    <div className="rounded-lg border border-border bg-card px-4 py-4">
+      <div className="flex items-center gap-3">
+        <span className="shrink-0 text-xs text-muted-foreground" aria-hidden="true">{format(min)}</span>
         <input
           type="range"
           min={min}
           max={upper}
           step="100"
           value={clamped}
-          disabled={disabled || upper <= min}
+          disabled={isDisabled}
           onChange={(event) => onChange(Number(event.target.value))}
           onMouseUp={() => onCommit?.(clamped)}
           onTouchEnd={() => onCommit?.(clamped)}
           onKeyUp={() => onCommit?.(clamped)}
           aria-label="Preis für weitere Berechnung"
-          className="order-3 col-span-2 w-full cursor-pointer accent-primary disabled:cursor-not-allowed sm:order-2 sm:col-span-1"
+          aria-valuetext={format(clamped)}
+          className="min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed"
         />
-        <div className="order-2 sm:order-3"><BoundBox value={format(upper)} caption="Maximum" /></div>
+        <span className="shrink-0 text-xs text-muted-foreground" aria-hidden="true">{format(upper)}</span>
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <span className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm">
-          <Icons.Lock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-          <span className="font-medium text-foreground">Ausgewählt:</span>
-          <span className="font-semibold text-primary">{format(clamped)}</span>
-        </span>
-        {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+      <div className="mt-3 flex items-center justify-center gap-2">
+        <span className="text-lg font-semibold text-primary">Ausgewählt:</span>
+        <div className="w-40">
+          <TextField
+            inputMode="decimal"
+            suffix="€"
+            aria-label="Ausgewählter Preis"
+            title={`Zwischen ${format(min)} und ${format(upper)}`}
+            disabled={isDisabled}
+            value={draft ?? formatDecimalInput(String(clamped))}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commitDraft}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur();
+              // Discards the typed value (no blur — that would commit it).
+              if (event.key === 'Escape') setDraft(null);
+            }}
+            className="text-right text-lg font-semibold text-primary"
+          />
+        </div>
       </div>
+      {hint && <p className="mt-0.5 text-center text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }

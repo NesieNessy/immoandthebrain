@@ -7,7 +7,8 @@ import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
 import { addMonths, runRentCalculator, CALCULATION_HORIZON_MONTHS, CALCULATION_HORIZON_YEARS, DEFAULT_VIEW_PERIOD_YEARS, type CalculatorMode, type CalculatorParams, type ModernizationPlanRow, type PlacementMode, type RentIndexSource, type RentIncrease558Row, type RentTimelineRow } from '@/lib/detailCheck/rentCalculator';
 import { buildEffectiveCalculatorParams, buildRestoreRequestBody, overridesFromParams, type CalculatorOverrides, type CalculatorParameterFields } from '@/lib/detailCheck/calculatorParamNormalization';
 import { costForCase, type RenovationCase, type RenovationTiming } from '@/lib/detailCheck/renovation';
-import { Check, ChevronDown, ChevronUp, LineChart, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, LineChart, Loader2 } from 'lucide-react';
+import { SaveStatusIndicator } from '@/components/features/SaveStatusIndicator';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
@@ -426,39 +427,6 @@ function TableToggle({ label, open, onClick }: { label: string; open: boolean; o
       aria-expanded={open}
       onClick={onClick}
     />
-  );
-}
-
-/**
- * The three states a change can be in: still typing/dragging (handled
- * elsewhere by the instant local preview), saved, or in between. `isDirty`
- * and `isSaving` are deliberately separate pieces of state — a save can be
- * in flight for an *earlier* edit while a *newer* one is already queued
- * behind it (see `queuedRecalcRef`), in which case both are true at once and
- * "Wird gespeichert…" is still the more honest thing to show.
- */
-function SaveStatusIndicator({ isSaving, isDirty }: { isSaving: boolean; isDirty: boolean }) {
-  if (isSaving) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-        Wird gespeichert…
-      </span>
-    );
-  }
-  if (isDirty) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-warning" role="status">
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warning" aria-hidden="true" />
-        Nicht gespeicherte Änderungen
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-      <Check size={14} aria-hidden="true" />
-      Gespeichert
-    </span>
   );
 }
 

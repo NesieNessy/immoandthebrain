@@ -79,6 +79,7 @@ import {
   Shield,
   ShoppingCart,
   Smartphone,
+  Sparkles,
   Star,
   Target,
   Trash2,
@@ -225,6 +226,7 @@ export const Icons = {
   PieChart,
   Database,
   Loader2,
+  Sparkles,
   ArrowDown,
 
   // Einstellungen

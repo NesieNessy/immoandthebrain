@@ -43,6 +43,9 @@ export function Button({
   "aria-label": ariaLabel,
   ...props
 }: ButtonProps) {
+  // Controlled so picking a menu item also closes the menu — otherwise it
+  // stays open over whatever the item just opened (a form, a modal).
+  const [menuOpen, setMenuOpen] = React.useState(false);
   const baseStyles = "inline-flex items-center justify-center rounded-lg transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none";
   // A hidden (display:none) label is dropped from the accessibility tree too,
   // so give mobile icon-only buttons a fallback accessible name.
@@ -112,7 +115,7 @@ export function Button({
   // If menuItems is provided, wrap button in Popover
   if (menuItems && menuItems.length > 0) {
     return (
-      <Popover>
+      <Popover open={menuOpen} onOpenChange={setMenuOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -135,7 +138,11 @@ export function Button({
                 <React.Fragment key={index}>
                   {showDividerAbove && <div className="my-1 h-px bg-border" />}
                   <button
-                    onClick={item.onClick}
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      item.onClick();
+                    }}
                     disabled={item.disabled}
                     className={cn(
                       "flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors text-left cursor-pointer",

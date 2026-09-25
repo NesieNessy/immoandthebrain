@@ -1,8 +1,10 @@
 "use client";
 
+import { PriceIndicationHint } from '@/components/features/PriceIndicationHint';
 import { PriceRangeSlider } from '@/components/features/PriceRangeSlider';
 import { RenovationMeasurePicker } from '@/components/features/RenovationMeasurePicker';
-import { Button, Checkbox, Dropdown, Icons, LoadingScreen, SectionLabel, StatTile, StickyActionBar, Table, Tag, TextArea, TextField, type TableColumn } from '@/components/ui';
+import { SaveStatusIndicator } from '@/components/features/SaveStatusIndicator';
+import { Button, Checkbox, ConfirmDeleteModal, Dropdown, Icons, LoadingScreen, SectionLabel, StatTile, StickyActionBar, Table, Tag, TextArea, TextField, type TableColumn } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { authFetch } from '@/lib/api/authFetch';
@@ -18,9 +20,9 @@ import {
   type RenovationFinancingMode,
   type RenovationTiming,
 } from '@/lib/detailCheck/renovation';
-import { categoryLabel, type RenovationCategory } from '@/lib/renovation/catalog';
+import { categoryLabel, indicatePriceRange, type RenovationCategory } from '@/lib/renovation/catalog';
 import { getDocumentsByUser, getDocumentUrl, uploadDocument } from '@/lib/supabase/document.supabase';
-import { cn, formatEuro } from '@/lib/utils';
+import { cn, deNumberFormatter, formatEuro } from '@/lib/utils';
 import type { UserDocument } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -32,8 +34,6 @@ interface CaseRow extends Record<string, unknown> {
   item: RenovationCase;
 }
 
-/** Summary table row: a selected case, or the trailing Gesamtsumme row. */
-type SummaryRow = CaseRow | { key: 'total'; item: null };
 
 type Stage = 'ENTRY' | 'PRICING';
 
@@ -65,6 +65,18 @@ const FINANCING_OPTIONS: { value: RenovationFinancingMode; label: string }[] = [
 
 const UPLOAD_ACCEPT = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx';
 
+/** Pause after the last change before it is saved automatically. */
+const AUTOSAVE_DELAY_MS = 800;
+
+/**
+ * Everything a save persists, as a comparable string: autosave runs whenever
+ * it differs from the last saved one. The server derives the financed amount
+ * itself except for TEILWEISE, so only that mode's amount counts as a change.
+ */
+function saveSnapshot(cases: RenovationCase[], mode: RenovationFinancingMode, financedAmount: number): string {
+  return JSON.stringify({ cases, mode, financedAmount: mode === 'TEILWEISE' ? financedAmount : 0 });
+}
+
 function idForCase() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -85,7 +97,8 @@ function RenovationContent() {
   const [description, setDescription] = useState('');
   const [uploadNames, setUploadNames] = useState<string[]>([]);
   const [documentsById, setDocumentsById] = useState<Record<number, UserDocument>>({});
-  const [previewUrls, setPreviewUrls] = useState<Record<number, string | null>>({});
+  /** Signed URLs of Belege already opened in this visit. */
+  const [documentUrls, setDocumentUrls] = useState<Record<number, string | null>>({});
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
   const [uploadFilesError, setUploadFilesError] = useState<string | null>(null);
   const [financingMode, setFinancingMode] = useState<RenovationFinancingMode>('FREMD');
@@ -98,14 +111,23 @@ function RenovationContent() {
   const [error, setError] = useState<string | null>(null);
   /** "Neue Modernisierung" panel — open by default only while nothing is captured yet. */
   const [isFormOpen, setIsFormOpen] = useState(false);
+  /** Set while the panel edits an existing case instead of adding one. */
+  const [editingCaseId, setEditingCaseId] = useState<string | null>(null);
+  const [casePendingDelete, setCasePendingDelete] = useState<RenovationCase | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
-  /** Preisindikation, price choice and Zusammenfassung stay hidden — even
+  /** "Auswertung & Planung" and the price choice stay hidden — even
    *  for a workflow that already has saved (evaluated) cases — until an
    *  Auswertung is run in this visit ("Auswertung prüfen & anpassen" or
    *  the bar's "Weiter zur Auswertung"). */
   const [isEvaluationVisible, setIsEvaluationVisible] = useState(false);
   const evaluationRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** Snapshot (see saveSnapshot) of what the server holds; null until loaded. */
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
+  /** A snapshot whose autosave failed — not retried until something changes again. */
+  const [failedSnapshot, setFailedSnapshot] = useState<string | null>(null);
+  const [isAutosaving, setIsAutosaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,10 +140,13 @@ function RenovationContent() {
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json() as RenovationResponse;
         if (cancelled) return;
-        setCases(withDefaultSelectedCosts(data.cases));
+        const loadedCases = withDefaultSelectedCosts(data.cases);
+        const loadedFinancedAmount = formatDecimalInput(String(data.financing.financedAmount || ''));
+        setCases(loadedCases);
         setContext(data.context);
         setFinancingMode(data.financing.mode);
-        setFinancedAmount(formatDecimalInput(String(data.financing.financedAmount || '')));
+        setFinancedAmount(loadedFinancedAmount);
+        setSavedSnapshot(saveSnapshot(loadedCases, data.financing.mode, parseDecimalInput(loadedFinancedAmount)));
         if (data.cases.length > 0) setStage('PRICING');
         setIsFormOpen(data.cases.length === 0);
       } catch (loadError) {
@@ -142,30 +167,10 @@ function RenovationContent() {
   useEffect(() => {
     if (!user) return;
 
-    getDocumentsByUser(user.id).then(async (documents) => {
+    // Belege are listed as links, so no signed URLs are fetched up front —
+    // openUpload resolves one on click.
+    getDocumentsByUser(user.id).then((documents) => {
       setDocumentsById(Object.fromEntries(documents.map((document) => [document.documentId, document])));
-
-      const imageDocuments = documents.filter((document) => document.contentType?.startsWith('image/'));
-      if (imageDocuments.length === 0) {
-        setPreviewUrls({});
-        return;
-      }
-
-      const settled = await Promise.allSettled(
-        imageDocuments.map(async (document) => {
-          const url = await getDocumentUrl(document.storagePath);
-          return [document.documentId, url] as const;
-        }),
-      );
-
-      const previewMap = Object.fromEntries(
-        settled
-          .filter((result): result is PromiseFulfilledResult<readonly [number, string | null]> => result.status === 'fulfilled')
-          .map((result) => result.value)
-          .filter((entry): entry is readonly [number, string] => Boolean(entry[1]))
-      );
-
-      setPreviewUrls(previewMap);
     });
   }, [user]);
 
@@ -177,6 +182,58 @@ function RenovationContent() {
   // lossy write that destroyed the entered figure: unticking clamped it down,
   // re-ticking could not bring it back because the original was already gone.
   const sumSelected = useMemo(() => sumSelectedCosts(cases), [cases]);
+
+  // Live indication for the Maßnahme chosen in the form — the same pricing
+  // the case gets once it is added (evaluateRenovationCases).
+  const formPriceRange = category && measure
+    ? indicatePriceRange(category, measure, context ?? {})
+    : null;
+
+  const snapshot = useMemo(
+    () => saveSnapshot(cases, financingMode, parseDecimalInput(financedAmount)),
+    [cases, financingMode, financedAmount],
+  );
+  const isDirty = savedSnapshot !== null && snapshot !== savedSnapshot;
+
+  // Request body of every save — the automatic one below and the explicit
+  // one behind "Auswertung prüfen & anpassen" / "Weiter".
+  const saveBody = useMemo(() => JSON.stringify({
+    quickCheckId,
+    workflowId,
+    cases,
+    pricing: { sum_selected: sumSelected || totals.sum_mid },
+    financing: {
+      mode: financingMode,
+      financedAmount: parseDecimalInput(financedAmount),
+    },
+  }), [quickCheckId, workflowId, cases, sumSelected, totals.sum_mid, financingMode, financedAmount]);
+
+  // Autosave: every added, edited or deleted Modernisierung (and every price,
+  // timing or financing change) is persisted shortly after the last edit, so
+  // nothing is lost when the page is left without "Weiter". Only one save
+  // runs at a time; a change made during it is picked up once it finishes.
+  useEffect(() => {
+    if (isLoading || isSaving || isAutosaving || !isDirty || snapshot === failedSnapshot) return;
+    const timer = setTimeout(async () => {
+      setIsAutosaving(true);
+      try {
+        const res = await authFetch('/api/detail-check/renovation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: saveBody,
+        });
+        if (!res.ok) throw new Error(await res.text());
+        setSavedSnapshot(snapshot);
+        setFailedSnapshot(null);
+      } catch {
+        setFailedSnapshot(snapshot);
+        setError('Die Änderungen konnten nicht automatisch gespeichert werden. Sie werden beim nächsten Speichern erneut übertragen.');
+      } finally {
+        setIsAutosaving(false);
+      }
+    }, AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [isLoading, isSaving, isAutosaving, isDirty, snapshot, failedSnapshot, saveBody]);
 
   useEffect(() => {
     if (financingMode === 'FREMD') setFinancedAmount(formatDecimalInput(String(sumSelected)));
@@ -204,10 +261,6 @@ function RenovationContent() {
         if (uploaded) {
           setUploadNames((prev) => [...prev.filter((name) => name !== `local:${file.name}`), `document:${uploaded.documentId}`]);
           setDocumentsById((prev) => ({ ...prev, [uploaded.documentId]: uploaded }));
-          if (uploaded.contentType?.startsWith('image/')) {
-            const url = await getDocumentUrl(uploaded.storagePath);
-            if (url) setPreviewUrls((prev) => ({ ...prev, [uploaded.documentId]: url }));
-          }
         }
       }
     } finally {
@@ -235,14 +288,14 @@ function RenovationContent() {
     const document = documentsById[documentId];
     if (!document) return;
 
-    const existingUrl = previewUrls[documentId];
+    const existingUrl = documentUrls[documentId];
     if (existingUrl) {
       window.open(existingUrl, '_blank', 'noopener,noreferrer');
       return;
     }
 
     const url = await getDocumentUrl(document.storagePath);
-    setPreviewUrls((prev) => ({ ...prev, [documentId]: url }));
+    setDocumentUrls((prev) => ({ ...prev, [documentId]: url }));
     if (url) {
       window.open(url, '_blank', 'noopener,noreferrer');
     }
@@ -253,12 +306,55 @@ function RenovationContent() {
     return documentsById[Number(reference.slice('document:'.length))]?.fileName ?? 'Datei';
   };
 
-  const addCase = () => {
+  const closeForm = () => {
+    resetForm();
+    setEditingCaseId(null);
+    setIsFormOpen(false);
+  };
+
+  const startEdit = (item: RenovationCase) => {
+    setCategory(item.kategorie);
+    setMeasure(item.massnahme);
+    setDescription(item.beschreibung ?? '');
+    setUploadNames(item.uploads ?? []);
+    setUploadFilesError(null);
+    setEditingCaseId(item.id);
+    setIsFormOpen(true);
+    requestAnimationFrame(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+
+  const confirmDeleteCase = () => {
+    if (!casePendingDelete) return;
+    if (casePendingDelete.id === editingCaseId) closeForm();
+    setCases((prev) => prev.filter((current) => current.id !== casePendingDelete.id));
+    setCasePendingDelete(null);
+  };
+
+  const saveCase = () => {
     if (!category || !measure) {
       setError('Bitte wählen Sie Kategorie und Maßnahme aus.');
       return;
     }
     setError(null);
+
+    if (editingCaseId) {
+      setCases((prev) => prev.map((item) => {
+        if (item.id !== editingCaseId) return item;
+        const edited = { ...item, kategorie: category, massnahme: measure, beschreibung: description.trim(), uploads: uploadNames };
+        // Same measure: keep its price and the amount set for it. A different
+        // measure is a different price range, so it is re-priced from scratch.
+        if (item.kategorie === category && item.massnahme === measure) return edited;
+        const [repriced] = withDefaultSelectedCosts(evaluateRenovationCases({
+          cases: [{ ...edited, cost_selected: undefined }],
+          regionFactor: context?.regionFactor,
+          livingAreaM2: context?.livingAreaM2,
+        }));
+        return repriced;
+      }));
+      closeForm();
+      return;
+    }
+
     // Price the new case right away with the same pure function the API route
     // uses (evaluateRenovationCases in buildResponse). Without this the case
     // enters the list with no `ai` payload, and because the pricing table
@@ -299,22 +395,17 @@ function RenovationContent() {
       const res = await authFetch('/api/detail-check/renovation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          quickCheckId,
-          workflowId,
-          cases,
-          pricing: { sum_selected: sumSelected || totals.sum_mid },
-          financing: {
-            mode: financingMode,
-            financedAmount: parseDecimalInput(financedAmount),
-          },
-        }),
+        body: saveBody,
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json() as RenovationResponse;
-      setCases(withDefaultSelectedCosts(data.cases));
+      const savedCases = withDefaultSelectedCosts(data.cases);
+      const savedFinancedAmount = formatDecimalInput(String(data.financing.financedAmount || ''));
+      setCases(savedCases);
       setFinancingMode(data.financing.mode);
-      setFinancedAmount(formatDecimalInput(String(data.financing.financedAmount || '')));
+      setFinancedAmount(savedFinancedAmount);
+      setSavedSnapshot(saveSnapshot(savedCases, data.financing.mode, parseDecimalInput(savedFinancedAmount)));
+      setFailedSnapshot(null);
       setStage('PRICING');
       setIsEvaluationVisible(true);
       return true;
@@ -356,6 +447,7 @@ function RenovationContent() {
         }),
       });
       if (!res.ok) throw new Error(await res.text());
+      setSavedSnapshot(saveSnapshot([], 'FREMD', 0));
       if (navigate) router.push(`/property-valuation/detail-check/calculator${suffix}`);
       return true;
     } catch (saveError) {
@@ -407,39 +499,41 @@ function RenovationContent() {
       : `${formatEuro(parseDecimalInput(financedAmount))} fremdfinanziert`;
 
   const casesRows: CaseRow[] = cases.map((item) => ({ key: item.id, item }));
-  const summaryRows: SummaryRow[] = [
-    ...selectedCases.map((item) => ({ key: item.id, item })),
-    ...(selectedCases.length > 0 ? [{ key: 'total' as const, item: null }] : []),
-  ];
 
-  const renderUploads = (uploads: string[] | undefined) => (
+  /** Belege as file links; `onRemove` adds a remove button per file (form only). */
+  const renderUploads = (uploads: string[] | undefined, onRemove?: (reference: string) => void) => (
     uploads?.length ? (
-      <div className="flex flex-wrap gap-1.5">
+      <ul className="flex flex-col gap-1">
         {uploads.map((reference) => {
           const documentId = reference.startsWith('document:') ? Number(reference.slice('document:'.length)) : 0;
           const document = documentsById[documentId];
-          const previewUrl = previewUrls[documentId];
+          const FileIcon = document?.contentType?.startsWith('image/') ? Icons.Image : Icons.FileText;
           return (
-            <button
-              key={reference}
-              type="button"
-              onClick={() => void openUpload(reference)}
-              disabled={!document}
-              className="group flex max-w-40 items-center gap-1.5 rounded-md border border-border bg-card p-1 pr-2 text-left text-xs hover:border-primary disabled:cursor-default"
-              title={document ? `${document.fileName} öffnen` : uploadLabel(reference)}
-            >
-              {previewUrl ? (
-                <img src={previewUrl} alt="" className="h-7 w-8 rounded object-cover" />
-              ) : (
-                <span className="flex h-7 w-8 items-center justify-center rounded bg-muted">
-                  <Icons.FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                </span>
+            <li key={reference} className="flex min-w-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => void openUpload(reference)}
+                disabled={!document}
+                title={document ? `${document.fileName} öffnen` : `${uploadLabel(reference)} (wird hochgeladen)`}
+                className="inline-flex min-w-0 cursor-pointer items-center gap-1.5 text-left text-sm text-primary hover:underline disabled:cursor-default disabled:text-muted-foreground disabled:no-underline"
+              >
+                <FileIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span className="truncate">{uploadLabel(reference)}</span>
+              </button>
+              {onRemove && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(reference)}
+                  aria-label={`${uploadLabel(reference)} entfernen`}
+                  className="shrink-0 cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <Icons.X className="h-3.5 w-3.5" />
+                </button>
               )}
-              <span className="min-w-0 truncate">{uploadLabel(reference)}</span>
-            </button>
+            </li>
           );
         })}
-      </div>
+      </ul>
     ) : <span className="text-muted-foreground">–</span>
   );
 
@@ -450,27 +544,55 @@ function RenovationContent() {
       width: '80px',
       renderCell: (_v, row) => (
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
           iconOnly
-          icon={<Icons.Trash2 />}
-          aria-label={`${row.item.massnahme} entfernen`}
-          className="border-destructive/40 text-destructive hover:border-destructive hover:bg-destructive hover:text-destructive-foreground"
-          onClick={() => setCases((prev) => prev.filter((current) => current.id !== row.item.id))}
+          icon={<Icons.MoreVertical />}
+          aria-label={`Aktionen für ${row.item.massnahme}`}
+          menuItems={[
+            { label: 'Bearbeiten', icon: <Icons.Rename />, onClick: () => startEdit(row.item) },
+            { label: 'Löschen', icon: <Icons.Trash2 />, destructive: true, onClick: () => setCasePendingDelete(row.item) },
+          ]}
         />
       ),
     },
-    { key: 'kategorie', label: 'Kategorie', width: '140px', renderCell: (_v, row) => <Tag label={categoryLabel(row.item.kategorie)} variant="info" /> },
-    { key: 'massnahme', label: 'Maßnahme', renderCell: (_v, row) => <span className="font-medium">{row.item.massnahme}</span> },
-    { key: 'beschreibung', label: 'Beschreibung', renderCell: (_v, row) => <span className="text-muted-foreground">{row.item.beschreibung || '–'}</span> },
-    { key: 'uploads', label: 'Belege', renderCell: (_v, row) => renderUploads(row.item.uploads) },
+    { key: 'kategorie', label: 'Kategorie', width: '150px', renderCell: (_v, row) => <Tag label={categoryLabel(row.item.kategorie)} variant="info" /> },
+    {
+      key: 'massnahme',
+      label: 'Maßnahme',
+      width: '22%',
+      renderCell: (_v, row) => <span className="block whitespace-normal break-words font-medium">{row.item.massnahme}</span>,
+    },
+    {
+      key: 'beschreibung',
+      label: 'Beschreibung',
+      // The table cell clips to one line by default; the description is
+      // free text of any length, so it wraps and is always shown in full.
+      renderCell: (_v, row) => (
+        <span className="block whitespace-pre-line break-words text-muted-foreground">{row.item.beschreibung || '–'}</span>
+      ),
+    },
+    { key: 'uploads', label: 'Belege', width: '22%', renderCell: (_v, row) => renderUploads(row.item.uploads) },
   ];
 
-  const pricingColumns: TableColumn<CaseRow>[] = [
+  const allSelected = cases.length > 0 && cases.every((item) => item.selected);
+
+  // One table for both the price indication and the planning (Zeitpunkt,
+  // Auftrag): every captured case, with a checkbox deciding whether it counts
+  // towards the total. Unticked cases stay visible (dimmed) and keep their
+  // amount, so re-ticking restores it.
+  const planningColumns: TableColumn<CaseRow>[] = [
     {
       key: 'selected',
       label: 'Auswahl',
-      width: '90px',
+      header: (
+        <Checkbox
+          checked={allSelected}
+          onChange={(event) => setCases((prev) => prev.map((item) => ({ ...item, selected: event.target.checked })))}
+          aria-label={allSelected ? 'Alle Maßnahmen abwählen' : 'Alle Maßnahmen auswählen'}
+        />
+      ),
+      width: '56px',
       renderCell: (_v, row) => (
         <Checkbox
           checked={row.item.selected}
@@ -479,19 +601,31 @@ function RenovationContent() {
         />
       ),
     },
-    { key: 'massnahme', label: 'Maßnahme', renderCell: (_v, row) => <span className="font-medium">{row.item.massnahme}</span> },
+    {
+      key: 'massnahme',
+      label: 'Maßnahme',
+      renderCell: (_v, row) => (
+        <>
+          <span className="block whitespace-normal break-words font-semibold">{row.item.massnahme}</span>
+          <span className="block text-xs text-muted-foreground">{categoryLabel(row.item.kategorie)}</span>
+        </>
+      ),
+    },
     {
       key: 'indikation',
       label: 'KI-Indikation',
-      renderCell: (_v, row) => <span className="block truncate text-muted-foreground" title={row.item.ai?.summary}>{row.item.ai?.summary ?? '–'}</span>,
+      width: '170px',
+      renderCell: (_v, row) => row.item.ai ? (
+        <span title={row.item.ai.summary}>
+          <span className="text-muted-foreground">{deNumberFormatter.format(row.item.ai.price_min)} – </span>
+          <span className="font-semibold text-primary">{formatEuro(row.item.ai.price_max)}</span>
+        </span>
+      ) : <span className="text-muted-foreground">–</span>,
     },
-    { key: 'von', label: 'Von', align: 'right', width: '110px', renderCell: (_v, row) => <span className="text-muted-foreground">{formatEuro(row.item.ai?.price_min ?? 0)}</span> },
-    { key: 'bis', label: 'Bis', align: 'right', width: '110px', renderCell: (_v, row) => <span className="text-muted-foreground">{formatEuro(row.item.ai?.price_max ?? 0)}</span> },
     {
       key: 'angesetzt',
-      label: 'Angesetzt',
-      align: 'right',
-      width: '160px',
+      label: 'Angesetzt (€)',
+      width: '170px',
       renderCell: (_v, row) => (
         <TextField
           inputMode="decimal"
@@ -505,77 +639,73 @@ function RenovationContent() {
         />
       ),
     },
-  ];
-
-  const summaryColumns: TableColumn<SummaryRow>[] = [
-    {
-      key: 'massnahme',
-      label: 'Maßnahme',
-      renderCell: (_v, row) => row.item ? (
-        <>
-          <div className="font-medium">{row.item.massnahme}</div>
-          <div className="text-xs text-muted-foreground">{categoryLabel(row.item.kategorie)}</div>
-        </>
-      ) : <span className="font-semibold">Gesamtsumme</span>,
-    },
-    {
-      key: 'kosten',
-      label: 'Kosten',
-      align: 'right',
-      width: '140px',
-      renderCell: (_v, row) => row.item ? (
-        <>
-          <div className="font-medium">{formatEuro(costForCase(row.item))}</div>
-          <div className="text-xs text-muted-foreground">Angesetzt</div>
-        </>
-      ) : <span className="text-base font-semibold text-primary">{formatEuro(sumSelected)}</span>,
-    },
     {
       key: 'zeitpunkt',
       label: 'Zeitpunkt',
-      width: '200px',
-      renderCell: (_v, row) => row.item ? (
+      width: '150px',
+      renderCell: (_v, row) => (
         <Dropdown
           aria-label={`${row.item.massnahme} Zeitpunkt`}
           value={row.item.zeitpunkt}
-          onChange={(event) => row.item && updateCase(row.item.id, { zeitpunkt: event.target.value as RenovationTiming })}
+          disabled={!row.item.selected}
+          onChange={(event) => updateCase(row.item.id, { zeitpunkt: event.target.value as RenovationTiming })}
           options={[
             { value: 'SOFORT', label: 'Sofort' },
             { value: 'FLEXIBEL', label: 'Flexibel' },
           ]}
         />
-      ) : (
-        <Dropdown
-          aria-label="Finanzierung"
-          value={financingMode}
-          onChange={(event) => setFinancingMode(event.target.value as RenovationFinancingMode)}
-          options={FINANCING_OPTIONS}
-        />
       ),
     },
     {
       key: 'publish',
-      label: 'Auftrag veröffentlichen',
-      width: '230px',
-      renderCell: (_v, row) => row.item ? (
-        <Checkbox
-          label="Im Handwerker-Netzwerk"
-          checked={row.item.publish_order}
-          onChange={(event) => row.item && updateCase(row.item.id, { publish_order: event.target.checked })}
-        />
-      ) : financingMode === 'TEILWEISE' ? (
-        <TextField
-          value={financedAmount}
-          onChange={(event) => setFinancedAmount(event.target.value)}
-          inputMode="decimal"
-          suffix="€"
-          placeholder="Fremdkapitalanteil"
-          aria-label="Fremdfinanzierter Anteil"
-          title="Der verbleibende Betrag wird als Eigenkapital behandelt."
-        />
-      ) : null,
+      label: 'Auftrag',
+      width: '90px',
+      align: 'center',
+      renderCell: (_v, row) => (
+        <span className="inline-flex justify-center" title="Im Handwerker-Netzwerk ausschreiben">
+          <Checkbox
+            checked={row.item.publish_order}
+            disabled={!row.item.selected}
+            onChange={(event) => updateCase(row.item.id, { publish_order: event.target.checked })}
+            aria-label={`${row.item.massnahme} im Handwerker-Netzwerk ausschreiben`}
+          />
+        </span>
+      ),
     },
   ];
+
+  // Table footer: the total of the ticked cases and how it is financed.
+  const planningFooter = (
+    <span className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm text-foreground">
+      <span className="font-medium">
+        Gesamtsumme: <span className="text-base font-semibold text-primary">{formatEuro(sumSelected)}</span>
+      </span>
+      <span className="flex flex-wrap items-center gap-2">
+        <span className="font-medium">Finanzierung:</span>
+        <span className="w-52">
+          <Dropdown
+            aria-label="Finanzierung"
+            value={financingMode}
+            onChange={(event) => setFinancingMode(event.target.value as RenovationFinancingMode)}
+            options={FINANCING_OPTIONS}
+          />
+        </span>
+        {financingMode === 'TEILWEISE' && (
+          <span className="w-44">
+            <TextField
+              value={financedAmount}
+              onChange={(event) => setFinancedAmount(event.target.value)}
+              inputMode="decimal"
+              suffix="€"
+              placeholder="Fremdkapitalanteil"
+              aria-label="Fremdfinanzierter Anteil"
+              title="Der verbleibende Betrag wird als Eigenkapital behandelt."
+            />
+          </span>
+        )}
+      </span>
+    </span>
+  );
 
 
   return (
@@ -584,6 +714,7 @@ function RenovationContent() {
       title="Sanierungskosten"
       beforeStepChange={persistCurrent}
       showFieldLegend
+      actions={isLoading ? undefined : <SaveStatusIndicator isSaving={isSaving || isAutosaving} isDirty={isDirty} />}
     >
       <div className="pb-24">
         {error && (
@@ -632,17 +763,19 @@ function RenovationContent() {
                     label={isFormOpen ? 'Schließen' : 'Modernisierung hinzufügen'}
                     icon={isFormOpen ? <Icons.X /> : <Icons.Plus />}
                     aria-expanded={isFormOpen}
-                    aria-controls="new-renovation-form"
-                    onClick={() => setIsFormOpen((open) => !open)}
+                    aria-controls="renovation-form"
+                    onClick={() => (isFormOpen ? closeForm() : setIsFormOpen(true))}
                   />
               </div>
 
               {isFormOpen && (
-                <div id="new-renovation-form" className="rounded-lg border border-border bg-card">
+                <div id="renovation-form" ref={formRef} className="scroll-mt-24 rounded-lg border border-border bg-card">
                   <div className="flex items-center justify-between border-b border-border px-4 py-3">
                     <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                      <Icons.Plus className="h-4 w-4 text-primary" aria-hidden="true" />
-                      Neue Modernisierung
+                      {editingCaseId
+                        ? <Icons.Rename className="h-4 w-4 text-primary" aria-hidden="true" />
+                        : <Icons.Plus className="h-4 w-4 text-primary" aria-hidden="true" />}
+                      {editingCaseId ? 'Modernisierung bearbeiten' : 'Neue Modernisierung'}
                     </h4>
                     <Button
                       variant="outline"
@@ -650,7 +783,7 @@ function RenovationContent() {
                       iconOnly
                       icon={<Icons.X />}
                       aria-label="Formular schließen"
-                      onClick={() => setIsFormOpen(false)}
+                      onClick={closeForm}
                     />
                   </div>
 
@@ -727,22 +860,32 @@ function RenovationContent() {
                           />
                         </div>
                         {uploadNames.length > 0 && (
-                          <div className="mt-3">{renderUploads(uploadNames)}</div>
+                          <div className="mt-3">
+                            {renderUploads(uploadNames, (reference) => setUploadNames((prev) => prev.filter((name) => name !== reference)))}
+                          </div>
                         )}
                         {uploadFilesError && <p className="mt-2 text-xs text-destructive">{uploadFilesError}</p>}
                       </div>
                     </div>
+
+                    {formPriceRange && (
+                      <div className="md:col-span-2">
+                        <PriceIndicationHint range={formPriceRange} />
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap justify-end gap-2 border-t border-border px-4 py-3">
-                    <Button variant="outline" size="sm" label="Zurücksetzen" icon={<Icons.X />} onClick={resetForm} />
+                    {editingCaseId
+                      ? <Button variant="outline" size="sm" label={BUTTON_DETAILS.Cancel.label} icon={<Icons.X />} onClick={closeForm} />
+                      : <Button variant="outline" size="sm" label="Zurücksetzen" icon={<Icons.X />} onClick={resetForm} />}
                     <Button
                       variant="outline"
                       size="sm"
-                      label="Hinzufügen"
-                      icon={<Icons.Plus />}
+                      label={editingCaseId ? 'Übernehmen' : 'Hinzufügen'}
+                      icon={editingCaseId ? <Icons.Check /> : <Icons.Plus />}
                       disabled={!category || !measure || isUploadingFiles}
-                      onClick={addCase}
+                      onClick={saveCase}
                     />
                   </div>
                 </div>
@@ -758,17 +901,19 @@ function RenovationContent() {
 
             {stage === 'PRICING' && isEvaluationVisible && (
               <div ref={evaluationRef} className="flex scroll-mt-24 flex-col gap-8">
-                {/* ── Preisindikation ─────────────────────────────────────── */}
+                {/* ── Auswertung & Planung ────────────────────────────────── */}
                 <section className="flex flex-col gap-3">
-                  <SectionLabel>Preisindikation</SectionLabel>
+                  <SectionLabel>Auswertung & Planung</SectionLabel>
                   <Table
-                    columns={pricingColumns}
+                    columns={planningColumns}
                     data={casesRows}
                     emptyMessage="Noch keine Modernisierungen erfasst."
-                    showFooter={false}
+                    footerLeft={planningFooter}
+                    getRowClassName={(row) => (row.item.selected ? undefined : 'opacity-60')}
                   />
                 </section>
 
+                {/* ── Preiswahl ───────────────────────────────────────────── */}
                 <section className="flex flex-col gap-3">
                   <SectionLabel>Mit welchem Preis möchtest du weiterrechnen?</SectionLabel>
                   <PriceRangeSlider
@@ -778,18 +923,6 @@ function RenovationContent() {
                     onChange={(value) => setCases((prev) => distributeTotalAcrossCases(prev, value))}
                     format={formatEuro}
                     hint="Dieser Wert fließt in die Renditeberechnung ein."
-                  />
-                </section>
-
-                {/* ── Zusammenfassung ─────────────────────────────────────── */}
-                <section className="flex flex-col gap-3">
-                  <SectionLabel>Zusammenfassung</SectionLabel>
-                  <Table
-                    columns={summaryColumns}
-                    data={summaryRows}
-                    emptyMessage="Keine Modernisierungen ausgewählt."
-                    showFooter={false}
-                    getRowClassName={(row) => (row.item ? undefined : 'bg-primary/5')}
                   />
                   <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                     <Icons.Info className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -820,6 +953,17 @@ function RenovationContent() {
           ? (cases.length === 0 ? () => void continueWithoutRenovations(true) : evaluateCases)
           : saveAndNext}
       />
+
+      <ConfirmDeleteModal
+        open={casePendingDelete !== null}
+        onCancel={() => setCasePendingDelete(null)}
+        onConfirm={confirmDeleteCase}
+        title="Modernisierung löschen?"
+      >
+        <p className="text-sm text-muted-foreground">
+          {casePendingDelete ? `„${casePendingDelete.massnahme}“ wird aus der Detailbewertung entfernt.` : ''}
+        </p>
+      </ConfirmDeleteModal>
     </PropertyValuationLayout>
   );
 }

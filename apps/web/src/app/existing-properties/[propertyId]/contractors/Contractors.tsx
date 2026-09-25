@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { buildPropertyUseCaseBreadcrumb, formatUnitLabel, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
+import { PriceIndicationHint } from '@/components/features/PriceIndicationHint';
 import { RenovationMeasurePicker } from '@/components/features/RenovationMeasurePicker';
 import {
     Button,
@@ -373,15 +374,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                         customTitle={newMeasure.customTitle}
                         onCustomTitleChange={(customTitle) => setNewMeasure((prev) => ({ ...prev, customTitle }))}
                     />
-                    {newRange && (
-                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                            <Icons.Info className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                            <span>
-                                Preisindikation: <span className="font-medium text-foreground">{formatEuro(newRange.min)} – {formatEuro(newRange.max)}</span>
-                                {' '}(Kategorie, Wohnfläche und PLZ-Regionalfaktor)
-                            </span>
-                        </p>
-                    )}
+                    {newRange && <PriceIndicationHint range={newRange} />}
                     <NumberField
                         label="Kosten veranschlagt"
                         optional
