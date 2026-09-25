@@ -1,6 +1,7 @@
 "use client";
 
-import { Button, Dropdown, Icons, LoadingScreen, ReadOnlyField, SectionLabel, StickyActionBar, Table, TextArea, TextField, type TableColumn } from '@/components/ui';
+import { Button, Checkbox, Dropdown, Icons, LoadingScreen, SectionLabel, StickyActionBar, Table, Tag, TextArea, TextField, type TableColumn } from '@/components/ui';
+import { cn } from '@/lib/utils';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { authFetch } from '@/lib/api/authFetch';
@@ -24,13 +25,16 @@ import { getDocumentsByUser, getDocumentUrl, uploadDocument } from '@/lib/supaba
 import type { UserDocument } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
 
 interface CaseRow extends Record<string, unknown> {
   key: string;
   item: RenovationCase;
 }
+
+/** Summary table row: a selected case, or the trailing Gesamtsumme row. */
+type SummaryRow = CaseRow | { key: 'total'; item: null };
 
 type Stage = 'ENTRY' | 'PRICING';
 
@@ -54,10 +58,19 @@ type RenovationResponse = {
   };
 };
 
+// Whole euros unless an entered amount actually has cents.
 const currencyFormatter = new Intl.NumberFormat('de-DE', {
-  minimumFractionDigits: 2,
+  minimumFractionDigits: 0,
   maximumFractionDigits: 2,
 });
+
+const FINANCING_OPTIONS: { value: RenovationFinancingMode; label: string }[] = [
+  { value: 'FREMD', label: 'Fremdfinanziert' },
+  { value: 'EIGEN', label: 'Eigen finanziert' },
+  { value: 'TEILWEISE', label: 'Teilweise' },
+];
+
+const UPLOAD_ACCEPT = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx';
 
 function formatCurrency(value: number): string {
   return `${currencyFormatter.format(value)} €`;
@@ -70,7 +83,7 @@ function idForCase() {
 
 function measureOptions(category: RenovationCategory | '') {
   return [
-    { value: '', label: 'Bitte wählen...' },
+    { value: '', label: category ? 'Bitte wählen…' : 'Erst Kategorie wählen…' },
     ...((category ? RENOVATION_MEASURES[category] : []) ?? []).map((measure) => ({
       value: measure,
       label: measure,
@@ -78,8 +91,33 @@ function measureOptions(category: RenovationCategory | '') {
   ];
 }
 
-function ReadOnlyPill({ value }: { value: string }) {
-  return <ReadOnlyField value={value} align="right" emphasis />;
+function StatCell({ label, value, caption, valueClassName, captionClassName }: {
+  label: string;
+  value: ReactNode;
+  caption: string;
+  valueClassName?: string;
+  captionClassName?: string;
+}) {
+  return (
+    <div className="min-w-0 bg-card px-4 py-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={cn('mt-1.5 truncate text-xl font-semibold text-foreground', valueClassName)}>{value}</p>
+      <p className={cn('mt-0.5 text-xs text-muted-foreground', captionClassName)}>{caption}</p>
+    </div>
+  );
+}
+
+/** The fixed ends of the price slider — read-only, hence the lock. */
+function BoundBox({ value, caption }: { value: string; caption: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-center">
+      <p className="text-sm font-semibold text-foreground">{value}</p>
+      <p className="mt-0.5 flex items-center justify-center gap-1 text-xs text-muted-foreground">
+        {caption}
+        <Icons.Lock className="h-3 w-3" aria-hidden="true" />
+      </p>
+    </div>
+  );
 }
 
 function RenovationContent() {
@@ -108,6 +146,16 @@ function RenovationContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** "Neue Modernisierung" panel — open by default only while nothing is captured yet. */
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  /** Preisindikation, price choice and Zusammenfassung stay hidden — even
+   *  for a workflow that already has saved (evaluated) cases — until an
+   *  Auswertung is run in this visit ("Auswertung prüfen & anpassen" or
+   *  the bar's "Weiter zur Auswertung"). */
+  const [isEvaluationVisible, setIsEvaluationVisible] = useState(false);
+  const evaluationRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,6 +173,7 @@ function RenovationContent() {
         setFinancingMode(data.financing.mode);
         setFinancedAmount(formatDecimalInput(String(data.financing.financedAmount || '')));
         if (data.cases.length > 0) setStage('PRICING');
+        setIsFormOpen(data.cases.length === 0);
       } catch (loadError) {
         if (!cancelled) {
           setError(loadError instanceof Error ? loadError.message : 'Sanierung konnte nicht geladen werden.');
@@ -216,6 +265,21 @@ function RenovationContent() {
     }
   };
 
+  // Shared by the file picker and drag & drop.
+  const selectFiles = (files: File[]) => {
+    if (files.length === 0 || !user || isUploadingFiles) return;
+    setUploadNames((prev) => [...prev, ...files.map((file) => `local:${file.name}`)]);
+    void handleUploadRenovationFiles(files);
+  };
+
+  const resetForm = () => {
+    setCategory('');
+    setMeasure('');
+    setDescription('');
+    setUploadNames([]);
+    setUploadFilesError(null);
+  };
+
   const openUpload = async (reference: string) => {
     const documentId = Number(reference.replace(/^document:/, ''));
     const document = documentsById[documentId];
@@ -302,6 +366,7 @@ function RenovationContent() {
       setFinancingMode(data.financing.mode);
       setFinancedAmount(formatDecimalInput(String(data.financing.financedAmount || '')));
       setStage('PRICING');
+      setIsEvaluationVisible(true);
       return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Sanierung konnte nicht ausgewertet werden.');
@@ -309,6 +374,13 @@ function RenovationContent() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // Saves + re-evaluates (so cases added since the last Auswertung get
+  // priced), then reveals the evaluation sections and scrolls to them.
+  const openEvaluation = async () => {
+    if (!(await evaluateCases())) return;
+    requestAnimationFrame(() => evaluationRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
 
   const saveAndNext = async () => {
@@ -377,87 +449,99 @@ function RenovationContent() {
 
   const selectedCases = cases.filter((item) => item.selected);
   const primaryLabel = stage === 'ENTRY' ? 'Weiter zur Auswertung' : 'Weiter';
+  const financingLabel = FINANCING_OPTIONS.find((option) => option.value === financingMode)?.label ?? '–';
+  const financingCaption = financingMode === 'FREMD'
+    ? 'über Darlehen'
+    : financingMode === 'EIGEN'
+      ? 'aus Eigenkapital'
+      : `${formatCurrency(parseDecimalInput(financedAmount))} fremdfinanziert`;
 
   const casesRows: CaseRow[] = cases.map((item) => ({ key: item.id, item }));
-  const selectedRows: CaseRow[] = selectedCases.map((item) => ({ key: item.id, item }));
+  const summaryRows: SummaryRow[] = [
+    ...selectedCases.map((item) => ({ key: item.id, item })),
+    ...(selectedCases.length > 0 ? [{ key: 'total' as const, item: null }] : []),
+  ];
+
+  const renderUploads = (uploads: string[] | undefined) => (
+    uploads?.length ? (
+      <div className="flex flex-wrap gap-1.5">
+        {uploads.map((reference) => {
+          const documentId = reference.startsWith('document:') ? Number(reference.slice('document:'.length)) : 0;
+          const document = documentsById[documentId];
+          const previewUrl = previewUrls[documentId];
+          return (
+            <button
+              key={reference}
+              type="button"
+              onClick={() => void openUpload(reference)}
+              disabled={!document}
+              className="group flex max-w-40 items-center gap-1.5 rounded-md border border-border bg-card p-1 pr-2 text-left text-xs hover:border-primary disabled:cursor-default"
+              title={document ? `${document.fileName} öffnen` : uploadLabel(reference)}
+            >
+              {previewUrl ? (
+                <img src={previewUrl} alt="" className="h-7 w-8 rounded object-cover" />
+              ) : (
+                <span className="flex h-7 w-8 items-center justify-center rounded bg-muted">
+                  <Icons.FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                </span>
+              )}
+              <span className="min-w-0 truncate">{uploadLabel(reference)}</span>
+            </button>
+          );
+        })}
+      </div>
+    ) : <span className="text-muted-foreground">–</span>
+  );
 
   const casesColumns: TableColumn<CaseRow>[] = [
-    { key: 'kategorie', label: 'Kategorie', renderCell: (_v, row) => categoryLabel(row.item.kategorie) },
-    { key: 'massnahme', label: 'Maßnahme', renderCell: (_v, row) => row.item.massnahme },
-    { key: 'beschreibung', label: 'Beschreibung', renderCell: (_v, row) => <span className="text-muted-foreground">{row.item.beschreibung || '-'}</span> },
-    {
-      key: 'uploads',
-      label: 'Bilder und Unterlagen',
-      renderCell: (_v, row) => (
-        row.item.uploads?.length ? (
-          <div className="flex flex-wrap gap-2">
-            {row.item.uploads.map((reference) => {
-              const documentId = reference.startsWith('document:') ? Number(reference.slice('document:'.length)) : 0;
-              const document = documentsById[documentId];
-              const previewUrl = previewUrls[documentId];
-              return (
-                <button
-                  key={reference}
-                  type="button"
-                  onClick={() => void openUpload(reference)}
-                  disabled={!document}
-                  className="group flex max-w-48 items-center gap-2 rounded-md border border-border bg-card p-1.5 text-left text-xs hover:border-primary disabled:cursor-default"
-                  title={document ? `${document.fileName} öffnen` : uploadLabel(reference)}
-                >
-                  {previewUrl ? (
-                    <img src={previewUrl} alt="" className="h-10 w-12 rounded object-cover" />
-                  ) : document?.contentType?.startsWith('image/') ? (
-                    <div className="flex h-10 w-12 items-center justify-center rounded bg-muted">
-                      <Icons.AlertTriangle className="w-4 h-4 text-warning" />
-                    </div>
-                  ) : (
-                    <Icons.FileText className="w-[18px] h-[18px]" />
-                  )}
-                  <span className="min-w-0 truncate">{uploadLabel(reference)}</span>
-                  {document && <Icons.Eye className="w-3.5 h-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />}
-                </button>
-              );
-            })}
-          </div>
-        ) : '-'
-      ),
-    },
     {
       key: 'actions',
       label: 'Aktion',
+      width: '80px',
       renderCell: (_v, row) => (
-        <button
-          type="button"
-          className="text-sm text-destructive cursor-pointer"
+        <Button
+          variant="outline"
+          size="sm"
+          iconOnly
+          icon={<Icons.Trash2 />}
+          aria-label={`${row.item.massnahme} entfernen`}
+          className="border-destructive/40 text-destructive hover:border-destructive hover:bg-destructive hover:text-destructive-foreground"
           onClick={() => setCases((prev) => prev.filter((current) => current.id !== row.item.id))}
-        >
-          Entfernen
-        </button>
+        />
       ),
     },
+    { key: 'kategorie', label: 'Kategorie', width: '140px', renderCell: (_v, row) => <Tag label={categoryLabel(row.item.kategorie)} variant="info" /> },
+    { key: 'massnahme', label: 'Maßnahme', renderCell: (_v, row) => <span className="font-medium">{row.item.massnahme}</span> },
+    { key: 'beschreibung', label: 'Beschreibung', renderCell: (_v, row) => <span className="text-muted-foreground">{row.item.beschreibung || '–'}</span> },
+    { key: 'uploads', label: 'Belege', renderCell: (_v, row) => renderUploads(row.item.uploads) },
   ];
 
   const pricingColumns: TableColumn<CaseRow>[] = [
     {
       key: 'selected',
       label: 'Auswahl',
-      width: '80px',
+      width: '90px',
       renderCell: (_v, row) => (
-        <input
-          type="checkbox"
+        <Checkbox
           checked={row.item.selected}
           onChange={(event) => updateCase(row.item.id, { selected: event.target.checked })}
           aria-label={`${row.item.massnahme} auswählen`}
         />
       ),
     },
-    { key: 'massnahme', label: 'Maßnahme', renderCell: (_v, row) => <span className="font-medium text-foreground">{row.item.massnahme}</span> },
-    { key: 'indikation', label: 'Indikation', renderCell: (_v, row) => <span className="text-muted-foreground">{row.item.ai?.summary ?? '-'}</span> },
-    { key: 'von', label: 'Von', align: 'right', renderCell: (_v, row) => formatCurrency(row.item.ai?.price_min ?? 0) },
-    { key: 'bis', label: 'Bis', align: 'right', renderCell: (_v, row) => formatCurrency(row.item.ai?.price_max ?? 0) },
+    { key: 'massnahme', label: 'Maßnahme', renderCell: (_v, row) => <span className="font-medium">{row.item.massnahme}</span> },
+    {
+      key: 'indikation',
+      label: 'KI-Indikation',
+      renderCell: (_v, row) => <span className="block truncate text-muted-foreground" title={row.item.ai?.summary}>{row.item.ai?.summary ?? '–'}</span>,
+    },
+    { key: 'von', label: 'Von', align: 'right', width: '110px', renderCell: (_v, row) => <span className="text-muted-foreground">{formatCurrency(row.item.ai?.price_min ?? 0)}</span> },
+    { key: 'bis', label: 'Bis', align: 'right', width: '110px', renderCell: (_v, row) => <span className="text-muted-foreground">{formatCurrency(row.item.ai?.price_max ?? 0)}</span> },
     {
       key: 'angesetzt',
       label: 'Angesetzt',
+      align: 'right',
+      width: '160px',
       renderCell: (_v, row) => (
         <TextField
           inputMode="decimal"
@@ -473,58 +557,77 @@ function RenovationContent() {
     },
   ];
 
-  const summaryColumns: TableColumn<CaseRow>[] = [
+  const summaryColumns: TableColumn<SummaryRow>[] = [
     {
       key: 'massnahme',
       label: 'Maßnahme',
-      renderCell: (_v, row) => (
+      renderCell: (_v, row) => row.item ? (
         <>
           <div className="font-medium">{row.item.massnahme}</div>
           <div className="text-xs text-muted-foreground">{categoryLabel(row.item.kategorie)}</div>
         </>
-      ),
+      ) : <span className="font-semibold">Gesamtsumme</span>,
     },
     {
       key: 'kosten',
       label: 'Kosten',
       align: 'right',
-      renderCell: (_v, row) => (
+      width: '140px',
+      renderCell: (_v, row) => row.item ? (
         <>
-          <div>{formatCurrency(costForCase(row.item))}</div>
-          <div className="text-xs font-normal text-muted-foreground">In der Preisindikation angesetzt</div>
+          <div className="font-medium">{formatCurrency(costForCase(row.item))}</div>
+          <div className="text-xs text-muted-foreground">Angesetzt</div>
         </>
-      ),
+      ) : <span className="text-base font-semibold text-primary">{formatCurrency(sumSelected)}</span>,
     },
     {
       key: 'zeitpunkt',
       label: 'Zeitpunkt',
-      renderCell: (_v, row) => (
+      width: '200px',
+      renderCell: (_v, row) => row.item ? (
         <Dropdown
           aria-label={`${row.item.massnahme} Zeitpunkt`}
           value={row.item.zeitpunkt}
-          onChange={(event) => updateCase(row.item.id, { zeitpunkt: event.target.value as RenovationTiming })}
+          onChange={(event) => row.item && updateCase(row.item.id, { zeitpunkt: event.target.value as RenovationTiming })}
           options={[
             { value: 'SOFORT', label: 'Sofort' },
             { value: 'FLEXIBEL', label: 'Flexibel' },
           ]}
+        />
+      ) : (
+        <Dropdown
+          aria-label="Finanzierung"
+          value={financingMode}
+          onChange={(event) => setFinancingMode(event.target.value as RenovationFinancingMode)}
+          options={FINANCING_OPTIONS}
         />
       ),
     },
     {
       key: 'publish',
       label: 'Auftrag veröffentlichen',
-      renderCell: (_v, row) => (
-        <label className="inline-flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={row.item.publish_order}
-            onChange={(event) => updateCase(row.item.id, { publish_order: event.target.checked })}
-          />
-          Ja
-        </label>
-      ),
+      width: '230px',
+      renderCell: (_v, row) => row.item ? (
+        <Checkbox
+          label="Im Handwerker-Netzwerk"
+          checked={row.item.publish_order}
+          onChange={(event) => row.item && updateCase(row.item.id, { publish_order: event.target.checked })}
+        />
+      ) : financingMode === 'TEILWEISE' ? (
+        <TextField
+          value={financedAmount}
+          onChange={(event) => setFinancedAmount(event.target.value)}
+          inputMode="decimal"
+          suffix="€"
+          placeholder="Fremdkapitalanteil"
+          aria-label="Fremdfinanzierter Anteil"
+          title="Der verbleibende Betrag wird als Eigenkapital behandelt."
+        />
+      ) : null,
     },
   ];
+
+  const sliderMax = Math.max(totals.sum_max, totals.sum_min);
 
   return (
     <PropertyValuationLayout
@@ -543,183 +646,244 @@ function RenovationContent() {
         {isLoading ? (
           <LoadingScreen message="Sanierung wird geladen…" fullScreen={false} />
         ) : (
-          <div className="flex flex-col gap-6">
-            <div className="flex flex-col gap-3">
-              <SectionLabel>Übersicht</SectionLabel>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="min-w-0 rounded-lg border border-border bg-card p-4">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Modernisierungen</p>
-                  <p className="mt-2 text-2xl font-semibold text-foreground">{cases.length}</p>
-                </div>
-                <div className="min-w-0 rounded-lg border border-border bg-card p-4">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Kostenspanne</p>
-                  <p className="mt-2 text-2xl font-semibold text-foreground">{stage === 'PRICING' ? `${formatCurrency(totals.sum_min)} – ${formatCurrency(totals.sum_max)}` : '–'}</p>
-                </div>
-                <div className="min-w-0 rounded-lg border border-border bg-card p-4">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Ausgewählt</p>
-                  <p className="mt-2 text-2xl font-semibold text-primary">{stage === 'PRICING' ? formatCurrency(sumSelected) : '–'}</p>
-                </div>
-                <div className="min-w-0 rounded-lg border border-border bg-card p-4">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Finanzierung</p>
-                  <p className="mt-2 text-2xl font-semibold text-foreground">
-                    {financingMode === 'FREMD' ? 'Fremdfinanziert' : financingMode === 'EIGEN' ? 'Eigen finanziert' : 'Teilweise'}
-                  </p>
-                </div>
-              </div>
+          <div className="flex flex-col gap-8">
+            {/* ── Übersicht ─────────────────────────────────────────────── */}
+            {/* gap-px over a border-coloured background draws the dividers,
+                for both the 2×2 (mobile) and 1×4 layout. */}
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
+              <StatCell label="Modernisierungen" value={cases.length} caption="erfasst" />
+              <StatCell
+                label="Angesetzte Kosten"
+                value={stage === 'PRICING' ? formatCurrency(sumSelected) : '–'}
+                valueClassName="text-primary"
+                caption={stage === 'PRICING' ? 'nach Auswertung' : 'nach Auswertung verfügbar'}
+              />
+              <StatCell
+                label="Ausgewählt"
+                value={`${selectedCases.length} / ${cases.length}`}
+                valueClassName={selectedCases.length > 0 ? 'text-success' : undefined}
+                caption="für Kalkulation"
+              />
+              <StatCell label="Finanzierung" value={financingLabel} caption={financingCaption} captionClassName="text-accent-text" />
             </div>
 
-            <div className="flex flex-col gap-2">
-              <SectionLabel>Aufnahme der Modernisierungen</SectionLabel>
+            {/* ── Erfasste Modernisierungen ─────────────────────────────── */}
+            <section className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Erfasste Modernisierungen</h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    label="Auswertung prüfen & anpassen"
+                    icon={isSaving ? <Icons.Loader2 className="animate-spin" /> : <Icons.BarChart3 />}
+                    disabled={cases.length === 0 || isLoading || isSaving}
+                    onClick={() => void openEvaluation()}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    label={isFormOpen ? 'Schließen' : 'Modernisierung hinzufügen'}
+                    icon={isFormOpen ? <Icons.X /> : <Icons.Plus />}
+                    aria-expanded={isFormOpen}
+                    aria-controls="new-renovation-form"
+                    onClick={() => setIsFormOpen((open) => !open)}
+                  />
+                </div>
+              </div>
 
-              <div className="grid gap-4 pt-1 md:grid-cols-2">
-                <Dropdown
-                  label="Kategorie"
-                  value={category}
-                  onChange={(event) => {
-                    setCategory(event.target.value as RenovationCategory);
-                    setMeasure('');
-                  }}
-                  options={[
-                    { value: '', label: 'Bitte wählen...' },
-                    ...RENOVATION_CATEGORIES,
-                  ]}
-                />
-                <Dropdown
-                  label="Maßnahme"
-                  value={measure}
-                  onChange={(event) => setMeasure(event.target.value)}
-                  disabled={!category}
-                  options={measureOptions(category)}
-                />
-                <TextArea
-                  label="Beschreibung"
-                  optional
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  maxLength={1500}
-                  helperText="Optional: Schaden oder Modernisierungswunsch beschreiben. Bilder und Text können kombiniert werden."
-                />
-                <div className="rounded-lg border border-dashed border-border bg-card px-4 py-3">
-                    <div className="mb-3 flex items-start gap-3">
-                      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><Icons.Upload className="w-[18px] h-[18px]" /></span>
-                      <div>
-                        <h3 className="font-medium text-foreground">Bilder und Unterlagen hochladen</h3>
-                        <p className="text-xs text-muted-foreground">Exposé, Besichtigungsfotos oder vorhandene Kostendokumente</p>
+              {isFormOpen && (
+                <div id="new-renovation-form" className="rounded-lg border border-border bg-card">
+                  <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                    <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <Icons.Plus className="h-4 w-4 text-primary" aria-hidden="true" />
+                      Neue Modernisierung
+                    </h4>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      iconOnly
+                      icon={<Icons.X />}
+                      aria-label="Formular schließen"
+                      onClick={() => setIsFormOpen(false)}
+                    />
+                  </div>
+
+                  <div className="grid gap-4 p-4 md:grid-cols-2">
+                    <Dropdown
+                      label="Kategorie"
+                      value={category}
+                      onChange={(event) => {
+                        setCategory(event.target.value as RenovationCategory);
+                        setMeasure('');
+                      }}
+                      options={[
+                        { value: '', label: 'Bitte wählen…' },
+                        ...RENOVATION_CATEGORIES,
+                      ]}
+                    />
+                    <Dropdown
+                      label="Maßnahme"
+                      value={measure}
+                      onChange={(event) => setMeasure(event.target.value)}
+                      disabled={!category}
+                      options={measureOptions(category)}
+                    />
+                    <div className="md:col-span-2">
+                      <TextArea
+                        label="Beschreibung"
+                        optional
+                        value={description}
+                        onChange={(event) => setDescription(event.target.value)}
+                        maxLength={1500}
+                        rows={3}
+                        placeholder="Schaden oder Modernisierungswunsch beschreiben. Bilder und Text können kombiniert werden."
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <p className="mb-2 text-sm font-medium text-foreground">
+                        Bilder & Unterlagen <span className="font-normal text-muted-foreground">(optional)</span>
+                      </p>
+                      <div
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          setIsDraggingFiles(true);
+                        }}
+                        onDragLeave={() => setIsDraggingFiles(false)}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          setIsDraggingFiles(false);
+                          selectFiles(Array.from(event.dataTransfer.files));
+                        }}
+                        className={cn(
+                          'rounded-lg border-2 border-dashed px-4 py-4 transition-colors',
+                          isDraggingFiles ? 'border-primary bg-primary/5' : 'border-border bg-background',
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                            <Icons.Image className="h-[18px] w-[18px]" aria-hidden="true" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground">Bilder und Unterlagen hochladen</p>
+                            <p className="text-xs text-muted-foreground">Exposé, Besichtigungsfotos, Kostendokumente · PNG, JPG, PDF</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            label="Datei auswählen"
+                            icon={isUploadingFiles ? <Icons.Loader2 className="animate-spin" /> : <Icons.Upload />}
+                            disabled={!user || isUploadingFiles}
+                            onClick={() => fileInputRef.current?.click()}
+                          />
+                          <span className="text-xs text-muted-foreground">oder hierher ziehen</span>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            accept={UPLOAD_ACCEPT}
+                            className="sr-only"
+                            tabIndex={-1}
+                            aria-hidden="true"
+                            onChange={(event) => {
+                              selectFiles(Array.from(event.target.files ?? []));
+                              event.target.value = '';
+                            }}
+                          />
+                        </div>
+                        {uploadNames.length > 0 && (
+                          <div className="mt-3">{renderUploads(uploadNames)}</div>
+                        )}
+                        {uploadFilesError && <p className="mt-2 text-xs text-destructive">{uploadFilesError}</p>}
                       </div>
                     </div>
-                  <input
-                    type="file"
-                    multiple
-                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
-                    disabled={!user || isUploadingFiles}
-                    onChange={(event) => {
-                      const files = Array.from(event.target.files ?? []);
-                      setUploadNames(files.map((file) => `local:${file.name}`));
-                      void handleUploadRenovationFiles(files);
-                    }}
-                    className="block w-full text-sm text-muted-foreground disabled:opacity-50"
-                  />
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Dateien werden gespeichert und erscheinen auf der Dokumente-Seite. Die Preisindikation verwendet derzeit Kategorie, Wohnfläche und PLZ; eine KI-Bildauswertung ist noch nicht angebunden.
-                  </p>
-                  {uploadNames.length > 0 && <p className="mt-2 text-xs font-medium text-primary">Ausgewählt: {uploadNames.map(uploadLabel).join(', ')}</p>}
-                  {isUploadingFiles && <p className="mt-1 text-xs text-muted-foreground">Lädt hoch…</p>}
-                  {uploadFilesError && <p className="mt-1 text-xs text-destructive">{uploadFilesError}</p>}
-                </div>
-                <div className="flex items-end justify-start md:col-start-2 md:justify-end">
-                  <Button label="Modernisierung hinzufügen" icon={<Icons.Plus className="w-4 h-4" />} onClick={addCase} />
-                </div>
-              </div>
+                  </div>
 
-              <div className="mt-6">
-                <Table
-                  columns={casesColumns}
-                  data={casesRows}
-                  emptyMessage="Noch keine Modernisierungen erfasst."
-                  footerLeft={`${cases.length} Einträge`}
-                />
-              </div>
-            </div>
+                  <div className="flex flex-wrap justify-end gap-2 border-t border-border px-4 py-3">
+                    <Button variant="outline" size="sm" label="Zurücksetzen" icon={<Icons.X />} onClick={resetForm} />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      label="Hinzufügen"
+                      icon={<Icons.Plus />}
+                      disabled={!category || !measure || isUploadingFiles}
+                      onClick={addCase}
+                    />
+                  </div>
+                </div>
+              )}
 
-            {stage === 'PRICING' && (
-              <>
-                <div className="flex flex-col gap-2">
+              <Table
+                columns={casesColumns}
+                data={casesRows}
+                emptyMessage="Noch keine Modernisierungen erfasst."
+                footerLeft={`${cases.length} ${cases.length === 1 ? 'Eintrag' : 'Einträge'}`}
+              />
+            </section>
+
+            {stage === 'PRICING' && isEvaluationVisible && (
+              <div ref={evaluationRef} className="flex scroll-mt-24 flex-col gap-8">
+                {/* ── Preisindikation ─────────────────────────────────────── */}
+                <section className="flex flex-col gap-3">
                   <SectionLabel>Preisindikation</SectionLabel>
                   <Table
                     columns={pricingColumns}
                     data={casesRows}
                     emptyMessage="Noch keine Modernisierungen erfasst."
-                    footerLeft={`${cases.length} Einträge`}
+                    showFooter={false}
                   />
+                </section>
 
-                  <div className="mt-6 max-w-3xl">
-                    <p className="mb-3 text-lg font-medium">Mit welchem Preis wollen Sie weiterrechnen?</p>
-                    <div className="grid gap-3 md:grid-cols-[130px_1fr_130px] md:items-center">
-                      <ReadOnlyPill value={formatCurrency(totals.sum_min)} />
+                <section className="flex flex-col gap-3">
+                  <SectionLabel>Mit welchem Preis weiterrechnen?</SectionLabel>
+                  <div className="rounded-lg border border-border bg-card p-4">
+                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[120px_1fr_120px]">
+                      <div className="order-1"><BoundBox value={formatCurrency(totals.sum_min)} caption="Minimum" /></div>
                       <input
                         type="range"
                         min={totals.sum_min}
-                        max={Math.max(totals.sum_max, totals.sum_min)}
+                        max={sliderMax}
                         step="100"
                         value={Math.max(totals.sum_min, Math.min(totals.sum_max, sumSelected))}
                         disabled={totals.sum_max <= totals.sum_min}
                         onChange={(event) => setCases((prev) => distributeTotalAcrossCases(prev, Number(event.target.value)))}
                         aria-label="Preis für weitere Berechnung"
+                        className="order-3 col-span-2 w-full cursor-pointer accent-primary disabled:cursor-not-allowed sm:order-2 sm:col-span-1"
                       />
-                      <ReadOnlyPill value={formatCurrency(totals.sum_max)} />
+                      <div className="order-2 sm:order-3"><BoundBox value={formatCurrency(totals.sum_max)} caption="Maximum" /></div>
                     </div>
-                    <div className="mt-3 max-w-xs">
-                      <ReadOnlyPill value={`Ausgewählt: ${formatCurrency(sumSelected)}`} />
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      <span className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm">
+                        <Icons.Lock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                        <span className="font-medium text-foreground">Ausgewählt:</span>
+                        <span className="font-semibold text-primary">{formatCurrency(sumSelected)}</span>
+                      </span>
+                      <span className="text-xs text-muted-foreground">Dieser Wert fließt in die Renditeberechnung ein.</span>
                     </div>
                   </div>
-                </div>
+                </section>
 
-                <div className="flex flex-col gap-2">
+                {/* ── Zusammenfassung ─────────────────────────────────────── */}
+                <section className="flex flex-col gap-3">
                   <SectionLabel>Zusammenfassung</SectionLabel>
                   <Table
                     columns={summaryColumns}
-                    data={selectedRows}
+                    data={summaryRows}
                     emptyMessage="Keine Modernisierungen ausgewählt."
-                    footerLeft={`${selectedCases.length} Einträge`}
-                    footerRight={`Gesamtsumme: ${formatCurrency(sumSelected)}`}
+                    showFooter={false}
+                    getRowClassName={(row) => (row.item ? undefined : 'bg-primary/5')}
                   />
-                  <div className="rounded-lg border border-border bg-card p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                      <div>
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide">Gesamtsumme</p>
-                        <p className="mt-1 text-2xl font-semibold text-foreground">{formatCurrency(sumSelected)}</p>
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-[minmax(0,240px)_minmax(0,220px)]">
-                        <Dropdown
-                          label="Finanzierung"
-                          value={financingMode}
-                          onChange={(event) => setFinancingMode(event.target.value as RenovationFinancingMode)}
-                          options={[
-                            { value: 'FREMD', label: 'Fremdfinanziert' },
-                            { value: 'EIGEN', label: 'Eigen finanziert' },
-                            { value: 'TEILWEISE', label: 'Teilweise' },
-                          ]}
-                        />
-                        {financingMode === 'TEILWEISE' && (
-                          <TextField
-                            label="Fremdkapitalanteil"
-                            optional
-                            value={financedAmount}
-                            onChange={(event) => setFinancedAmount(event.target.value)}
-                            inputMode="decimal"
-                            suffix="€"
-                            aria-label="Fremdfinanzierter Anteil"
-                            helperText="Der verbleibende Betrag wird als Eigenkapital behandelt."
-                          />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Preisindikation aktuell per lokaler Fallback-Logik mit PLZ-Faktor{context?.postalCode ? ` (${context.postalCode})` : ''}; die KI- und Upload-Auswertung ist als nächster Integrationspunkt vorbereitet.
+                  <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                    <Icons.Info className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span>
+                      Preisindikation aktuell per lokaler Fallback-Logik mit PLZ-Faktor{context?.postalCode ? ` (${context.postalCode})` : ''}; die KI- und Upload-Auswertung ist als nächster Integrationspunkt vorbereitet.
+                    </span>
                   </p>
-                </div>
-              </>
+                </section>
+              </div>
             )}
           </div>
         )}
