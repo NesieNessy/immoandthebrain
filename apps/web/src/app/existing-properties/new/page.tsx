@@ -346,6 +346,7 @@ function NewPropertyPageContent() {
         primaryLabel="Objekt speichern"
         primaryIcon={<BUTTON_DETAILS.Save.icon />}
         primaryDisabled={!isEditing || !isValid || isSaving || authLoading}
+        loading={isSaving}
         onPrimary={() => void handleSave()}
       />
 

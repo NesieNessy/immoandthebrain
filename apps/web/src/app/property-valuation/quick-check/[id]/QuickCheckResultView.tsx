@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { NoResult } from '@/components/common';
 import { KpfAssessmentCard } from '@/components/features/KpfAssessmentCard';
@@ -345,6 +345,7 @@ export function QuickCheckResultView({ id }: Props) {
           primaryLabel="Ersteinschätzung speichern"
           primaryIcon={<BUTTON_DETAILS.Save.icon />}
           primaryDisabled={!isEditValid || isBusy || !hasChanges}
+          loading={isBusy}
           onPrimary={() => void handleTakeOver()}
         />
 

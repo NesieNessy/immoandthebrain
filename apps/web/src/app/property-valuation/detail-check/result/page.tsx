@@ -267,6 +267,7 @@ function ResultContent() {
         primaryLabel="Speichern"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving}
+        loading={isSaving}
         onPrimary={saveRecommendation}
       />
     </PropertyValuationLayout>

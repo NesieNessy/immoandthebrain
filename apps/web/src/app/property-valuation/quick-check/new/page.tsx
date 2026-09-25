@@ -282,6 +282,7 @@ export default function QuickCheckPage() {
           primaryLabel="Ersteinschätzung speichern"
           primaryIcon={<BUTTON_DETAILS.Save.icon />}
           primaryDisabled={!isFormValid || isSaving || authLoading || !user}
+          loading={isSaving}
           onPrimary={handleTakeOver}
         />
 

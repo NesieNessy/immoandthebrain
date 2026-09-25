@@ -333,6 +333,7 @@ export function TenantMoveOutView({ propertyId, property, unit, hasMultipleUnits
                 primaryLabel="Mieterauszug speichern"
                 primaryIcon={<BUTTON_DETAILS.Save.icon />}
                 primaryDisabled={data.isSaving}
+                loading={data.isSaving}
                 onPrimary={() => void data.handleSave()}
             />
 

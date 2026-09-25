@@ -695,6 +695,7 @@ function RenovationContent() {
         primaryLabel={primaryLabel}
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving}
+        loading={isSaving}
         onPrimary={stage === 'ENTRY'
           ? (cases.length === 0 ? () => void continueWithoutRenovations(true) : evaluateCases)
           : saveAndNext}

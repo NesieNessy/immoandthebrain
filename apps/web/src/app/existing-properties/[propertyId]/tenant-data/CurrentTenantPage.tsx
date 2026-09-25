@@ -340,6 +340,7 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                 primaryLabel={data.isArchived ? 'Mieter reaktivieren' : 'Mieterdaten speichern'}
                 primaryIcon={data.isArchived ? <RotateCcw className="w-4 h-4" /> : <BUTTON_DETAILS.Save.icon />}
                 primaryDisabled={data.isArchived ? isReactivating : (!data.isEditing || data.isSaving || !data.isPrimaryPersonValid)}
+                loading={data.isSaving}
             />
 
             <Modal
@@ -358,7 +359,7 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                         <Button
                             label="Reaktivieren"
                             variant="primary"
-                            disabled={isReactivating}
+                            loading={isReactivating}
                             onClick={() => void handleConfirmReactivate()}
                         />
                     </>
@@ -409,7 +410,8 @@ export function CurrentTenantPage({ propertyId, property, unit, hasMultipleUnits
                             label="Speichern"
                             icon={<Icons.Check className="w-4 h-4" />}
                             variant="primary"
-                            disabled={data.renameValue.trim() === '' || data.isRenaming}
+                            disabled={data.renameValue.trim() === ''}
+                            loading={data.isRenaming}
                             onClick={() => void data.confirmRenameDocument()}
                         />
                     </>

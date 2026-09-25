@@ -198,6 +198,7 @@ function ComparisonContent() {
         primaryLabel="Weiter"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving}
+        loading={isSaving}
         onPrimary={saveAndNext}
       />
     </PropertyValuationLayout>

@@ -914,6 +914,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                 primaryLabel="Abrechnung speichern"
                 primaryIcon={<BUTTON_DETAILS.Save.icon />}
                 primaryDisabled={!data.isEditing || data.isSaving}
+                loading={data.isSaving}
                 leftContent={<DetailFieldLegend />}
             />
 
