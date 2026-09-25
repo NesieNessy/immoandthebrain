@@ -236,6 +236,42 @@ describe('suggestShareForCostItem', () => {
         expect(suggestShareForCostItem(4500, 'Grundsteuer', [], previous)?.rate).toBeCloseTo(0.08, 5);
         expect(suggestShareForCostItem(1200, 'Aufzug', [], previous)?.rate).toBeCloseTo(0.25, 5);
     });
+
+    it('never suggests a negative Anteil Wohnung from a corrupt explicit key (negative numerator)', () => {
+        const result = suggestShareForCostItem(
+            4500,
+            'Grundsteuer',
+            [{ label: 'Grundsteuer', numerator: -80, denominator: 1000, allocationType: null }],
+            [],
+        );
+        expect(result).toBeNull();
+    });
+
+    it('never suggests a negative Anteil Wohnung from a corrupt explicit key (negative denominator)', () => {
+        const result = suggestShareForCostItem(
+            4500,
+            'Grundsteuer',
+            [{ label: 'Grundsteuer', numerator: 80, denominator: -1000, allocationType: null }],
+            [],
+        );
+        expect(result).toBeNull();
+    });
+
+    it('never suggests a negative Anteil Wohnung from corrupt prior-period history', () => {
+        const result = suggestShareForCostItem(4500, 'Grundsteuer', [], [{ label: 'Grundsteuer', actualAmount: 4000, actualShareOverride: -320 }]);
+        expect(result).toBeNull();
+    });
+
+    it('floors the suggested value at 0 if the row\'s own Gesamt Objekt is negative despite a valid key', () => {
+        const result = suggestShareForCostItem(
+            -4500,
+            'Grundsteuer',
+            [{ label: 'Grundsteuer', numerator: 80, denominator: 1000, allocationType: null }],
+            [],
+        );
+        expect(result?.value).toBe(0);
+        expect(result?.value).not.toBeLessThan(0);
+    });
 });
 
 describe('occupancyFraction', () => {
@@ -281,6 +317,22 @@ describe('computeUnitSettlementSummary', () => {
         expect(result.overUnderCoverage).toBeCloseTo(-200, 2);
         expect(result.settlementCoverage).toBe('surplus');
         expect(result.newMonthlyPrepayment).toBeCloseTo(1100 / 12, 2);
+    });
+
+    it('floors newMonthlyPrepayment at 0 — a monthly prepayment can never be negative', () => {
+        const result = computeUnitSettlementSummary({
+            costItems: [
+                { actualAmount: 4000, budgetAmount: 4400, allocable: true, actualShareOverride: 1000, budgetShareOverride: -1100 },
+            ],
+            unitLivingAreaM2: 50,
+            totalLivingAreaM2: 200,
+            currentMonthlyPrepayment: 100,
+            miscRentHistory: [],
+            periodStart: new Date(2026, 0, 1),
+            periodEnd: new Date(2026, 11, 31),
+        });
+        expect(result.unitBudgetShare).toBe(-1100);
+        expect(result.newMonthlyPrepayment).toBe(0);
     });
 
     it('never falls back to a living-area-proportional split when no manual Anteil Wohnung is entered', () => {

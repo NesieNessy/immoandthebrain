@@ -472,7 +472,11 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     const budgetOverUnderCoverage = unitBudgetShare - annualPrepayment;
 
     // Budget plan (3) divided by 12, compared against the current monthly NK-Vorauszahlung.
-    const newMonthlyPrepayment = totalBudgetAllocable > 0 ? Math.round((unitBudgetShare / 12) * 100) / 100 : null;
+    // A monthly prepayment can never be negative in reality — floored at 0 so
+    // bad input (e.g. a mistyped Anteil Wohnung, or an extracted document
+    // value) can never propagate into "übernehmen" writing a negative
+    // miscRent onto the tenancy.
+    const newMonthlyPrepayment = totalBudgetAllocable > 0 ? Math.max(0, Math.round((unitBudgetShare / 12) * 100) / 100) : null;
     // Drives the "übernehmen" button: compared against the LIVE tenancy rate,
     // since that's the value the button actually writes to (a no-op, and
     // therefore disabled, once they already match).
