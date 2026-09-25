@@ -483,6 +483,10 @@ describe('isPeriodTooLong', () => {
     it('is false for a short partial-year period', () => {
         expect(isPeriodTooLong(new Date(2026, 3, 1), new Date(2026, 8, 22))).toBe(false);
     });
+
+    it('ignores a time-of-day on the end date (Dec 31 01:00 is still within the year)', () => {
+        expect(isPeriodTooLong(new Date(2026, 0, 1, 1), new Date(2026, 11, 31, 1))).toBe(false);
+    });
 });
 
 describe('defaultSettlementPeriod', () => {

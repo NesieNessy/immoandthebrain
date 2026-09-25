@@ -62,7 +62,7 @@ import type {
     TenancyDocument,
     TenancyPerson,
 } from '@immoandthebrain/types';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -339,8 +339,10 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
     };
 
     const applyTenancyPeriodSuggestion = (suggestion: { startDateStr: string; endDateStr: string }) => {
-        setPeriodStart(new Date(suggestion.startDateStr));
-        setPeriodEnd(new Date(suggestion.endDateStr));
+        // parseISO, not new Date(): a bare 'yyyy-MM-dd' string passed to the
+        // Date constructor is UTC midnight, i.e. 01:00/02:00 local here.
+        setPeriodStart(parseISO(suggestion.startDateStr));
+        setPeriodEnd(parseISO(suggestion.endDateStr));
     };
     // Navigating to a different year means "load that year's settlement" —
     // guarded the same way PropertyData.tsx guards route navigation away
@@ -744,6 +746,10 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             // deletedCostItemIds — which target that OTHER settlement — must
             // not be applied to this one.
             let isNewSettlementForThisSave = false;
+            // The loaded settlement's own period was edited — the saved-
+            // settlements menu labels need refreshing, but the cost items
+            // still belong to this same row.
+            let periodChangedInPlace = false;
 
             if (!activeSettlement) {
                 activeSettlement = await createSettlement({
@@ -771,27 +777,25 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
                 format(new Date(activeSettlement.periodStart), 'yyyy-MM-dd') !== periodStartStr
                 || format(new Date(activeSettlement.periodEnd), 'yyyy-MM-dd') !== periodEndStr
             ) {
-                // The period was changed away from the settlement that's
-                // loaded. That settlement is a distinct billing period with
-                // its own saved history and must not be overwritten by
-                // renaming its period (the old bug) — instead, this edit
-                // belongs to a settlement for the *new* target period.
-                // Check whether one already exists there first, since
-                // blindly creating could duplicate it.
+                // The period of the loaded settlement was edited — correct it
+                // on that same settlement (keeping its cost items and source
+                // document) rather than spawning a second settlement next to
+                // it. Browsing to another period goes through switchToPeriod,
+                // which reloads, so reaching here always means "edit this one".
+                // Only refuse when a *different* settlement already occupies
+                // the new period, since two rows for one period would clash.
                 const conflict = await getSettlementByPeriod(property.propertyId, unit.propertyUnitId, periodStartStr, periodEndStr);
-                if (conflict) throw new Error('PERIOD_CONFLICT');
-                const created = await createSettlement({
-                    propertyId: property.propertyId,
-                    propertyUnitId: unit.propertyUnitId,
+                if (conflict && conflict.serviceChargeSettlementId !== activeSettlement.serviceChargeSettlementId) {
+                    throw new Error('PERIOD_CONFLICT');
+                }
+                const updated = await updateSettlement(activeSettlement.serviceChargeSettlementId, {
                     periodStart: periodStartStr,
                     periodEnd: periodEndStr,
-                    sourceDocumentName: null,
-                    sourceDocumentPath: null,
                 });
-                if (!created) throw new Error('createSettlement failed');
-                activeSettlement = created;
-                setSettlement(created);
-                isNewSettlementForThisSave = true;
+                if (!updated) throw new Error('updateSettlement failed');
+                activeSettlement = updated;
+                setSettlement(updated);
+                periodChangedInPlace = true;
             }
 
             const deleteResults = isNewSettlementForThisSave
@@ -826,9 +830,10 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
             setCostItems(savedItems);
             setDeletedCostItemIds([]);
             setOriginalSnapshot(serializeCostItems(savedItems, periodStart, periodEnd));
-            if (isNewSettlementForThisSave) void refreshSavedSettlements();
+            if (isNewSettlementForThisSave || periodChangedInPlace) void refreshSavedSettlements();
             showToast('Nebenkostenabrechnung gespeichert.', 'success');
         } catch (err) {
+            console.error('Nebenkostenabrechnung speichern fehlgeschlagen', err);
             const code = err instanceof Error ? err.message : null;
             const [errorKey, shareLabel, shareColumn] = code?.split('|') ?? [];
             setError(
@@ -991,8 +996,9 @@ export function useServiceChargeSettlementData(propertyId: string, property: Pro
 
     const applyExtractedData = (extracted: ExtractedSettlementData) => {
         if (extracted.periodStart && extracted.periodEnd) {
-            const start = new Date(extracted.periodStart);
-            const end = new Date(extracted.periodEnd);
+            // 'yyyy-MM-dd' from the extraction — see applyTenancyPeriodSuggestion.
+            const start = parseISO(extracted.periodStart);
+            const end = parseISO(extracted.periodEnd);
             if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
                 setPeriodStart(start);
                 setPeriodEnd(end);

@@ -15,10 +15,13 @@ export function isFullCalendarYear(start: Date, end: Date): boolean {
  * period at all, regardless of what the underlying proration math would
  * otherwise happily compute for an arbitrarily long span (e.g. mistakenly
  * covering a tenant's entire multi-year tenancy instead of one year of it).
+ * Compares calendar days only — a time-of-day on `end` (e.g. 01:00 from a
+ * 'yyyy-MM-dd' string parsed as UTC) must not tip Dec 31 into "too long".
  */
 export function isPeriodTooLong(start: Date, end: Date): boolean {
     const maxEnd = new Date(start.getFullYear() + 1, start.getMonth(), start.getDate() - 1);
-    return end > maxEnd;
+    const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    return endDay > maxEnd;
 }
 
 /**
