@@ -49,7 +49,8 @@ function isToolUseBlock(block: unknown): block is AnthropicToolUseBlock {
 }
 
 export async function POST(request: Request) {
-  await requireUserId(request);
+  const auth = await requireUserId(request);
+  if (auth instanceof Response) return auth;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

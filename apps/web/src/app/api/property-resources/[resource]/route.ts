@@ -213,6 +213,7 @@ type RouteContext = { params: Promise<{ resource: string }> };
 
 export async function GET(request: Request, context: RouteContext) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const config = getConfig((await context.params).resource);
   if (!config) return NextResponse.json({ error: 'Unbekannte Ressource.' }, { status: 404 });
 
@@ -308,6 +309,7 @@ export async function GET(request: Request, context: RouteContext) {
 
 export async function POST(request: Request, context: RouteContext) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const config = getConfig((await context.params).resource);
   if (!config) return NextResponse.json({ error: 'Unbekannte Ressource.' }, { status: 404 });
   const input = await request.json();
@@ -332,6 +334,7 @@ export async function POST(request: Request, context: RouteContext) {
 
 export async function PATCH(request: Request, context: RouteContext) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const config = getConfig((await context.params).resource);
   if (!config) return NextResponse.json({ error: 'Unbekannte Ressource.' }, { status: 404 });
   const input = await request.json();
@@ -385,6 +388,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
 export async function DELETE(request: Request, context: RouteContext) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const config = getConfig((await context.params).resource);
   if (!config) return NextResponse.json({ error: 'Unbekannte Ressource.' }, { status: 404 });
   const url = new URL(request.url);

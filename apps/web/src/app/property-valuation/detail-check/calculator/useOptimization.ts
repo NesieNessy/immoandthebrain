@@ -13,6 +13,9 @@ export type OptimizationState =
   | { status: 'done'; proposal: OptimizationProposal | null; durationMs: number }
   | { status: 'error'; message: string };
 
+/** Shown on the card — the technical cause goes to the console, not to the user. */
+const OPTIMIZATION_ERROR_MESSAGE = 'Die Optimierung ist fehlgeschlagen. Bitte versuche es erneut.';
+
 const IDLE: OptimizationState = { status: 'idle' };
 
 /** `goal` is always a single sub-goal here — `RECOMMENDATION` never reaches a worker, it is assembled in `useOptimization` from the five sub-goal results. */
@@ -75,7 +78,8 @@ export function useOptimization(params: CalculatorParams, cases: RenovationCase[
             setStates((current) => ({ ...current, [key]: { status: 'done', proposal, durationMs: performance.now() - startedAt } }));
             resolve(proposal);
           } catch (error) {
-            setStates((current) => ({ ...current, [key]: { status: 'error', message: error instanceof Error ? error.message : String(error) } }));
+            console.error('Optimierung fehlgeschlagen:', error);
+            setStates((current) => ({ ...current, [key]: { status: 'error', message: OPTIMIZATION_ERROR_MESSAGE } }));
             resolve(null);
           }
         }, 0);
@@ -94,14 +98,16 @@ export function useOptimization(params: CalculatorParams, cases: RenovationCase[
           setStates((current) => ({ ...current, [key]: { status: 'done', proposal, durationMs: event.data.durationMs ?? 0 } }));
           resolve(proposal);
         } else {
-          setStates((current) => ({ ...current, [key]: { status: 'error', message: event.data.message ?? 'Unbekannter Fehler' } }));
+          console.error('Optimierung fehlgeschlagen:', event.data.message);
+          setStates((current) => ({ ...current, [key]: { status: 'error', message: OPTIMIZATION_ERROR_MESSAGE } }));
           resolve(null);
         }
       };
       worker.onerror = (event) => {
         worker.terminate();
         workersRef.current.delete(goal);
-        setStates((current) => ({ ...current, [key]: { status: 'error', message: event.message || 'Worker-Fehler' } }));
+        console.error('Optimierung abgebrochen (Worker):', event.message);
+        setStates((current) => ({ ...current, [key]: { status: 'error', message: OPTIMIZATION_ERROR_MESSAGE } }));
         resolve(null);
       };
       worker.postMessage({ requestId, params, cases, goal });

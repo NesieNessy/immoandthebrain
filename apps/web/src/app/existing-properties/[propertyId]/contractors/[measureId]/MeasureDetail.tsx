@@ -18,16 +18,13 @@ import {
     TextArea,
     TextField,
 } from '@/components/ui';
+import { PriceRangeSlider } from '@/components/features/PriceRangeSlider';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
-import { deCurrencyFormatter } from '@/lib/utils';
+import { categoryLabel, midpoint } from '@/lib/renovation/catalog';
+import { formatEuro as euro } from '@/lib/utils';
 import type { RenovationMeasureDefect, RenovationMeasureQuote } from '@immoandthebrain/types';
-import { estimateRange, MEASURE_CATEGORY_ESTIMATES } from '../measureCategories';
 import { canConfirmCustomerCompletion } from '../measureStatus';
 import { useMeasureDetailData } from './useMeasureDetailData';
-
-function euro(value: number | null | undefined): string {
-    return value != null ? `${deCurrencyFormatter.format(value)} €` : '–';
-}
 
 function toDate(value: string | null): Date | undefined {
     return value ? parseISO(value) : undefined;
@@ -80,13 +77,11 @@ export default function MeasureDetail({ propertyId, measureId }: { propertyId: s
     if (data.isLoading) return <PropertyLoadingPage />;
     if (!data.property || data.notFound || !data.measure) return <PropertyNotFoundPage />;
 
-    const { property, measure, quotes, defects, isLocked } = data;
+    const { property, measure, quotes, defects, isLocked, priceRange: range } = data;
     const address = `${property.street} ${property.houseNumber}, ${property.postalCode} ${property.city}`;
     const backHref = `/existing-properties/${propertyId}/contractors`;
 
-    const range = estimateRange(measure.category);
-    const items = measure.category ? MEASURE_CATEGORY_ESTIMATES[measure.category] : undefined;
-    const sliderValue = priceSliderValue ?? measure.estimatedCost ?? (range ? Math.round((range.min + range.max) / 2) : 0);
+    const sliderValue = priceSliderValue ?? measure.estimatedCost ?? (range ? midpoint(range) : 0);
 
     const openQuoteModal = () => {
         setQuoteCompany('');
@@ -233,53 +228,32 @@ export default function MeasureDetail({ propertyId, measureId }: { propertyId: s
                     </MeasureCard>
 
                     {/* ── Preisindikation ─────────────────────────────────────── */}
-                    {items && range && (
-                        <MeasureCard icon={Icons.Calculator} title={`KI-Schätzung ${measure.category}sanierung (je nach Region & Qualität)`}>
-                            <div className="flex items-start gap-4">
-                                <div className="flex-1 min-w-0 overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                        <thead>
-                                            <tr className="text-xs text-muted-foreground uppercase tracking-wide">
-                                                <th className="text-left font-medium pb-2">Maßnahme</th>
-                                                <th className="text-right font-medium pb-2">Geschätzte Kosten</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-border">
-                                            {items.map((item) => (
-                                                <tr key={item.label}>
-                                                    <td className="py-1.5 text-foreground">{item.label}</td>
-                                                    <td className="py-1.5 text-right text-foreground whitespace-nowrap">{euro(item.min)} – {euro(item.max)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                    <div className="flex items-center justify-between pt-2 mt-2 border-t border-border text-sm">
-                                        <span className="text-muted-foreground">Gesamtschätzung</span>
-                                        <span className="font-semibold text-primary">{euro(range.min)} – {euro(range.max)}</span>
-                                    </div>
-                                </div>
+                    {range && (
+                        <MeasureCard icon={Icons.Calculator} title="Preisindikation">
+                            <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                                <span className="text-muted-foreground">
+                                    {measure.title}
+                                    {measure.category && <> · {categoryLabel(measure.category)}</>}
+                                </span>
+                                <span className="font-semibold text-primary">{euro(range.min)} – {euro(range.max)}</span>
                             </div>
-
-                            <div className="rounded-lg border border-border p-4">
-                                <p className="text-sm text-foreground mb-3">Mit welchem Preis möchten Sie weiterrechnen?</p>
-                                <input
-                                    type="range"
+                            <div className="flex flex-col gap-2">
+                                <p className="text-sm font-medium text-foreground">Mit welchem Preis möchtest du weiterrechnen?</p>
+                                <PriceRangeSlider
                                     min={range.min}
                                     max={range.max}
-                                    step={100}
                                     value={sliderValue}
                                     disabled={isLocked}
-                                    onChange={(e) => setPriceSliderValue(Number(e.target.value))}
-                                    onMouseUp={() => void data.commitField({ estimatedCost: sliderValue })}
-                                    onTouchEnd={() => void data.commitField({ estimatedCost: sliderValue })}
-                                    className="w-full accent-primary cursor-pointer disabled:cursor-not-allowed"
+                                    onChange={setPriceSliderValue}
+                                    onCommit={(value) => data.commitField({ estimatedCost: value })}
+                                    format={euro}
+                                    hint="Wird als „Kosten kalkuliert“ übernommen."
                                 />
-                                <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
-                                    <span>{euro(range.min)}</span>
-                                    <span className="text-base font-semibold text-primary">{euro(sliderValue)}</span>
-                                    <span>{euro(range.max)}</span>
-                                </div>
                             </div>
+                            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                                <Icons.Info className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                Kostenspanne auf Basis von Kategorie, Wohnfläche und PLZ-Regionalfaktor — dieselbe Preisindikation wie in der Detailbewertung.
+                            </p>
                         </MeasureCard>
                     )}
 

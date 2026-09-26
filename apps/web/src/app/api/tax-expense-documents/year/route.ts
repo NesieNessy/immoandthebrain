@@ -11,7 +11,7 @@ const BUCKET = 'tax-expense-documents';
 function storageHeaders(extra?: Record<string, string>) {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) {
-    throw new Response(JSON.stringify({ error: 'Supabase admin configuration is missing.' }), {
+    throw new Response(JSON.stringify({ error: 'Der Server ist nicht richtig konfiguriert. Bitte später erneut versuchen.' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -22,7 +22,7 @@ function storageHeaders(extra?: Record<string, string>) {
 function storageBaseUrl(): string {
   const url = process.env.SUPABASE_ADMIN_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!url) {
-    throw new Response(JSON.stringify({ error: 'Supabase admin configuration is missing.' }), {
+    throw new Response(JSON.stringify({ error: 'Der Server ist nicht richtig konfiguriert. Bitte später erneut versuchen.' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -37,6 +37,7 @@ function storageBaseUrl(): string {
 // `amount` total by subtracting exactly what was removed.
 export async function DELETE(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const url = new URL(request.url);
   const propertyId = Number(url.searchParams.get('propertyId'));
   const year = Number(url.searchParams.get('year'));

@@ -1,12 +1,13 @@
 "use client";
 
-import { LoadingScreen, ReadOnlyField, SectionLabel, StickyActionBar, Tag } from '@/components/ui';
+import { LoadingScreen, ReadOnlyField, SectionLabel, StickyActionBar, Tag, ErrorAlert } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { type ReferenceProperty, type SubjectProperty } from '@/lib/detailCheck/comparison';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
+import { errorMessage, readApiError } from '@/lib/api/apiError';
 
 type ComparisonResponse = {
   workflowId: string;
@@ -114,11 +115,11 @@ function ComparisonContent() {
       setError(null);
       try {
         const res = await authFetch(`/api/detail-check/comparison${suffix}`, { cache: 'no-store' });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw await readApiError(res);
         const loaded = await res.json() as ComparisonResponse;
         if (!cancelled) setData(loaded);
       } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : 'Vergleich konnte nicht geladen werden.');
+        if (!cancelled) setError(errorMessage(loadError, 'Vergleich konnte nicht geladen werden.'));
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -140,10 +141,10 @@ function ComparisonContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quickCheckId, workflowId }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await readApiError(res);
       router.push(`/property-valuation/detail-check/result${suffix}`);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Vergleich konnte nicht gespeichert werden.');
+      setError(errorMessage(saveError, 'Vergleich konnte nicht gespeichert werden.'));
     } finally {
       setIsSaving(false);
     }
@@ -156,11 +157,7 @@ function ComparisonContent() {
       showFieldLegend
     >
       <div className="pb-24">
-        {error && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        {error && <ErrorAlert message={error} className="mb-4" />}
 
         {isLoading || !data ? (
           <LoadingScreen message="Vergleich wird geladen…" fullScreen={false} />

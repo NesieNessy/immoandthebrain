@@ -12,11 +12,12 @@ import {
   type QuickCheckEntry,
 } from '@/components/features/QuickCheckDisplay';
 import type { BreadcrumbItem, MenuItem, SortDirection, TableColumn } from '@/components/ui';
-import { Button, Header, Icons, LoadingScreen, PAGE_CONTAINER_CLASS, Table, TextFieldWithIcon, Tag } from '@/components/ui';
+import { Button, Header, Icons, LoadingScreen, PAGE_CONTAINER_CLASS, Table, TextFieldWithIcon, Tag, useToast } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { FieldLabels } from '@/constants/FieldLabels';
 import { useQuickChecks } from '@/hooks/useQuickChecks';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
+import { errorMessage } from '@/lib/api/apiError';
 import { cn } from '@/lib/utils';
 import { PropertyCondition } from '@immoandthebrain/types';
 import Link from 'next/link';
@@ -61,6 +62,7 @@ export function QuickCheckOverviewTable({
 }: QuickCheckOverviewTableProps) {
   const { isLoading: authLoading } = useRequireAuth();
   const { data: rawData, isLoading, error, deleteSelected } = useQuickChecks(detailCheck);
+  const { showToast } = useToast();
 
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<string>('ingestDate');
@@ -86,10 +88,13 @@ export function QuickCheckOverviewTable({
     setDeletingId(id);
     try {
       await deleteSelected([id]);
+    } catch (err) {
+      // Used to be a silent, unhandled rejection — the row just stayed.
+      showToast(errorMessage(err, 'Ersteinschätzung konnte nicht gelöscht werden.'), 'error');
     } finally {
       setDeletingId(null);
     }
-  }, [deleteSelected]);
+  }, [deleteSelected, showToast]);
 
   // Shared by the desktop table's actions column and the mobile card menu.
   const rowMenuItems = useCallback((row: QuickCheckEntry): MenuItem[] => [

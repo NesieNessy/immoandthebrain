@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { indicatePriceRange } from '@/lib/renovation/catalog';
 import {
   aggregateRenovationPricing,
   costForCase,
   distributeTotalAcrossCases,
+  evaluateRenovationCases,
   sumSelectedCosts,
   withDefaultSelectedCosts,
   type RenovationCase,
@@ -18,6 +20,38 @@ import { renovationCase } from './testFixtures';
  * `cost_selected` authoritative and the total derived from it — verified only
  * manually in the browser at the time; these tests make that permanent.
  */
+
+describe('evaluateRenovationCases', () => {
+  const unpriced: RenovationCase = {
+    id: 'a',
+    kategorie: 'SANITAER',
+    massnahme: 'Badsanierung komplett',
+    selected: true,
+    zeitpunkt: 'SOFORT',
+    publish_order: false,
+  };
+
+  it('prices each case with the shared catalog indication (region factor + living area)', () => {
+    const context = { regionFactor: 1.2, livingAreaM2: 75 };
+    const [evaluated] = evaluateRenovationCases({ cases: [unpriced], ...context });
+    const expected = indicatePriceRange('SANITAER', 'Badsanierung komplett', context);
+    expect(evaluated.ai).toMatchObject({ price_min: expected.min, price_max: expected.max, source: 'FALLBACK' });
+    expect(evaluated.ai?.summary).toContain('Badsanierung komplett');
+  });
+
+  it('re-prices from scratch, ignoring an indication the client sent along', () => {
+    const tampered = { ...unpriced, ai: { summary: 'x', price_min: 1, price_max: 2, confidence: 1, source: 'AI' as const } };
+    const [evaluated] = evaluateRenovationCases({ cases: [tampered] });
+    expect(evaluated.ai?.price_min).toBe(12000);
+    expect(evaluated.ai?.price_max).toBe(28000);
+  });
+
+  it('keeps the user’s choices (selection, timing, publish, amount) untouched', () => {
+    const chosen = { ...unpriced, selected: false, zeitpunkt: 'FLEXIBEL' as const, publish_order: true, cost_selected: 15000 };
+    const [evaluated] = evaluateRenovationCases({ cases: [chosen] });
+    expect(evaluated).toMatchObject({ selected: false, zeitpunkt: 'FLEXIBEL', publish_order: true, cost_selected: 15000 });
+  });
+});
 
 describe('withDefaultSelectedCosts', () => {
   it('defaults an unpriced case to the midpoint of its indicated range', () => {

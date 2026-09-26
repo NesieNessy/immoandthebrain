@@ -4,7 +4,8 @@ import { Button, ConfirmDeleteModal, Dropdown, FilePickerButton, Header, Icons, 
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { deleteDocument, getDocumentsByUser, getDocumentUrl, uploadDocument } from '@/lib/supabase/document.supabase';
 import { getProperties } from '@/lib/supabase/property.supabase';
-import { getAllQuickChecks, type QuickCheckOverview } from '@/lib/supabase/quick_check.supabase';
+import { getDetailCheckSummaries, type DetailCheckSummary } from '@/lib/api/detailChecks';
+import { quickCheckIdFromWorkflow } from '@/lib/detailCheck/workflow';
 import { deleteTaxExpenseDocument, getTaxExpenseDocumentsByUser, getTaxExpenseDocumentUrl } from '@/lib/supabase/tax_expense_document.supabase';
 import { archiveTenancyDocument, deleteTenancyDocument, getTenancyDocumentsByUser, getTenancyDocumentUrl } from '@/lib/supabase/tenancy_document.supabase';
 import { cn } from '@/lib/utils';
@@ -28,6 +29,8 @@ interface DisplayDocument {
     category: DocumentCategory;
     propertyId: number | null;
     quickCheckId: number | null;
+    /** Detailbewertung the document belongs to (with or without Ersteinschätzung). */
+    detailCheckWorkflowId: string | null;
     documentDate: string | null;
     fileName: string;
     storagePath: string;
@@ -94,15 +97,12 @@ function propertyLabel(property: Property): string {
     return `${property.street} ${property.houseNumber}, ${property.postalCode} ${property.city}`;
 }
 
-function quickCheckLabel(qc: QuickCheckOverview): string {
-    return `${qc.street}, ${qc.city}`;
-}
 
 export default function DocumentsPage() {
     const { user } = useRequireAuth();
     const [documents, setDocuments] = useState<DisplayDocument[]>([]);
     const [properties, setProperties] = useState<Property[]>([]);
-    const [quickChecks, setQuickChecks] = useState<QuickCheckOverview[]>([]);
+    const [detailChecks, setDetailChecks] = useState<DetailCheckSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     const [search, setSearch] = useState('');
@@ -130,8 +130,8 @@ export default function DocumentsPage() {
             getTenancyDocumentsByUser(),
             getTaxExpenseDocumentsByUser(),
             getProperties(user.id),
-            getAllQuickChecks(true),
-        ]).then(([docs, tenancyDocs, taxExpenseDocs, props, qcs]) => {
+            getDetailCheckSummaries(),
+        ]).then(([docs, tenancyDocs, taxExpenseDocs, props, checks]) => {
             const fromDocuments: DisplayDocument[] = docs.map((d) => ({
                 key: `document-${d.documentId}`,
                 source: 'document',
@@ -140,6 +140,7 @@ export default function DocumentsPage() {
                 category: d.category,
                 propertyId: d.propertyId,
                 quickCheckId: d.quickCheckId,
+                detailCheckWorkflowId: d.detailCheckWorkflowId,
                 documentDate: d.documentDate,
                 fileName: d.fileName,
                 storagePath: d.storagePath,
@@ -154,6 +155,7 @@ export default function DocumentsPage() {
                 category: 'Bestandsobjekt',
                 propertyId: d.propertyId,
                 quickCheckId: null,
+                detailCheckWorkflowId: null,
                 documentDate: d.createdAt,
                 fileName: d.fileName,
                 storagePath: d.storagePath,
@@ -168,6 +170,7 @@ export default function DocumentsPage() {
                 category: 'Bestandsobjekt',
                 propertyId: d.propertyId,
                 quickCheckId: null,
+                detailCheckWorkflowId: null,
                 documentDate: d.createdAt,
                 fileName: d.fileName,
                 storagePath: d.storagePath,
@@ -176,7 +179,7 @@ export default function DocumentsPage() {
             }));
             setDocuments([...fromDocuments, ...fromTenancy, ...fromTaxExpense]);
             setProperties(props);
-            setQuickChecks(qcs);
+            setDetailChecks(checks);
             setIsLoading(false);
         });
     }, [user]);
@@ -186,19 +189,23 @@ export default function DocumentsPage() {
     // that wasn't linked to one) — this is what the "Objekt" table column shows.
     const resolveObject = useMemo(() => {
         const propertyById = new Map(properties.map((p) => [p.propertyId, p]));
-        const quickCheckById = new Map(quickChecks.map((q) => [q.quickCheckId, q]));
+        const detailCheckByWorkflow = new Map(detailChecks.map((check) => [check.workflowId, check]));
+        const detailCheckByQuickCheck = new Map(detailChecks.filter((check) => check.quickCheckId != null).map((check) => [check.quickCheckId, check]));
         return (doc: DisplayDocument): string => {
             if (doc.category === 'Bestandsobjekt' && doc.propertyId != null) {
                 const p = propertyById.get(doc.propertyId);
                 return p ? propertyLabel(p) : '–';
             }
-            if (doc.category === 'Detailbewertung' && doc.quickCheckId != null) {
-                const q = quickCheckById.get(doc.quickCheckId);
-                return q ? quickCheckLabel(q) : '–';
+            if (doc.category === 'Detailbewertung') {
+                // The workflow link covers detail checks with and without an
+                // Ersteinschätzung; quick_check_id is the older, quick-check-only link.
+                const check = (doc.detailCheckWorkflowId ? detailCheckByWorkflow.get(doc.detailCheckWorkflowId) : undefined)
+                    ?? (doc.quickCheckId != null ? detailCheckByQuickCheck.get(doc.quickCheckId) : undefined);
+                return check ? check.label : '–';
             }
             return '–';
         };
-    }, [properties, quickChecks]);
+    }, [properties, detailChecks]);
 
     // Group key for the "Nach Objekt" view — Persönlich documents and any
     // document without a resolved object share one bucket each.
@@ -322,7 +329,8 @@ export default function DocumentsPage() {
                 category: uploadCategory,
                 name: uploadName.trim(),
                 propertyId: uploadCategory === 'Bestandsobjekt' && uploadObjectId ? Number(uploadObjectId) : null,
-                quickCheckId: uploadCategory === 'Detailbewertung' && uploadObjectId ? Number(uploadObjectId) : null,
+                quickCheckId: uploadCategory === 'Detailbewertung' && uploadObjectId ? quickCheckIdFromWorkflow(uploadObjectId) : null,
+                detailCheckWorkflowId: uploadCategory === 'Detailbewertung' && uploadObjectId ? uploadObjectId : null,
                 documentDate: format(new Date(), 'yyyy-MM-dd'),
             });
             if (uploaded) {
@@ -334,6 +342,7 @@ export default function DocumentsPage() {
                     category: uploaded.category,
                     propertyId: uploaded.propertyId,
                     quickCheckId: uploaded.quickCheckId,
+                    detailCheckWorkflowId: uploaded.detailCheckWorkflowId,
                     documentDate: uploaded.documentDate,
                     fileName: uploaded.fileName,
                     storagePath: uploaded.storagePath,
@@ -423,7 +432,7 @@ export default function DocumentsPage() {
     const uploadObjectOptions = uploadCategory === 'Bestandsobjekt'
         ? properties.map((p) => ({ value: String(p.propertyId), label: propertyLabel(p) }))
         : uploadCategory === 'Detailbewertung'
-            ? quickChecks.map((q) => ({ value: String(q.quickCheckId), label: quickCheckLabel(q) }))
+            ? detailChecks.map((check) => ({ value: check.workflowId, label: check.label }))
             : [];
 
     const groupedByObject = useMemo(() => {

@@ -13,6 +13,8 @@ export type SortDirection = "asc" | "desc" | null;
 export interface TableColumn<T = Record<string, unknown>> {
   key: string;
   label: string;
+  /** Replaces `label` in the header cell — e.g. a "select all" checkbox. */
+  header?: React.ReactNode;
   width?: string;
   sortable?: boolean;
   /** Show a filter input below this column header */
@@ -192,7 +194,7 @@ export function Table<T extends Record<string, unknown> = Record<string, unknown
                   onClick={() => col.sortable && onSort?.(col.key)}
                 >
                   <span className="inline-flex items-center gap-1.5">
-                    {col.label}
+                    {col.header ?? col.label}
                     {col.sortable && (
                       <SortIcon
                         columnKey={col.key}

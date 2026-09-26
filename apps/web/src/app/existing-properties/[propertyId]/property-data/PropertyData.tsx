@@ -4,6 +4,7 @@ import { PROPERTY_CATEGORY_CREATE_OPTIONS, PropertyLoadingPage, PropertyNotFound
 import { PropertyImageGallery } from '@/components/features/PropertyImageGallery';
 import { CalendarField, Dropdown, Header, NumberField, PAGE_CONTAINER_CLASS, PillOptions, SectionLabel, StickyActionBar, TextField, UnsavedChangesModal, useToast } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
+import { errorMessage } from '@/lib/api/apiError';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import { getLabel } from '@/constants/FieldLabels';
 import { createAcquisitionCosts, getAcquisitionCosts, updateAcquisitionCosts } from '@/lib/supabase/acquisition_costs.supabase';
@@ -216,7 +217,7 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
             showToast('Objektdaten gespeichert.');
             router.push(`/existing-properties/${propertyId}`);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
+            setError(errorMessage(err, 'Objektdaten konnten nicht gespeichert werden.'));
         } finally {
             setIsSaving(false);
         }

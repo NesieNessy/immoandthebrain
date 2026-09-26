@@ -3,6 +3,7 @@
 import { BESTANDSOBJEKTE_BREADCRUMB_ROOT, PROPERTY_CATEGORY_CREATE_OPTIONS } from '@/components/features/PropertyDisplay';
 import { CalendarField, Dropdown, Header, Icons, NumberField, PAGE_CONTAINER_CLASS, PillOptions, SectionLabel, StickyActionBar, TextField, UnsavedChangesModal, UploadButton, useToast, type BreadcrumbItem } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
+import { errorMessage } from '@/lib/api/apiError';
 import { getLabel } from '@/constants/FieldLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { createAcquisitionCosts } from '@/lib/supabase/acquisition_costs.supabase';
@@ -181,7 +182,7 @@ function NewPropertyPageContent() {
       showToast('Objekt gespeichert.');
       router.push('/existing-properties');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
+      setError(errorMessage(err, 'Objekt konnte nicht gespeichert werden.'));
       setIsSaving(false);
     }
   };

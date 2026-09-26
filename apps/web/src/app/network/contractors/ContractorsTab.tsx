@@ -1,6 +1,7 @@
 "use client";
 
 import { Icons, Tag, TextFieldWithIcon } from '@/components/ui';
+import { categoryLabel } from '@/lib/renovation/catalog';
 import { deCurrencyFormatter, formatDeDate } from '@/lib/utils';
 import type { RenovationMeasureJobListing } from '@immoandthebrain/types';
 import { useMemo, useState } from 'react';
@@ -35,7 +36,7 @@ function JobCard({ job, expanded, onToggle }: {
                         <Icons.MapPin className="w-3 h-3" /> {job.city}
                     </p>
                 </div>
-                {job.category && <span className="hidden sm:block shrink-0"><Tag label={job.category} variant="info" size="sm" /></span>}
+                {job.category && <span className="hidden sm:block shrink-0"><Tag label={categoryLabel(job.category)} variant="info" size="sm" /></span>}
                 <span className="hidden md:block w-40 text-sm text-muted-foreground shrink-0 text-right">{budgetRange(job)}</span>
                 <Icons.ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${expanded ? 'rotate-180' : ''}`} />
             </button>
@@ -75,7 +76,7 @@ export function ContractorsTab() {
         return data.jobs.filter((job) =>
             job.title.toLowerCase().includes(query) ||
             job.city.toLowerCase().includes(query) ||
-            (job.category?.toLowerCase().includes(query) ?? false));
+            categoryLabel(job.category).toLowerCase().includes(query));
     }, [data.jobs, search]);
 
     const pageItems = paginate(filtered, page, PAGE_SIZE);

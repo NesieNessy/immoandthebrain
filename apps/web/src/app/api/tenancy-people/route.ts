@@ -12,6 +12,7 @@ function updatesFrom(input: Record<string, unknown>) {
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const tenancyId = Number(new URL(request.url).searchParams.get('tenancyId'));
   const { rows } = await db.query(
     `
@@ -28,6 +29,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const tenancyId = Number(input.tenancy_id);
   const owned = await db.query(
@@ -46,6 +48,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const id = Number(input.id);
   const values = updatesFrom(input.values ?? {});
@@ -69,6 +72,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const id = Number(new URL(request.url).searchParams.get('id'));
   const result = await db.query(
     `

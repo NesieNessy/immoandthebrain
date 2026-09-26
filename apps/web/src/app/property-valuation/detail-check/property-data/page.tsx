@@ -1,15 +1,17 @@
 "use client";
 
-import { Button, Dropdown, LoadingScreen, PillOptions, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
+import { Button, Dropdown, ErrorAlert, LoadingScreen, PillOptions, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
 import { PROPERTY_CATEGORY_CREATE_OPTIONS } from '@/components/features/PropertyDisplay';
 import { PortalImportSection } from '@/components/features/PortalImportSection';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
-import { isValidListingUrl, LISTING_URL_ERROR, normalizeListingReference } from '@/lib/listingUrl';
+import { isPropertyDataValid, livePropertyDataErrors, propertyDataErrors } from '@/lib/detailCheck/propertyDataValidation';
+import { normalizeListingReference } from '@/lib/listingUrl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
+import { errorMessage, readApiError } from '@/lib/api/apiError';
 
 type FormState = {
   propertyCategory: string;
@@ -109,7 +111,7 @@ function PropertyDataContent() {
       setTopError(null);
       try {
         const res = await authFetch(`/api/detail-check/property-data${suffix}`, { cache: 'no-store' });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw await readApiError(res);
         const data = await res.json() as PropertyDataResponse;
         if (cancelled) return;
         setHasDetailCheckData(data.hasDetailCheckData);
@@ -128,7 +130,7 @@ function PropertyDataContent() {
         });
       } catch (error) {
         if (!cancelled) {
-          setTopError(error instanceof Error ? error.message : 'Objektdaten konnten nicht geladen werden.');
+          setTopError(errorMessage(error, 'Objektdaten konnten nicht geladen werden.'));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -157,7 +159,7 @@ function PropertyDataContent() {
           `/api/address/postal-code?postalCode=${encodeURIComponent(postalCode)}`,
           { cache: 'force-cache', signal: controller.signal },
         );
-        if (!response.ok) throw new Error(await response.text());
+        if (!response.ok) throw await readApiError(response);
 
         const payload = await response.json() as PostalCodeLookupResponse;
         if (controller.signal.aborted || payload.postalCode !== postalCode) return;
@@ -193,39 +195,13 @@ function PropertyDataContent() {
   }, [form.postalCode, isLoading, postalCodeWasEdited]);
 
   const currentYear = new Date().getFullYear();
-  const liveErrors = useMemo(() => {
-    const errors: Record<string, string> = {};
-    const year = Number(form.yearOfConstruction);
-    const livingArea = parseDecimalInput(form.livingAreaM2);
+  const liveErrors = useMemo(() => livePropertyDataErrors(form, currentYear), [form, currentYear]);
 
-    if (form.streetHouseNumber.length > 100) errors.streetHouseNumber = 'Maximal 100 Zeichen.';
-    if (form.postalCode && !/^\d{4,5}$/.test(form.postalCode)) errors.postalCode = 'Bitte 4 bis 5 Ziffern eingeben.';
-    if (form.city && form.city.length > 100) errors.city = 'Maximal 100 Zeichen.';
-    if (form.yearOfConstruction && (!Number.isInteger(year) || year < 1000 || year > currentYear)) {
-      errors.yearOfConstruction = `Baujahr muss zwischen 1000 und ${currentYear} liegen.`;
-    }
-    if (form.livingAreaM2 && (livingArea <= 0 || livingArea > 10000)) {
-      errors.livingAreaM2 = 'Wohnfläche muss größer als 0 und maximal 10.000 sein.';
-    }
+  const displayErrors: Record<string, string | undefined> = { ...liveErrors, ...fieldErrors };
 
-    return errors;
-  }, [form, currentYear]);
-
-  const displayErrors = { ...liveErrors, ...fieldErrors };
-
-  // Mirrors validateBeforeSave's checks, without setting fieldErrors — used
-  // to keep "Weiter" disabled until every mandatory field is actually filled.
-  const isValid = useMemo(() => {
-    if (!form.propertyCategory) return false;
-    if (!form.tenancyType) return false;
-    if (form.sourceUrl.trim() && !isValidListingUrl(form.sourceUrl)) return false;
-    if (!form.city.trim()) return false;
-    const year = Number(form.yearOfConstruction);
-    if (!Number.isInteger(year) || year < 1000 || year > currentYear) return false;
-    const livingArea = parseDecimalInput(form.livingAreaM2);
-    if (livingArea <= 0 || livingArea > 10000) return false;
-    return true;
-  }, [form, currentYear]);
+  // Same rules as the save itself, so "Weiter" is only enabled when the save
+  // will actually go through.
+  const isValid = useMemo(() => isPropertyDataValid(form, currentYear), [form, currentYear]);
 
   const updateForm = (field: keyof FormState, value: string) => {
     setFieldErrors((prev) => {
@@ -256,23 +232,7 @@ function PropertyDataContent() {
             : undefined;
 
   const validateBeforeSave = () => {
-    const errors: Record<string, string> = { ...liveErrors };
-    const year = Number(form.yearOfConstruction);
-    const livingArea = parseDecimalInput(form.livingAreaM2);
-
-    if (!form.propertyCategory) errors.propertyCategory = 'Bitte wählen Sie eine Objektkategorie.';
-    if (!form.tenancyType) errors.tenancyType = 'Bitte wählen Sie eine Miet-/Nutzungsart.';
-    // Same rule as the Ersteinschätzung's Portal-URL (lib/listingUrl.ts): a
-    // link typed without "https://" counts as valid (SCRUM-102).
-    if (form.sourceUrl.trim() && !isValidListingUrl(form.sourceUrl)) errors.sourceUrl = LISTING_URL_ERROR;
-    if (!form.city.trim()) errors.city = 'Ort ist ein Pflichtfeld.';
-    if (!Number.isInteger(year) || year < 1000 || year > currentYear) {
-      errors.yearOfConstruction = `Baujahr muss zwischen 1000 und ${currentYear} liegen.`;
-    }
-    if (livingArea <= 0 || livingArea > 10000) {
-      errors.livingAreaM2 = 'Wohnfläche muss größer als 0 sein.';
-    }
-
+    const errors = propertyDataErrors(form, currentYear) as Record<string, string>;
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -304,19 +264,14 @@ function PropertyDataContent() {
       });
 
       if (!res.ok) {
-        const responseText = await res.text();
-        let payload: { fieldErrors?: Record<string, string>; error?: string } | null = null;
-        try {
-          payload = responseText ? JSON.parse(responseText) : null;
-        } catch {
-          payload = null;
-        }
-        if (payload?.fieldErrors) {
-          setFieldErrors(payload.fieldErrors);
+        const apiError = await readApiError(res);
+        // The server's own field validation: shown on the fields themselves.
+        if (apiError.fieldErrors) {
+          setFieldErrors(apiError.fieldErrors);
           setTopError('Bitte prüfen Sie die markierten Felder.');
           return false;
         }
-        throw new Error(payload?.error ?? responseText);
+        throw apiError;
       }
 
       const payload = await res.json() as { workflowId: string };
@@ -325,7 +280,7 @@ function PropertyDataContent() {
       }
       return true;
     } catch (error) {
-      setTopError(error instanceof Error ? error.message : 'Objektdaten konnten nicht gespeichert werden.');
+      setTopError(errorMessage(error, 'Objektdaten konnten nicht gespeichert werden.'));
       return false;
     } finally {
       setIsSaving(false);
@@ -352,11 +307,7 @@ function PropertyDataContent() {
   return (
     <PropertyValuationLayout currentStep={0} title="Objektdaten" beforeStepChange={persist}>
       <div className="pb-24">
-        {topError && (
-          <div aria-live="assertive" className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {topError}
-          </div>
-        )}
+        {topError && <ErrorAlert message={topError} className="mb-4" />}
 
         {isLoading ? (
           <LoadingScreen message="Objektdaten werden geladen…" fullScreen={false} />

@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const { rows } = await db.query(
     'SELECT * FROM subscription WHERE user_id = $1 ORDER BY start_date DESC LIMIT 1',
     [userId],

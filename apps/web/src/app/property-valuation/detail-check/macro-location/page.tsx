@@ -1,6 +1,6 @@
 "use client";
 
-import { LoadingScreen, SectionLabel, StickyActionBar, Tag } from '@/components/ui';
+import { LoadingScreen, SectionLabel, StickyActionBar, Tag, ErrorAlert } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import {
@@ -13,6 +13,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
+import { errorMessage, readApiError } from '@/lib/api/apiError';
 
 type LocationResponse = LocationScoreResult & {
   workflowId: string;
@@ -107,12 +108,12 @@ function MacroLocationContent() {
       setError(null);
       try {
         const res = await authFetch(`/api/detail-check/location-score${suffix}`, { cache: 'no-store' });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw await readApiError(res);
         const loaded = await res.json() as LocationResponse;
         if (!cancelled) setData(loaded);
       } catch (loadError) {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : 'Lagebewertung konnte nicht geladen werden.');
+          setError(errorMessage(loadError, 'Lagebewertung konnte nicht geladen werden.'));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -135,10 +136,10 @@ function MacroLocationContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quickCheckId, workflowId }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await readApiError(res);
       router.push(`/property-valuation/detail-check/comparison${suffix}`);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Lagebewertung konnte nicht gespeichert werden.');
+      setError(errorMessage(saveError, 'Lagebewertung konnte nicht gespeichert werden.'));
     } finally {
       setIsSaving(false);
     }
@@ -150,11 +151,7 @@ function MacroLocationContent() {
       title="Mikro- und Makrolage"
     >
       <div className="pb-24">
-        {error && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        {error && <ErrorAlert message={error} className="mb-4" />}
 
         {isLoading || !data ? (
           <LoadingScreen message="Lagebewertung wird geladen…" fullScreen={false} />

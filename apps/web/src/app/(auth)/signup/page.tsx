@@ -4,6 +4,7 @@ import { Button, Icons, TextField } from '@/components/ui';
 import { supabase } from '@/lib/supabase/client.supabase';
 import Link from 'next/link';
 import { useState } from 'react';
+import { authErrorMessage } from '@/lib/auth/authErrorMessage';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
@@ -27,7 +28,7 @@ export default function SignupPage() {
     const { error } = await supabase.auth.signUp({ email, password });
 
     if (error) {
-      setError(error.message);
+      setError(authErrorMessage(error, 'Die Registrierung ist fehlgeschlagen. Bitte versuche es erneut.'));
       setIsLoading(false);
     } else {
       setConfirmed(true);

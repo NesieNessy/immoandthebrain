@@ -41,6 +41,7 @@ async function syncCoverOnProperty(propertyId: number) {
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const propertyId = Number(new URL(request.url).searchParams.get('propertyId'));
   if (!Number.isInteger(propertyId)) {
     return NextResponse.json({ error: 'Ungültige Objekt-ID.' }, { status: 400 });
@@ -58,6 +59,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const propertyId = Number(input.propertyId);
   const storagePath = String(input.storagePath ?? '');
@@ -83,6 +85,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const propertyImageId = Number(input.propertyImageId);
   if (!Number.isInteger(propertyImageId)) {
@@ -106,6 +109,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const propertyImageId = Number(new URL(request.url).searchParams.get('id'));
   if (!Number.isInteger(propertyImageId)) {
     return NextResponse.json({ error: 'Ungültige Bild-ID.' }, { status: 400 });

@@ -10,7 +10,8 @@ type RouteContext = { params: Promise<{ id: string }> };
 // app, a plain increment-on-load rather than a per-viewer dedupe table
 // (matching the scope this pass is meant to cover).
 export async function GET(request: Request, context: RouteContext) {
-  await requireUserId(request);
+  const auth = await requireUserId(request);
+  if (auth instanceof Response) return auth;
   const postId = Number((await context.params).id);
   if (!Number.isInteger(postId)) return NextResponse.json({ error: 'Ungültiger Beitrag.' }, { status: 400 });
 

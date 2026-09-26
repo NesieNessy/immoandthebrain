@@ -3,35 +3,30 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { buildPropertyUseCaseBreadcrumb, formatUnitLabel, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
+import { PriceIndicationHint } from '@/components/features/PriceIndicationHint';
+import { RenovationMeasurePicker } from '@/components/features/RenovationMeasurePicker';
 import {
     Button,
     CalendarField,
     ConfirmDeleteModal,
-    Dropdown,
     Header,
     Icons,
     Modal,
     NumberField,
     PAGE_CONTAINER_CLASS,
     SectionLabel,
+    StatTile,
     Table,
-    TextField,
     type TableColumn,
 } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
-import { deCurrencyFormatter } from '@/lib/utils';
+import { categoryLabel, midpoint } from '@/lib/renovation/catalog';
+import { formatEuro } from '@/lib/utils';
 import type { RenovationMeasure } from '@immoandthebrain/types';
 import { format, parseISO } from 'date-fns';
-import { MEASURE_CATEGORIES } from './measureCategories';
 import { canConfirmCustomerCompletion, isLocked, summarizeMeasures } from './measureStatus';
-import { EMPTY_NEW_MEASURE, useRenovationMeasuresData, type NewMeasureForm } from './useRenovationMeasuresData';
-
-const CATEGORY_OPTIONS = [{ value: '', label: 'Bitte wählen...' }, ...MEASURE_CATEGORIES];
-
-function euro(value: number | null | undefined): string {
-    return value != null ? `${deCurrencyFormatter.format(value)} €` : '–';
-}
+import { EMPTY_NEW_MEASURE, newMeasurePriceRange, newMeasureTitle, useRenovationMeasuresData, type NewMeasureForm } from './useRenovationMeasuresData';
 
 function toDate(value: string | null): Date | undefined {
     return value ? parseISO(value) : undefined;
@@ -63,6 +58,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
     const { property, measures, hasMultipleUnits, contextUnit } = data;
 
     const { totalEstimated, quotedCount, totalQuoted, deviation } = summarizeMeasures(measures);
+    const newRange = newMeasurePriceRange(newMeasure, data.pricingContext);
 
     const openAddModal = () => {
         setNewMeasure(EMPTY_NEW_MEASURE);
@@ -118,7 +114,12 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
             key: 'title',
             label: 'Maßnahme',
             width: '160px',
-            renderCell: (_v, row) => <span className="font-semibold text-foreground">{row.measure.title}</span>,
+            renderCell: (_v, row) => (
+                <>
+                    <span className="block truncate font-semibold text-foreground">{row.measure.title}</span>
+                    {row.measure.category && <span className="block truncate text-xs text-muted-foreground">{categoryLabel(row.measure.category)}</span>}
+                </>
+            ),
         },
         {
             key: 'estimatedCost',
@@ -310,24 +311,20 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                     <div className="flex flex-col gap-3">
                         <SectionLabel>Übersicht</SectionLabel>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <div className="min-w-0 rounded-lg border border-border bg-card p-4">
-                                <p className="text-xs text-muted-foreground uppercase tracking-wide">Maßnahmen gesamt</p>
-                                <p className="mt-2 text-2xl font-semibold text-foreground">{measures.length}</p>
-                            </div>
-                            <div className="min-w-0 rounded-lg border border-border bg-card p-4">
-                                <p className="text-xs text-muted-foreground uppercase tracking-wide">Kosten veranschlagt</p>
-                                <p className="mt-2 text-2xl font-semibold text-foreground">{euro(totalEstimated)}</p>
-                            </div>
-                            <div className="min-w-0 rounded-lg border border-border bg-card p-4">
-                                <p className="text-xs text-muted-foreground uppercase tracking-wide">Kosten lt. Angebot</p>
-                                <p className="mt-2 text-2xl font-semibold text-primary">{quotedCount > 0 ? euro(totalQuoted) : '–'}</p>
-                            </div>
-                            <div className="min-w-0 rounded-lg border border-border bg-card p-4">
-                                <p className="text-xs text-muted-foreground uppercase tracking-wide">Abweichung</p>
-                                <p className={`mt-2 text-2xl font-semibold ${quotedCount === 0 ? 'text-foreground' : deviation > 0 ? 'text-warning' : deviation < 0 ? 'text-success' : 'text-foreground'}`}>
-                                    {quotedCount === 0 ? '–' : `${deviation > 0 ? '+' : ''}${euro(deviation)}`}
-                                </p>
-                            </div>
+                            <StatTile label="Maßnahmen gesamt" value={measures.length} caption="erfasst" />
+                            <StatTile label="Kosten veranschlagt" value={formatEuro(totalEstimated)} caption="kalkuliert" />
+                            <StatTile
+                                label="Kosten lt. Angebot"
+                                value={quotedCount > 0 ? formatEuro(totalQuoted) : '–'}
+                                valueClassName="text-primary"
+                                caption={`${quotedCount} von ${measures.length} mit Angebot`}
+                            />
+                            <StatTile
+                                label="Abweichung"
+                                value={quotedCount === 0 ? '–' : `${deviation > 0 ? '+' : ''}${formatEuro(deviation)}`}
+                                valueClassName={quotedCount === 0 ? undefined : deviation > 0 ? 'text-warning' : deviation < 0 ? 'text-success' : undefined}
+                                caption="Angebot vs. Kalkulation"
+                            />
                         </div>
                     </div>
 
@@ -361,7 +358,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                             label="Hinzufügen"
                             icon={<Icons.Plus className="w-4 h-4" />}
                             variant="primary"
-                            disabled={newMeasure.title.trim() === ''}
+                            disabled={newMeasureTitle(newMeasure) === ''}
                             loading={isAdding}
                             onClick={() => void confirmAdd()}
                         />
@@ -369,24 +366,22 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                 }
             >
                 <div className="flex flex-col gap-3">
-                    <TextField
-                        label="Maßnahme"
-                        placeholder="z.B. Fußboden"
-                        value={newMeasure.title}
-                        onChange={(e) => setNewMeasure((prev) => ({ ...prev, title: e.target.value }))}
+                    <RenovationMeasurePicker
+                        category={newMeasure.category}
+                        measure={newMeasure.measure}
+                        onCategoryChange={(category) => setNewMeasure((prev) => ({ ...prev, category }))}
+                        onMeasureChange={(measure) => setNewMeasure((prev) => ({ ...prev, measure }))}
+                        allowCustom
+                        customTitle={newMeasure.customTitle}
+                        onCustomTitleChange={(customTitle) => setNewMeasure((prev) => ({ ...prev, customTitle }))}
                     />
-                    <Dropdown
-                        label="Kategorie"
-                        optional
-                        options={CATEGORY_OPTIONS}
-                        value={newMeasure.category}
-                        onChange={(e) => setNewMeasure((prev) => ({ ...prev, category: e.target.value }))}
-                    />
+                    {newRange && <PriceIndicationHint range={newRange} />}
                     <NumberField
                         label="Kosten veranschlagt"
                         optional
                         unit="€"
                         min={0}
+                        placeholder={newRange ? String(midpoint(newRange)) : undefined}
                         value={newMeasure.estimatedCost}
                         onChange={(e) => setNewMeasure((prev) => ({ ...prev, estimatedCost: e.target.value }))}
                     />

@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const propertyId = new URL(request.url).searchParams.get('propertyId');
   const values: unknown[] = [userId];
   const filter = propertyId ? ' AND pd.property_id = $2' : '';
@@ -26,6 +27,7 @@ export async function GET(request: Request) {
 // likes, each under whatever name they gave it. No slot/replace semantics.
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const propertyId = Number(input.property_id);
   const owned = await db.query('SELECT 1 FROM property WHERE property_id = $1 AND user_id = $2', [propertyId, userId]);
@@ -40,6 +42,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const id = Number(new URL(request.url).searchParams.get('id'));
   const result = await db.query(
     `

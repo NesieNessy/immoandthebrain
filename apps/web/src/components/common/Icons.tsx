@@ -71,6 +71,7 @@ import {
   Plus,
   Receipt,
   RefreshCw,
+  RotateCcw,
   Ruler,
   Search,
   SearchX,
@@ -79,6 +80,7 @@ import {
   Shield,
   ShoppingCart,
   Smartphone,
+  Sparkles,
   Star,
   Target,
   Trash2,
@@ -200,6 +202,7 @@ export const Icons = {
   Wallet,
   Check,
   RefreshCw,
+  RotateCcw,
   MoreVertical,
   Eye,
   EyeOff,
@@ -225,6 +228,7 @@ export const Icons = {
   PieChart,
   Database,
   Loader2,
+  Sparkles,
   ArrowDown,
 
   // Einstellungen

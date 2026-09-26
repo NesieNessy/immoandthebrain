@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 // staff-authored posts ("inb Expertenkommentar" — no staff/admin role
 // exists, so this is a sentinel rather than a real flag).
 export async function GET(request: Request) {
-  await requireUserId(request);
+  const auth = await requireUserId(request);
+  if (auth instanceof Response) return auth;
   const { rows } = await db.query(
     `SELECT f.*, COALESCE(p.first_name || ' ' || p.last_name, 'inb Expertenkommentar') AS author_name
      FROM forum_post f
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
 
   const missing = ['category', 'title', 'body'].filter((field) => !String(input[field] ?? '').trim());

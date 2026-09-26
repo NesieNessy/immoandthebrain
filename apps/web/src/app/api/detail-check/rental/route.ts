@@ -1,6 +1,6 @@
 import { roundCurrency } from '@/lib/detailCheck/acquisitionCosts';
 import { currentMonthDate } from '@/lib/detailCheck/rental';
-import { requireUserId, workflowIdFor } from '@/lib/server/auth';
+import { requireUserId, resolveWorkflowId } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
 import { NextResponse } from 'next/server';
 
@@ -28,9 +28,11 @@ async function loadQuickCheck(userId: string, quickCheckId: string | null) {
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const url = new URL(request.url);
   const quickCheckId = url.searchParams.get('quickCheckId');
-  const workflowId = workflowIdFor(userId, quickCheckId, url.searchParams.get('workflowId'));
+  const workflowId = resolveWorkflowId(userId, quickCheckId, url.searchParams.get('workflowId'));
+  if (workflowId instanceof Response) return workflowId;
   const quickCheck = await loadQuickCheck(userId, quickCheckId);
 
   const { rows } = await db.query(
@@ -68,9 +70,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const quickCheckId = input.quickCheckId ? String(input.quickCheckId) : null;
-  const workflowId = workflowIdFor(userId, quickCheckId, input.workflowId ? String(input.workflowId) : null);
+  const workflowId = resolveWorkflowId(userId, quickCheckId, input.workflowId ? String(input.workflowId) : null);
+  if (workflowId instanceof Response) return workflowId;
   const quickCheck = await loadQuickCheck(userId, quickCheckId);
 
   const isRented = Boolean(input.isRented);
@@ -92,7 +96,7 @@ export async function POST(request: Request) {
     !/^\d{4}-\d{2}-01$/.test(valuationDate) ||
     values.some((value) => value < 0 || value > 1_000_000_000)
   ) {
-    return NextResponse.json({ error: 'Invalid rental payload' }, { status: 400 });
+    return NextResponse.json({ error: 'Die Angaben zur Vermietung sind ungültig. Bitte nur Beträge ab 0 eingeben.' }, { status: 400 });
   }
 
   const plausibilityWarningNk = false;

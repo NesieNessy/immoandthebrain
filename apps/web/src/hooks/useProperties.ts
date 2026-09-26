@@ -1,7 +1,8 @@
 'use client';
 
 import { archiveProperty, deleteProperty, getPropertiesOverview, type PropertyOverview } from '@/lib/supabase/property.supabase';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { errorMessage, UserFacingError } from '@/lib/api/apiError';
 
 export interface UsePropertiesResult {
     data: PropertyOverview[];
@@ -30,7 +31,7 @@ export function useProperties(userId: string | undefined): UsePropertiesResult {
             const rows = await getPropertiesOverview(userId);
             setData(rows);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
+            setError(errorMessage(err, 'Objekte konnten nicht geladen werden.'));
         } finally {
             setIsLoading(false);
         }
@@ -42,13 +43,13 @@ export function useProperties(userId: string | undefined): UsePropertiesResult {
 
     const deleteSelected = useCallback(async (id: number) => {
         const success = await deleteProperty(id);
-        if (!success) throw new Error('Löschen fehlgeschlagen');
+        if (!success) throw new UserFacingError('Objekt konnte nicht gelöscht werden.');
         setData((prev) => prev.filter((row) => row.propertyId !== id));
     }, []);
 
     const archiveSelected = useCallback(async (id: number) => {
         const archived = await archiveProperty(id);
-        if (!archived) throw new Error('Archivieren fehlgeschlagen');
+        if (!archived) throw new UserFacingError('Objekt konnte nicht archiviert werden.');
         setData((prev) => prev.map((row) => row.propertyId === id ? { ...row, archivedAt: archived.archivedAt } : row));
     }, []);
 

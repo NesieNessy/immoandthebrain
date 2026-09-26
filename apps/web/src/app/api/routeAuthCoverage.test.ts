@@ -60,7 +60,11 @@ function handlersWithoutAuth(source: string): string[] {
     const start = starts[i];
     const end = i + 1 < starts.length ? starts[i + 1].index : source.length;
     const body = source.slice(start.index, end);
-    if (!body.includes('requireUserId(')) {
+    // requireUserId *returns* its 401 instead of throwing it, so calling it is
+    // not enough — the handler must also return that response. TypeScript
+    // can't catch a forgotten guard: the unchecked Response would just be
+    // passed into the SQL parameters as the user id.
+    if (!body.includes('requireUserId(') || !/instanceof Response\) return \w+;/.test(body)) {
       missing.push(start.method);
     }
   }
@@ -118,14 +122,25 @@ describe('API route auth coverage', () => {
   });
 
   describe('handlersWithoutAuth (unit tests on synthetic sources)', () => {
-    it('finds no violations when the handler calls requireUserId', () => {
+    it('finds no violations when the handler calls requireUserId and returns its error response', () => {
+      const source = `
+        export async function GET(request: Request) {
+          const userId = await requireUserId(request);
+          if (userId instanceof Response) return userId;
+          return Response.json({ userId });
+        }
+      `;
+      expect(handlersWithoutAuth(source)).toEqual([]);
+    });
+
+    it('flags a handler that calls requireUserId but ignores its 401 response', () => {
       const source = `
         export async function GET(request: Request) {
           const userId = await requireUserId(request);
           return Response.json({ userId });
         }
       `;
-      expect(handlersWithoutAuth(source)).toEqual([]);
+      expect(handlersWithoutAuth(source)).toEqual(['GET']);
     });
 
     it('flags a handler that never calls requireUserId', () => {
@@ -141,6 +156,7 @@ describe('API route auth coverage', () => {
       const source = `
         export async function GET(request: Request) {
           const userId = await requireUserId(request);
+          if (userId instanceof Response) return userId;
           return Response.json({ userId });
         }
 

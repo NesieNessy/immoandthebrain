@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AppNavigation } from '@/components/features/AppNavigation';
+import { SessionExpiredDialog } from '@/components/features/SessionExpiredDialog';
 import { ToastProvider } from '@/components/ui';
 import "../styles/index.css";
 
@@ -27,6 +28,8 @@ export default function RootLayout({
               StickyActionBar already uses at the bottom. */}
           <AppNavigation />
           {children}
+          <SessionExpiredDialog />
+
         </ToastProvider>
       </body>
     </html>

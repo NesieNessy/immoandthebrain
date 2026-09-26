@@ -1,6 +1,8 @@
 'use client';
 
-import { Button, Checkbox, Icons, TextField } from '@/components/ui';
+import { Button, Checkbox, ErrorAlert, Icons, TextField } from '@/components/ui';
+import { authErrorMessage } from '@/lib/auth/authErrorMessage';
+import { safeNextPath } from '@/lib/auth/safeNextPath';
 import { recordLoginTime } from '@/lib/auth/sessionTimeout';
 import { supabase } from '@/lib/supabase/client.supabase';
 import Link from 'next/link';
@@ -11,6 +13,7 @@ function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const accountDeleted = searchParams.get('accountDeleted') === '1';
+  const nextPath = safeNextPath(searchParams.get('next'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -26,11 +29,11 @@ function LoginPageContent() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      setError(error.message);
+      setError(authErrorMessage(error, 'Die Anmeldung ist fehlgeschlagen. Bitte versuche es erneut.'));
       setIsLoading(false);
     } else {
       recordLoginTime();
-      router.push('/');
+      router.push(nextPath);
       router.refresh();
     }
   };
@@ -51,11 +54,7 @@ function LoginPageContent() {
       )}
 
       <form onSubmit={handleLogin} className="space-y-4">
-        {error && (
-          <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
-            {error}
-          </div>
-        )}
+        {error && <ErrorAlert message={error} />}
 
         <TextField
           label="E-Mail-Adresse"

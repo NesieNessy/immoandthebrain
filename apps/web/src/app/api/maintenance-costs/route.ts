@@ -45,6 +45,7 @@ function mapMaintenanceCosts(row: MaintenanceCostsRow) {
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const { searchParams } = new URL(request.url);
   const id = Number(searchParams.get('id'));
   const propertyId = Number(searchParams.get('propertyId'));
@@ -80,15 +81,16 @@ export async function GET(request: Request) {
     return NextResponse.json(rows.map(mapMaintenanceCosts));
   }
 
-  return NextResponse.json({ error: 'id or propertyId is required' }, { status: 400 });
+  return NextResponse.json({ error: 'Das Objekt fehlt.' }, { status: 400 });
 }
 
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const propertyId = Number(input.propertyId);
   if (!Number.isInteger(propertyId)) {
-    return NextResponse.json({ error: 'Invalid maintenance-costs payload' }, { status: 400 });
+    return NextResponse.json({ error: 'Die Angaben zu den laufenden Kosten sind unvollständig oder ungültig.' }, { status: 400 });
   }
 
   const { rows } = await db.query<MaintenanceCostsRow>(
@@ -117,16 +119,17 @@ export async function POST(request: Request) {
     ],
   );
 
-  if (!rows[0]) return NextResponse.json({ error: 'Property not found or not owned by user' }, { status: 404 });
+  if (!rows[0]) return NextResponse.json({ error: 'Objekt nicht gefunden.' }, { status: 404 });
   return NextResponse.json(mapMaintenanceCosts(rows[0]), { status: 201 });
 }
 
 export async function PATCH(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const maintenanceCostsId = Number(input.maintenanceCostsId);
   if (!Number.isInteger(maintenanceCostsId)) {
-    return NextResponse.json({ error: 'Invalid maintenance-costs id' }, { status: 400 });
+    return NextResponse.json({ error: 'Ungültiger Eintrag.' }, { status: 400 });
   }
 
   const sets: string[] = [];
@@ -150,7 +153,7 @@ export async function PATCH(request: Request) {
   }
 
   if (sets.length === 0) {
-    return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+    return NextResponse.json({ error: 'Keine Änderungen übermittelt.' }, { status: 400 });
   }
 
   values.push(maintenanceCostsId, userId);
@@ -168,6 +171,6 @@ export async function PATCH(request: Request) {
     values,
   );
 
-  if (!rows[0]) return NextResponse.json({ error: 'Maintenance-costs record not found' }, { status: 404 });
+  if (!rows[0]) return NextResponse.json({ error: 'Eintrag nicht gefunden.' }, { status: 404 });
   return NextResponse.json(mapMaintenanceCosts(rows[0]));
 }

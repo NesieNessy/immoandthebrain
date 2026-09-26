@@ -1,5 +1,5 @@
 import { computeRecommendation } from '@/lib/detailCheck/recommendation';
-import { requireUserId, workflowIdFor } from '@/lib/server/auth';
+import { requireUserId, resolveWorkflowId } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
 import { NextResponse } from 'next/server';
 
@@ -181,9 +181,11 @@ async function saveResult(
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const url = new URL(request.url);
   const quickCheckId = url.searchParams.get('quickCheckId');
-  const workflowId = workflowIdFor(userId, quickCheckId, url.searchParams.get('workflowId'));
+  const workflowId = resolveWorkflowId(userId, quickCheckId, url.searchParams.get('workflowId'));
+  if (workflowId instanceof Response) return workflowId;
   const context = await loadContext(userId, workflowId, quickCheckId);
   const result = computeRecommendation(context.input);
 
@@ -197,9 +199,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const quickCheckId = input.quickCheckId ? String(input.quickCheckId) : null;
-  const workflowId = workflowIdFor(userId, quickCheckId, input.workflowId ? String(input.workflowId) : null);
+  const workflowId = resolveWorkflowId(userId, quickCheckId, input.workflowId ? String(input.workflowId) : null);
+  if (workflowId instanceof Response) return workflowId;
   const context = await loadContext(userId, workflowId, quickCheckId);
   const result = computeRecommendation(context.input);
   await saveResult(userId, workflowId, context.quickCheck?.quick_check_id ?? null, result);

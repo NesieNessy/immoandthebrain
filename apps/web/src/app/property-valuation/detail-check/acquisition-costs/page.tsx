@@ -1,9 +1,10 @@
 "use client";
 
-import { LoadingScreen, ReadOnlyField, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
+import { LoadingScreen, ReadOnlyField, SectionLabel, StickyActionBar, TextField, ErrorAlert } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import {
+  acquisitionCostErrors,
   computeAcquisitionCosts,
   formatDecimalInput,
   parseDecimalInput,
@@ -12,6 +13,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
+import { errorMessage, readApiError } from '@/lib/api/apiError';
 
 type FormState = {
   purchasePrice: string;
@@ -107,19 +109,20 @@ function AcquisitionCostsContent() {
       setError(null);
       try {
         const res = await authFetch(`/api/detail-check/acquisition-costs${suffix}`, { cache: 'no-store' });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw await readApiError(res);
         const data = await res.json() as ApiPayload;
         if (cancelled) return;
         setApiData(data);
         setForm({
-          purchasePrice: decimalString(data.purchasePrice),
+          // No price yet (a detail check without Ersteinschätzung) starts empty, not "0".
+          purchasePrice: data.purchasePrice > 0 ? decimalString(data.purchasePrice) : '',
           parkingPurchasePrice: decimalString(data.parkingPurchasePrice),
           brokerPercent: decimalString(data.brokerPercent),
           livingAreaM2: decimalString(data.livingAreaM2),
         });
       } catch (loadError) {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : 'Kaufkosten konnten nicht geladen werden.');
+          setError(errorMessage(loadError, 'Kaufkosten konnten nicht geladen werden.'));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -177,22 +180,15 @@ function AcquisitionCostsContent() {
     propertyTransferTaxPercent,
   ]);
 
+  const validationErrors = acquisitionCostErrors(values);
+  const isValid = Object.keys(validationErrors).length === 0;
   const errors = {
-    purchasePrice:
-      values.purchasePrice < 0 || values.purchasePrice > 1_000_000_000
-        ? 'Bitte einen Betrag zwischen 0 und 1.000.000.000 eingeben.'
-        : '',
-    parkingPurchasePrice:
-      values.parkingPurchasePrice < 0 || values.parkingPurchasePrice > 1_000_000_000
-        ? 'Bitte einen Betrag zwischen 0 und 1.000.000.000 eingeben.'
-        : '',
-    brokerPercent:
-      values.brokerPercent < 0 || values.brokerPercent > 20
-        ? 'Bitte einen Prozentsatz zwischen 0 und 20 eingeben.'
-        : '',
+    // An empty price just keeps "Weiter" disabled — the message only appears
+    // once something invalid (e.g. 0) has actually been entered.
+    purchasePrice: form.purchasePrice.trim() ? validationErrors.purchasePrice ?? '' : '',
+    parkingPurchasePrice: validationErrors.parkingPurchasePrice ?? '',
+    brokerPercent: validationErrors.brokerPercent ?? '',
   };
-
-  const isValid = !errors.purchasePrice && !errors.parkingPurchasePrice && !errors.brokerPercent;
 
   const formatCurrency = (value: number | null | undefined) =>
     value == null ? '-' : currencyFormatter.format(value);
@@ -217,10 +213,10 @@ function AcquisitionCostsContent() {
           livingAreaM2: values.livingAreaM2,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await readApiError(res);
       return true;
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Kaufkosten konnten nicht gespeichert werden.');
+      setError(errorMessage(saveError, 'Kaufkosten konnten nicht gespeichert werden.'));
       return false;
     } finally {
       setIsSaving(false);
@@ -232,18 +228,21 @@ function AcquisitionCostsContent() {
   };
 
   const handleBack = async () => {
-    if (await persist()) router.push(`/property-valuation/detail-check/property-data${suffix}`);
+    const backHref = `/property-valuation/detail-check/property-data${suffix}`;
+    // Going back must stay possible before a valid price is entered (e.g. to
+    // fix the Objektdaten first) — it just doesn't save the incomplete step.
+    if (!isValid) {
+      router.push(backHref);
+      return;
+    }
+    if (await persist()) router.push(backHref);
   };
 
   return (
     <PropertyValuationLayout currentStep={1} title="Kaufkosten" beforeStepChange={persist} showFieldLegend>
       <div className="pb-24">
 
-        {error && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        {error && <ErrorAlert message={error} className="mb-4" />}
 
         {isLoading ? (
           <LoadingScreen message="Kaufkosten werden geladen…" fullScreen={false} />

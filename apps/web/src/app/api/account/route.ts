@@ -9,13 +9,13 @@ const USER_ASSETS_BUCKET = 'user-assets';
 
 function storageHeaders(extra?: Record<string, string>) {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) throw new Response(JSON.stringify({ error: 'Supabase admin configuration is missing.' }), { status: 500 });
+  if (!key) throw new Response(JSON.stringify({ error: 'Der Server ist nicht richtig konfiguriert. Bitte später erneut versuchen.' }), { status: 500 });
   return { Authorization: `Bearer ${key}`, apikey: key, ...extra };
 }
 
 function storageBaseUrl(): string {
   const url = process.env.SUPABASE_ADMIN_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url) throw new Response(JSON.stringify({ error: 'Supabase admin configuration is missing.' }), { status: 500 });
+  if (!url) throw new Response(JSON.stringify({ error: 'Der Server ist nicht richtig konfiguriert. Bitte später erneut versuchen.' }), { status: 500 });
   return `${url}/storage/v1`;
 }
 
@@ -55,6 +55,7 @@ async function deleteUserAssetFolder(userId: string) {
  *  before the confirm button is enabled — there is no server-side undo. */
 export async function DELETE(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
 
   await db.query('DELETE FROM property WHERE user_id = $1', [userId]);
   await db.query('DELETE FROM personal_data WHERE user_id = $1', [userId]);
@@ -63,7 +64,7 @@ export async function DELETE(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json({ error: 'Supabase admin configuration is missing.' }, { status: 500 });
+    return NextResponse.json({ error: 'Der Server ist nicht richtig konfiguriert. Bitte später erneut versuchen.' }, { status: 500 });
   }
   const admin = createClient(supabaseUrl, serviceRoleKey);
   const { error } = await admin.auth.admin.deleteUser(userId);

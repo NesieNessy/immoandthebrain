@@ -6,10 +6,11 @@ import { NewPropertyModal } from '@/components/features/NewPropertyModal';
 import { PropertyCard } from '@/components/features/PropertyCard';
 import { PropertyListRow } from '@/components/features/PropertyListRow';
 import type { MenuItem } from '@/components/ui';
-import { Button, ConfirmDeleteModal, Header, Icons, LoadingScreen, PAGE_CONTAINER_CLASS, Switch, TextFieldWithIcon } from '@/components/ui';
+import { Button, ConfirmDeleteModal, Header, Icons, LoadingScreen, PAGE_CONTAINER_CLASS, Switch, TextFieldWithIcon, useToast } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useProperties } from '@/hooks/useProperties';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
+import { errorMessage } from '@/lib/api/apiError';
 import { cn } from '@/lib/utils';
 import type { PropertyOverview } from '@/lib/supabase/property.supabase';
 import { KeyRound, LayoutGrid } from 'lucide-react';
@@ -62,6 +63,7 @@ export default function ExistingPropertiesPage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useRequireAuth();
   const { data: properties, isLoading, error, deleteSelected, archiveSelected } = useProperties(user?.id);
+  const { showToast } = useToast();
 
   const [search, setSearch] = useState('');
   const [objektTyp, setObjektTyp] = useState('');
@@ -87,6 +89,9 @@ export default function ExistingPropertiesPage() {
     try {
       await deleteSelected(id);
       setPropertyToDelete(null);
+    } catch (err) {
+      // Used to be a silent, unhandled rejection — the dialog just stayed open.
+      showToast(errorMessage(err, 'Objekt konnte nicht gelöscht werden.'), 'error');
     } finally {
       setDeletingId(null);
     }
@@ -96,6 +101,8 @@ export default function ExistingPropertiesPage() {
     setArchivingId(property.propertyId);
     try {
       await archiveSelected(property.propertyId);
+    } catch (err) {
+      showToast(errorMessage(err, 'Objekt konnte nicht archiviert werden.'), 'error');
     } finally {
       setArchivingId(null);
     }

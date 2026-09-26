@@ -37,6 +37,7 @@ export function PillOptions({ options, value, onChange, size = "sm", className, 
                         type="button"
                         disabled={isDisabled}
                         title={opt.title}
+                        aria-pressed={value === opt.value}
                         onClick={() => onChange(opt.value)}
                         className={cn(
                             "rounded-full text-sm font-medium border transition-colors cursor-pointer",

@@ -1,18 +1,20 @@
 "use client";
 
-import { Button, CalculatedPanel, Dropdown, FixedOverlay, LoadingScreen, MetricCard, MonthField, ReadOnlyField, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
+import { Button, CalculatedPanel, Dropdown, FixedOverlay, LoadingScreen, MetricCard, MonthField, ReadOnlyField, SectionLabel, StickyActionBar, TextField, ErrorAlert } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
 import { addMonths, runRentCalculator, CALCULATION_HORIZON_MONTHS, CALCULATION_HORIZON_YEARS, DEFAULT_VIEW_PERIOD_YEARS, type CalculatorMode, type CalculatorParams, type ModernizationPlanRow, type PlacementMode, type RentIndexSource, type RentIncrease558Row, type RentTimelineRow } from '@/lib/detailCheck/rentCalculator';
 import { buildEffectiveCalculatorParams, buildRestoreRequestBody, overridesFromParams, type CalculatorOverrides, type CalculatorParameterFields } from '@/lib/detailCheck/calculatorParamNormalization';
 import { costForCase, type RenovationCase, type RenovationTiming } from '@/lib/detailCheck/renovation';
-import { Check, ChevronDown, ChevronUp, LineChart, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, LineChart, Loader2 } from 'lucide-react';
+import { SaveStatusIndicator } from '@/components/features/SaveStatusIndicator';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
 import { AnalysisPanel } from './AnalysisPanel';
+import { errorMessage, readApiError } from '@/lib/api/apiError';
 
 /**
  * Renders a modal straight into `document.body`, bypassing every ancestor —
@@ -426,39 +428,6 @@ function TableToggle({ label, open, onClick }: { label: string; open: boolean; o
       aria-expanded={open}
       onClick={onClick}
     />
-  );
-}
-
-/**
- * The three states a change can be in: still typing/dragging (handled
- * elsewhere by the instant local preview), saved, or in between. `isDirty`
- * and `isSaving` are deliberately separate pieces of state — a save can be
- * in flight for an *earlier* edit while a *newer* one is already queued
- * behind it (see `queuedRecalcRef`), in which case both are true at once and
- * "Wird gespeichert…" is still the more honest thing to show.
- */
-function SaveStatusIndicator({ isSaving, isDirty }: { isSaving: boolean; isDirty: boolean }) {
-  if (isSaving) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-        Wird gespeichert…
-      </span>
-    );
-  }
-  if (isDirty) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-warning" role="status">
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warning" aria-hidden="true" />
-        Nicht gespeicherte Änderungen
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-      <Check size={14} aria-hidden="true" />
-      Gespeichert
-    </span>
   );
 }
 
@@ -1791,14 +1760,14 @@ function CalculatorContent() {
       setError(null);
       try {
         const res = await authFetch(`/api/detail-check/calculator${suffix}`, { cache: 'no-store' });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw await readApiError(res);
         const loaded = await res.json() as CalculatorResponse;
         if (cancelled) return;
         applyServerSnapshot(loaded);
         initialDataRef.current = loaded;
         setUpstreamResetNotice(loaded.overridesResetByUpstreamChange === true);
       } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : 'Kalkulator konnte nicht geladen werden.');
+        if (!cancelled) setError(errorMessage(loadError, 'Kalkulator konnte nicht geladen werden.'));
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -1888,7 +1857,7 @@ function CalculatorContent() {
           apply,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await readApiError(res);
       const updated = await res.json() as CalculatorResponse;
       // Always safe to adopt: `data` is only the baseline `effectiveParams`
       // builds on, and the overrides layered on top of it stay whatever the
@@ -1916,7 +1885,7 @@ function CalculatorContent() {
       if (navigate) router.push(`/property-valuation/detail-check/macro-location${suffix}`);
       return true;
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Kalkulation konnte nicht gespeichert werden.');
+      setError(errorMessage(saveError, 'Kalkulation konnte nicht gespeichert werden.'));
       return false;
     } finally {
       isSavingRef.current = false;
@@ -2093,11 +2062,11 @@ function CalculatorContent() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(buildRestoreRequestBody(initial.params, quickCheckId, workflowId)),
         });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw await readApiError(res);
         const restored = await res.json() as CalculatorResponse;
         applyServerSnapshot(restored);
       } catch (discardError) {
-        setError(discardError instanceof Error ? discardError.message : 'Änderungen konnten nicht verworfen werden.');
+        setError(errorMessage(discardError, 'Änderungen konnten nicht verworfen werden.'));
         setApplyPhase('ASK');
         return;
       }
@@ -2159,11 +2128,7 @@ function CalculatorContent() {
             </button>
           </div>
         )}
-        {error && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        {error && <ErrorAlert message={error} className="mb-4" />}
 
         {isLoading || !data || !presented ? (
           <LoadingScreen message="Kalkulator wird geladen…" fullScreen={false} />
@@ -2570,11 +2535,7 @@ function CalculatorContent() {
                 {/* Shown inside the dialog, not only in the page banner behind
                     it — after a failed apply the overlay is still up, so a
                     banner underneath would be invisible exactly when it matters. */}
-                {error && (
-                  <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                    Übernehmen fehlgeschlagen: {error}
-                  </div>
-                )}
+                {error && <ErrorAlert title="Übernehmen fehlgeschlagen" message={error} className="mb-4" />}
                 <div className="flex flex-wrap justify-end gap-2">
                   <button
                     className="rounded-md border border-border px-3 py-2"

@@ -1,6 +1,6 @@
 "use client";
 
-import { ComingSoonButton, Dropdown, LoadingScreen, PillOptions, ReadOnlyField, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
+import { ComingSoonButton, Dropdown, LoadingScreen, PillOptions, ReadOnlyField, SectionLabel, StickyActionBar, TextField, ErrorAlert } from '@/components/ui';
 import { PROPERTY_CATEGORY_LABEL } from '@/components/features/PropertyDisplay';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
@@ -18,6 +18,7 @@ import { cn, deCurrencyFormatter, deNumberFormatter } from '@/lib/utils';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
+import { errorMessage, readApiError } from '@/lib/api/apiError';
 
 type DepreciationResponse = {
   depreciationMode: DepreciationMode;
@@ -97,7 +98,7 @@ function DepreciationContent() {
       setError(null);
       try {
         const res = await authFetch(`/api/detail-check/depreciation${suffix}`, { cache: 'no-store' });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw await readApiError(res);
         const data = await res.json() as DepreciationResponse;
         if (cancelled) return;
         setContext(data);
@@ -111,7 +112,7 @@ function DepreciationContent() {
         setPropertyCategory(data.propertyCategory || 'EIGENTUMSWOHNUNG');
       } catch (loadError) {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : 'Abschreibung konnte nicht geladen werden.');
+          setError(errorMessage(loadError, 'Abschreibung konnte nicht geladen werden.'));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -186,10 +187,10 @@ function DepreciationContent() {
           coOwnershipDenominator: parseDecimalInput(coOwnershipDenominator),
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await readApiError(res);
       return true;
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Abschreibung konnte nicht gespeichert werden.');
+      setError(errorMessage(saveError, 'Abschreibung konnte nicht gespeichert werden.'));
       return false;
     } finally {
       setIsSaving(false);
@@ -208,11 +209,7 @@ function DepreciationContent() {
       showFieldLegend
     >
       <div className="pb-24">
-        {error && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        {error && <ErrorAlert message={error} className="mb-4" />}
 
         {isLoading || !context || !selectedSplit ? (
           <LoadingScreen message="Abschreibung wird geladen…" fullScreen={false} />
@@ -291,6 +288,7 @@ function DepreciationContent() {
                     >
                       <span className="text-sm text-foreground">{label}</span>
                       <Dropdown
+                        aria-label={`${label} – zuletzt erneuert`}
                         options={MODERNIZATION_OPTIONS}
                         value={modernization[field]}
                         onChange={(event) =>

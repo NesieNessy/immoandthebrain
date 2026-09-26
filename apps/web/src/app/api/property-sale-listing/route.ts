@@ -11,6 +11,7 @@ async function requireOwnedProperty(propertyId: number, userId: string): Promise
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const propertyId = Number(new URL(request.url).searchParams.get('propertyId'));
   if (!Number.isInteger(propertyId)) {
     return NextResponse.json({ error: 'Ungültige Objekt-ID.' }, { status: 400 });
@@ -27,6 +28,7 @@ export async function GET(request: Request) {
 // Veröffentlichen, update from then on.
 export async function PATCH(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const propertyId = Number(input.propertyId);
   if (!Number.isInteger(propertyId)) {

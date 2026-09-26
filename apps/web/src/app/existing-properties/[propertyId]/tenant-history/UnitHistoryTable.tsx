@@ -17,6 +17,7 @@ import { useRouter } from 'next/navigation';
 
 import { euro } from '../tenant-data/useTenantUnitData';
 import { formatDuration, personName } from './tenantHistoryFormatting';
+import { errorMessage, UserFacingError } from '@/lib/api/apiError';
 
 interface HistoryRow {
     tenancy: Tenancy;
@@ -162,12 +163,12 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
                 .filter((t): t is Tenancy & { tenancyStartDate: string } => t.tenancyStartDate != null)
                 .map((t) => (willEndCurrentToday && t.tenancyId === current!.tenancyId ? { ...t, tenancyEndDate: todayStr } : t));
             const reactivateStart = reactivateRow.tenancy.tenancyStartDate;
-            if (!reactivateStart) throw new Error('Dieses Mietverhältnis hat kein Einzugsdatum und kann nicht reaktiviert werden.');
+            if (!reactivateStart) throw new UserFacingError('Dieses Mietverhältnis hat kein Einzugsdatum und kann nicht reaktiviert werden.');
             const overlap = findOverlappingTenancy(candidateTenancies, reactivateStart, null, reactivateRow.tenancy.tenancyId);
             if (overlap) {
                 const overlapLabel = `${overlap.tenantFirstName ?? ''} ${overlap.tenantLastName ?? ''}`.trim() || 'ein anderes Mietverhältnis';
                 const overlapEndLabel = overlap.tenancyEndDate ? formatDeDate(overlap.tenancyEndDate) : 'laufend';
-                throw new Error(`Reaktivieren würde sich mit „${overlapLabel}" (${formatDeDate(overlap.tenancyStartDate)} – ${overlapEndLabel}) überschneiden. Bitte zuerst dessen Zeitraum anpassen.`);
+                throw new UserFacingError(`Reaktivieren würde sich mit „${overlapLabel}" (${formatDeDate(overlap.tenancyStartDate)} – ${overlapEndLabel}) überschneiden. Bitte zuerst dessen Zeitraum anpassen.`);
             }
 
             if (willEndCurrentToday) {
@@ -180,8 +181,7 @@ export function UnitHistoryTable({ propertyId, property, unit, hasMultipleUnits 
             await load();
             showToast('Mietverhältnis reaktiviert.', 'success');
         } catch (err) {
-            const message = err instanceof Error && err.message && err.message !== 'updateTenancy failed' ? err.message : 'Mietverhältnis konnte nicht reaktiviert werden.';
-            showToast(message, 'error');
+            showToast(errorMessage(err, 'Mietverhältnis konnte nicht reaktiviert werden.'), 'error');
         } finally {
             setIsReactivating(false);
         }
