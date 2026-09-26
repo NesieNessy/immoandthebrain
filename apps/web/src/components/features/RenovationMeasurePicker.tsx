@@ -1,10 +1,9 @@
 "use client";
 
 import { Dropdown, TextField } from '@/components/ui';
-import { RENOVATION_CATEGORIES, RENOVATION_MEASURES, type RenovationCategory } from '@/lib/renovation/catalog';
+import { CUSTOM_MEASURE, RENOVATION_CATEGORIES, RENOVATION_MEASURES, type RenovationCategory } from '@/lib/renovation/catalog';
 
-/** Maßnahme option that switches to a free-text title (see `allowCustom`). */
-export const CUSTOM_MEASURE = '__custom__';
+export { CUSTOM_MEASURE };
 
 interface RenovationMeasurePickerProps {
   category: RenovationCategory | '';
@@ -16,6 +15,8 @@ interface RenovationMeasurePickerProps {
   allowCustom?: boolean;
   customTitle?: string;
   onCustomTitleChange?: (title: string) => void;
+  /** Shown but not changeable (e.g. a commissioned measure). */
+  disabled?: boolean;
 }
 
 /**
@@ -31,6 +32,7 @@ export function RenovationMeasurePicker({
   allowCustom = false,
   customTitle = '',
   onCustomTitleChange,
+  disabled = false,
 }: RenovationMeasurePickerProps) {
   const measureOptions = [
     { value: '', label: category ? 'Bitte wählen…' : 'Erst Kategorie wählen…' },
@@ -48,12 +50,13 @@ export function RenovationMeasurePicker({
           onMeasureChange('');
         }}
         options={[{ value: '', label: 'Bitte wählen…' }, ...RENOVATION_CATEGORIES]}
+        disabled={disabled}
       />
       <Dropdown
         label="Maßnahme"
         value={measure}
         onChange={(event) => onMeasureChange(event.target.value)}
-        disabled={!category}
+        disabled={disabled || !category}
         options={measureOptions}
       />
       {allowCustom && measure === CUSTOM_MEASURE && (
@@ -61,6 +64,7 @@ export function RenovationMeasurePicker({
           label="Bezeichnung"
           placeholder="z.B. Treppenhaus streichen"
           value={customTitle}
+          disabled={disabled}
           onChange={(event) => onCustomTitleChange?.(event.target.value)}
         />
       )}
