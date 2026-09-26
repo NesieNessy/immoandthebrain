@@ -80,7 +80,6 @@ test('adding a measure requires a Maßnahme, and cost summary tiles reflect esti
 
     const titleA = `E2E Badsanierung ${Date.now()}`;
     await fillCustomMeasure(addForm, titleA);
-    await addForm.getByLabel('Kosten veranschlagt (optional)').fill('3000');
     await expect(addButton).toBeEnabled();
     await addButton.click();
 
@@ -95,13 +94,19 @@ test('adding a measure requires a Maßnahme, and cost summary tiles reflect esti
     await expect(addButton).toBeDisabled();
     const titleB = `E2E Fenstersanierung ${Date.now()}`;
     await fillCustomMeasure(addForm, titleB);
-    await addForm.getByLabel('Kosten veranschlagt (optional)').fill('2000');
     await addButton.click();
     await expect(page.locator('tbody tr').filter({ hasText: titleB }).first()).toBeVisible();
 
     // Closed, so the tiles below are the only "Kosten veranschlagt" text left.
     await addForm.getByRole('button', { name: 'Formular schließen' }).click();
     await expect(addForm).not.toBeVisible();
+
+    // Costs are entered in "Kosten & Termine" (saved when the field is left).
+    for (const [title, cost] of [[titleA, '3000'], [titleB, '2000']]) {
+        const estimate = page.getByLabel(`Kosten veranschlagt für ${title}`);
+        await estimate.fill(cost);
+        await estimate.blur();
+    }
 
     // Each summary tile is a flat <div> with two direct <p> children (label
     // + value), no nested divs — .last() on a hasText filter reliably
@@ -114,10 +119,12 @@ test('adding a measure requires a Maßnahme, and cost summary tiles reflect esti
     await expect(quotedTile.getByText('–', { exact: true })).toBeVisible();
 });
 
-/** A measure's two rows: in "Erfasste Maßnahmen" (data) and "Status & Beauftragung" (status). */
+/** Where a measure appears on the page. */
 function measureRows(page: Page, title: string) {
     const rows = page.locator('tbody tr').filter({ hasText: title });
-    return { dataRow: rows.first(), statusRow: rows.last() };
+    // "Erfasste Maßnahmen" (first table), "Kosten & Termine" (second), and the
+    // measure's card in "Status & Beauftragung".
+    return { dataRow: rows.first(), costRow: rows.last(), statusCard: page.getByRole('article', { name: title }) };
 }
 
 /** "Bearbeiten" in the measure's ⋮ menu (a row click opens its details instead). */
@@ -139,11 +146,11 @@ async function addMeasure(page: Page, title: string) {
 test('quote acceptance locks the measure and syncs quotedCost; switching quotes needs an unlock first', async ({ page }) => {
     const title = `E2E Dachsanierung ${Date.now()}`;
     await addMeasure(page, title);
-    const { dataRow, statusRow } = measureRows(page, title);
+    const { costRow, statusCard } = measureRows(page, title);
 
     // Everything on one page: a click on the measure in "Status &
     // Beauftragung" opens its Angebote, Rückfragen and Mängel below it.
-    await statusRow.getByText(title, { exact: true }).click();
+    await statusCard.getByRole('button', { name: 'Angebote, Rückfragen & Mängel' }).click();
 
     // ── Add two quotes ──────────────────────────────────────────────────
     await page.getByRole('button', { name: 'Angebot hinzufügen' }).click();
@@ -163,27 +170,28 @@ test('quote acceptance locks the measure and syncs quotedCost; switching quotes 
 
     // ── Accept A: measure is commissioned and locked, quotedCost = 1000 ──
     await page.getByRole('button', { name: 'Angebot A auswählen' }).click();
-    await expect(statusRow.getByRole('img', { name: `${title} beauftragt` })).toBeVisible();
-    await expect(dataRow.getByText('1.000 €')).toBeVisible();
+    await expect(statusCard.getByRole('img', { name: `${title} beauftragt` })).toBeVisible();
+    await expect(costRow.getByLabel(`Kosten laut Angebot für ${title}`)).toHaveValue('1000');
     await expect(page.getByRole('button', { name: 'Angebot hinzufügen' })).not.toBeVisible();
     // B can't be chosen directly while locked — switching needs an unlock first.
     await expect(page.getByRole('button', { name: 'Angebot B auswählen' })).toBeDisabled();
 
     // The locked fields can't be changed in the edit form either.
+    await expect(costRow.getByLabel(`Kosten veranschlagt für ${title}`)).toBeDisabled();
     await openEditForm(page, title);
     const editForm = page.getByRole('region', { name: 'Maßnahme bearbeiten' });
-    await expect(editForm.getByLabel('Kosten veranschlagt (optional)')).toBeDisabled();
+    await expect(editForm.getByLabel('Beschreibung')).toBeDisabled();
     await editForm.getByRole('button', { name: 'Formular schließen' }).click();
 
     // ── Unlock in the panel ─────────────────────────────────────────────
     await page.getByRole('button', { name: 'Beauftragung aufheben' }).click();
-    await expect(statusRow.getByRole('img', { name: `${title} nicht beauftragt` })).toBeVisible();
+    await expect(statusCard.getByRole('img', { name: `${title} nicht beauftragt` })).toBeVisible();
 
     // ── Now accept B instead: the FE's own unaccept-others logic (client-
     // side, not the server's exclusiveBooleanOnUpdate — that's covered
     // directly, bypassing the FE, in the "server enforces" test below) ──
     await page.getByRole('button', { name: 'Angebot B auswählen' }).click();
-    await expect(dataRow.getByText('1.500 €')).toBeVisible();
+    await expect(costRow.getByLabel(`Kosten laut Angebot für ${title}`)).toHaveValue('1500');
     await expect(page.getByRole('button', { name: 'Angebot A auswählen' })).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByRole('button', { name: 'Angebot B auswählen' })).toHaveAttribute('aria-pressed', 'true');
 
@@ -214,10 +222,10 @@ test('quote acceptance locks the measure and syncs quotedCost; switching quotes 
 test('customer confirmation requires craftsman confirmation and a completion date; clearing the date resets it', async ({ page }) => {
     const title = `E2E Elektrik ${Date.now()}`;
     await addMeasure(page, title);
-    const { dataRow, statusRow } = measureRows(page, title);
+    const { costRow, statusCard } = measureRows(page, title);
 
     // ── Mängel (defects) in the measure's panel: add and remove ─────────
-    await statusRow.getByText(title, { exact: true }).click();
+    await statusCard.getByRole('button', { name: 'Angebote, Rückfragen & Mängel' }).click();
     await page.getByPlaceholder('Mangel beschreiben…').fill('Riss in der Wand');
     await page.getByRole('button', { name: 'Mangel hinzufügen' }).click();
     await expect(page.getByText('Riss in der Wand')).toBeVisible();
@@ -226,31 +234,25 @@ test('customer confirmation requires craftsman confirmation and a completion dat
     await expect(page.getByText('Riss in der Wand')).not.toBeVisible();
 
     // Craftsman-confirmed alone isn't enough — no completion date yet.
-    await statusRow.getByRole('button', { name: `${title}: vom Handwerker bestätigt` }).click();
-    await expect(statusRow.getByRole('button', { name: `${title} als abgeschlossen bestätigen` })).toBeDisabled();
+    await statusCard.getByRole('button', { name: `${title}: vom Handwerker bestätigt` }).click();
+    await expect(statusCard.getByRole('button', { name: `${title} als abgeschlossen bestätigen` })).toBeDisabled();
 
-    // The completion date is set in the edit form ("Bearbeiten").
-    // CalendarField's "Kalender öffnen" button also carries the label, so
-    // scope to role=textbox.
+    // The completion date is set in "Kosten & Termine". CalendarField's
+    // "Kalender öffnen" button also carries the label, so scope to role=textbox.
+    const completionDate = costRow.getByRole('textbox', { name: `Tatsächlicher Abschluss für ${title}` });
     const setCompletionDate = async (value: string) => {
-        await openEditForm(page, title);
-        const editForm = page.getByRole('region', { name: 'Maßnahme bearbeiten' });
-        await editForm.getByRole('textbox', { name: 'Abschluss ist' }).fill(value);
-        await editForm.getByRole('button', { name: 'Übernehmen' }).click();
-        await expect(editForm).not.toBeVisible();
+        await completionDate.fill(value);
+        await completionDate.blur();
     };
 
     await setCompletionDate('01.06.2026');
-    await expect(dataRow.getByText('01.06.2026')).toBeVisible();
-    await statusRow.getByRole('button', { name: `${title} als abgeschlossen bestätigen` }).click();
-    await expect(statusRow.getByRole('button', { name: `${title} als nicht abgeschlossen markieren` })).toBeVisible();
+    await expect(completionDate).toHaveValue('01.06.2026');
+    await statusCard.getByRole('button', { name: `${title} als abgeschlossen bestätigen` }).click();
+    await expect(statusCard.getByRole('button', { name: `${title} als nicht abgeschlossen markieren` })).toBeVisible();
 
     // Clearing the completion date resets the customer confirmation.
     await setCompletionDate('');
-    await expect(statusRow.getByRole('button', { name: `${title} als abgeschlossen bestätigen` })).toBeDisabled();
-
-    // Costs and dates are read-only in the table — changed in the form only.
-    await expect(dataRow.getByRole('textbox')).toHaveCount(0);
+    await expect(statusCard.getByRole('button', { name: `${title} als abgeschlossen bestätigen` })).toBeDisabled();
 });
 
 test('an old measure link opens the measure on the Handwerkerleistungen page', async ({ page }) => {

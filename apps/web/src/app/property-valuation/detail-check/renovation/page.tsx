@@ -589,15 +589,15 @@ function RenovationContent() {
       key: 'massnahme',
       label: 'Maßnahme',
       renderCell: (_v, row) => (
-        <>
-          <span className="block whitespace-normal break-words font-semibold">{row.item.massnahme}</span>
-          <span className="block text-xs text-muted-foreground">{categoryLabel(row.item.kategorie)}</span>
-        </>
+        <div className="flex min-w-0 flex-col items-start gap-1 whitespace-normal">
+          <span className="break-words font-semibold">{row.item.massnahme}</span>
+          <Tag label={categoryLabel(row.item.kategorie)} variant="info" />
+        </div>
       ),
     },
     {
       key: 'indikation',
-      label: 'KI-Indikation',
+      label: 'Preisindikation',
       width: '170px',
       renderCell: (_v, row) => row.item.ai ? (
         <span title={row.item.ai.summary}>

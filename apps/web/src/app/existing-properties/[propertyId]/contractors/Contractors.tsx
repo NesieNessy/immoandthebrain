@@ -1,17 +1,17 @@
 "use client";
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 import { FileDropZone } from '@/components/features/FileDropZone';
 import { FileLinkList, isImageFileName, type FileLink } from '@/components/features/FileLinkList';
 import { FormPanel } from '@/components/features/FormPanel';
+import { PriceIndicationHint } from '@/components/features/PriceIndicationHint';
 import { PriceRangeSlider } from '@/components/features/PriceRangeSlider';
 import { buildPropertyUseCaseBreadcrumb, formatUnitLabel, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
 import { RenovationMeasurePicker } from '@/components/features/RenovationMeasurePicker';
 import {
     Button,
     CalendarField,
-    Checkbox,
     ConfirmDeleteModal,
     Header,
     Icons,
@@ -29,80 +29,22 @@ import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCas
 import { categoryLabel, midpoint } from '@/lib/renovation/catalog';
 import { deNumberFormatter, formatEuro } from '@/lib/utils';
 import type { RenovationMeasure } from '@immoandthebrain/types';
-import { format, parseISO } from 'date-fns';
-import { MeasureWorkPanel } from './MeasureWorkPanel';
+import { parseISO } from 'date-fns';
+import { MeasureStatusCard } from './MeasureStatusCard';
 import {
     EMPTY_NEW_MEASURE,
     formFromMeasure,
+    distributeEstimates,
     measurePriceRange,
     newMeasurePriceRange,
     newMeasureTitle,
+    planSlider,
     type NewMeasureForm,
 } from './measureForm';
-import { canConfirmCustomerCompletion, isLocked, summarizeMeasures } from './measureStatus';
+import { isLocked, summarizeMeasures } from './measureStatus';
 import { useRenovationMeasuresData } from './useRenovationMeasuresData';
 
 const EMPTY = <span className="text-muted-foreground">–</span>;
-
-function formatCost(value: number | null) {
-    return value == null ? EMPTY : formatEuro(value);
-}
-
-function formatDate(value: string | null) {
-    return value ? format(parseISO(value), 'dd.MM.yyyy') : EMPTY;
-}
-
-/** The last column of both tables: shows whether the row's panel is open. */
-function ExpandChevron({ open, what }: { open: boolean; what: string }) {
-    return (
-        <Icons.ChevronDown
-            className={`mx-auto h-4 w-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`}
-            aria-label={open ? `${what} schließen` : `${what} öffnen`}
-        />
-    );
-}
-
-/** Title, category tag and the full description of a measure. */
-function MeasureSummary({ measure }: { measure: RenovationMeasure }) {
-    return (
-        <div className="flex min-w-0 flex-col gap-1.5 whitespace-normal">
-            <span className="break-words font-semibold text-foreground">{measure.title}</span>
-            {measure.category && <span><Tag label={categoryLabel(measure.category)} variant="info" /></span>}
-            {/* Free text of any length — wraps and is always shown in full. */}
-            {measure.description && <span className="whitespace-pre-line break-words text-muted-foreground">{measure.description}</span>}
-        </div>
-    );
-}
-
-/** Small label/value pairs stacked in one cell (e.g. the costs of a measure). */
-function ValueList({ items }: { items: { label: string; value: ReactNode }[] }) {
-    return (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 whitespace-nowrap text-sm">
-            {items.map((item) => (
-                <div key={item.label} className="contents">
-                    <dt className="text-muted-foreground">{item.label}</dt>
-                    <dd className="text-right text-foreground">{item.value}</dd>
-                </div>
-            ))}
-        </dl>
-    );
-}
-
-function costItems(measure: RenovationMeasure, range: { min: number; max: number } | null) {
-    return [
-        { label: 'Indikation', value: range ? `${deNumberFormatter.format(range.min)} – ${formatEuro(range.max)}` : EMPTY },
-        { label: 'Veranschlagt', value: formatCost(measure.estimatedCost) },
-        { label: 'Lt. Angebot', value: formatCost(measure.quotedCost) },
-    ];
-}
-
-function dateItems(measure: RenovationMeasure) {
-    return [
-        { label: 'Start Wunsch', value: formatDate(measure.preferredStartDate) },
-        { label: 'Start lt. Angebot', value: formatDate(measure.quotedStartDate) },
-        { label: 'Abschluss', value: formatDate(measure.actualCompletionDate) },
-    ];
-}
 
 interface MeasureRow extends Record<string, unknown> {
     key: string;
@@ -112,37 +54,13 @@ interface MeasureRow extends Record<string, unknown> {
 /** What the measure files bucket accepts (renovation-measure-files). */
 const UPLOAD_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp';
 
-/** A round status mark (✓ when set) — as a button when it can be toggled. */
-function StatusMark({ checked, label, disabled, title, onToggle }: {
-    checked: boolean;
-    label: string;
-    disabled?: boolean;
-    title?: string;
-    onToggle?: () => void;
-}) {
-    const mark = checked
-        ? <Icons.CheckCircle2 className="h-5 w-5 text-success" />
-        : <span className="block h-5 w-5 rounded-full border-2 border-border transition-colors hover:border-primary" />;
-    if (!onToggle) return <span className="mx-auto flex justify-center" role="img" aria-label={label}>{mark}</span>;
-    return (
-        <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onToggle(); }}
-            disabled={disabled}
-            aria-pressed={checked}
-            aria-label={label}
-            title={title}
-            className="mx-auto flex cursor-pointer items-center justify-center disabled:cursor-not-allowed disabled:opacity-40"
-        >
-            {mark}
-        </button>
-    );
-}
-
 /**
- * Handwerkerleistungen — everything on one page, like Sanierung: the add/edit
- * form above "Erfasste Maßnahmen", and "Status & Beauftragung" below, where a
- * click on a measure opens its Angebote, Rückfragen and Mängel.
+ * Handwerkerleistungen — everything on one page, like Sanierung:
+ *  - the add/edit form above "Erfasste Maßnahmen" (the same table as
+ *    Sanierung's "Erfasste Modernisierungen"),
+ *  - "Kosten & Termine" to compare the measures' figures side by side,
+ *  - "Status & Beauftragung": one card per measure with its progress steps,
+ *    opening its Angebote, Rückfragen and Mängel.
  */
 export default function Contractors({ propertyId }: { propertyId: string }) {
     const searchParams = useSearchParams();
@@ -158,8 +76,6 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
         const requested = Number(searchParams.get('measure'));
         return Number.isInteger(requested) && requested > 0 ? requested : null;
     });
-    /** The measure whose description and Belege are open in "Erfasste Maßnahmen". */
-    const [detailsId, setDetailsId] = useState<number | null>(null);
     const formRef = useRef<HTMLDivElement>(null);
 
     if (data.isLoading) return <PropertyLoadingPage />;
@@ -174,7 +90,8 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
     const priceRange = editing && newMeasureTitle(form) === editing.title && form.category === (editing.category ?? '')
         ? measurePriceRange(editing, data.pricingContext)
         : newMeasurePriceRange(form, data.pricingContext);
-    const sliderValue = form.estimatedCost !== '' ? Number(form.estimatedCost) : priceRange ? midpoint(priceRange) : 0;
+    const rangeOf = (m: RenovationMeasure) => measurePriceRange(m, data.pricingContext);
+    const slider = planSlider(measures, rangeOf);
 
     const setField = (patch: Partial<NewMeasureForm>) => setForm((prev) => ({ ...prev, ...patch }));
 
@@ -237,9 +154,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
     const photoByKey = (measure: RenovationMeasure, key: string) =>
         data.photosOf(measure.renovationMeasureId).find((photo) => String(photo.renovationMeasurePhotoId) === key);
 
-    const commitFor = (measure: RenovationMeasure) => (patch: Partial<RenovationMeasure>) => data.commitField(measure.renovationMeasureId, patch);
-
-    // ── Erfasste Maßnahmen ──────────────────────────────────────────────
+    // ── Erfasste Maßnahmen — as Sanierung's "Erfasste Modernisierungen" ──
     const columns: TableColumn<MeasureRow>[] = [
         {
             key: 'actions',
@@ -248,34 +163,90 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
             renderCell: (_v, row) => {
                 const m = row.measure;
                 return (
-                    <div onClick={(e) => e.stopPropagation()}>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            iconOnly
-                            icon={<Icons.MoreVertical />}
-                            aria-label={`Aktionen für ${m.title}`}
-                            menuItems={[
-                                { label: 'Bearbeiten', icon: <Icons.Rename />, onClick: () => openEdit(m) },
-                                { label: 'Löschen', icon: <Icons.Trash2 />, destructive: true, disabled: isLocked(m), onClick: () => data.requestDeleteMeasure(m) },
-                            ]}
-                        />
-                    </div>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        iconOnly
+                        icon={<Icons.MoreVertical />}
+                        aria-label={`Aktionen für ${m.title}`}
+                        menuItems={[
+                            { label: 'Bearbeiten', icon: <Icons.Rename />, onClick: () => openEdit(m) },
+                            { label: 'Löschen', icon: <Icons.Trash2 />, destructive: true, disabled: isLocked(m), onClick: () => data.requestDeleteMeasure(m) },
+                        ]}
+                    />
                 );
             },
         },
-        // Costs and dates each in their own column, so measures can be
-        // compared at a glance. Description and Belege aren't compared — they
-        // open on demand below the row, which keeps the table narrow enough
-        // to fit without scrolling. Read-only; changed in the form above.
+        {
+            key: 'category',
+            label: 'Kategorie',
+            width: '150px',
+            renderCell: (_v, row) => row.measure.category ? <Tag label={categoryLabel(row.measure.category)} variant="info" /> : EMPTY,
+        },
+        {
+            key: 'title',
+            label: 'Maßnahme',
+            width: '22%',
+            renderCell: (_v, row) => <span className="block whitespace-normal break-words font-medium">{row.measure.title}</span>,
+        },
+        {
+            key: 'description',
+            label: 'Beschreibung',
+            // Free text of any length — wraps and is always shown in full.
+            renderCell: (_v, row) => row.measure.description
+                ? <span className="block whitespace-pre-line break-words text-muted-foreground">{row.measure.description}</span>
+                : EMPTY,
+        },
+        {
+            key: 'files',
+            label: 'Belege',
+            width: '22%',
+            renderCell: (_v, row) => (
+                <div className="whitespace-normal">
+                    <FileLinkList
+                        files={savedFileLinks(row.measure)}
+                        onOpen={(file) => { const photo = photoByKey(row.measure, file.key); if (photo) void data.viewPhoto(photo); }}
+                    />
+                </div>
+            ),
+        },
+    ];
+
+    // ── Kosten & Termine — the figures, one column each, to compare ────
+    const costInput = (m: RenovationMeasure, field: 'estimatedCost' | 'quotedCost', label: string) => {
+        const range = field === 'estimatedCost' ? rangeOf(m) : null;
+        return (
+            <NumberField
+                aria-label={label}
+                unit="€"
+                min={0}
+                disabled={isLocked(m)}
+                placeholder={range ? String(midpoint(range)) : undefined}
+                value={m[field] ?? ''}
+                onChange={(e) => data.updateLocalField(m.renovationMeasureId, { [field]: e.target.value === '' ? null : Number(e.target.value) })}
+                onBlur={() => void data.persistField(m.renovationMeasureId, { [field]: m[field] })}
+            />
+        );
+    };
+
+    const dateInput = (m: RenovationMeasure, field: 'preferredStartDate' | 'quotedStartDate' | 'actualCompletionDate', label: string) => (
+        <CalendarField
+            aria-label={label}
+            disabled={field !== 'actualCompletionDate' && isLocked(m)}
+            value={m[field] ? parseISO(m[field]!) : undefined}
+            onChange={(date) => data.setDate(m, field, date)}
+        />
+    );
+
+    const costColumns: TableColumn<MeasureRow>[] = [
         {
             key: 'title',
             label: 'Maßnahme',
             renderCell: (_v, row) => (
-                <div className="flex min-w-0 flex-col items-start gap-1 whitespace-normal">
-                    <span className="break-words font-semibold text-foreground">{row.measure.title}</span>
-                    {row.measure.category && <Tag label={categoryLabel(row.measure.category)} variant="info" />}
-                </div>
+                <>
+                    <span className="block whitespace-normal break-words font-semibold">{row.measure.title}</span>
+                    {row.measure.category && <span className="block text-xs text-muted-foreground">{categoryLabel(row.measure.category)}</span>}
+                </>
             ),
         },
         {
@@ -283,7 +254,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
             label: 'Preisindikation',
             width: '170px',
             align: 'right',
-            // Same range and formatting as Sanierung's KI-Indikation; none for a free-text measure.
+            // Same range and formatting as Sanierung's Preisindikation; none for a free-text measure.
             renderCell: (_v, row) => {
                 const range = measurePriceRange(row.measure, data.pricingContext);
                 return range ? (
@@ -294,159 +265,52 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                 ) : EMPTY;
             },
         },
-        { key: 'estimatedCost', label: 'Kosten veranschl.', width: '140px', align: 'right', renderCell: (_v, row) => formatCost(row.measure.estimatedCost) },
-        { key: 'quotedCost', label: 'Kosten lt. Angebot', width: '145px', align: 'right', renderCell: (_v, row) => formatCost(row.measure.quotedCost) },
-        { key: 'preferredStartDate', label: 'Start Wunsch', width: '120px', renderCell: (_v, row) => formatDate(row.measure.preferredStartDate) },
-        { key: 'quotedStartDate', label: 'Start lt. Angebot', width: '140px', renderCell: (_v, row) => formatDate(row.measure.quotedStartDate) },
-        { key: 'actualCompletionDate', label: 'Abschluss ist', width: '120px', renderCell: (_v, row) => formatDate(row.measure.actualCompletionDate) },
+        // Entered right here, like "Angesetzt" and "Zeitpunkt" in Sanierung.
+        // Costs are saved when the field is left, dates when picked. Once
+        // commissioned, only the completion date stays editable (as on the server).
         {
-            key: 'expand',
-            label: '',
-            width: '56px',
-            align: 'center',
-            renderCell: (_v, row) => <ExpandChevron open={detailsId === row.measure.renovationMeasureId} what="Beschreibung & Belege" />,
+            key: 'estimatedCost',
+            label: 'Kosten veranschl.',
+            width: '160px',
+            renderCell: (_v, row) => costInput(row.measure, 'estimatedCost', `Kosten veranschlagt für ${row.measure.title}`),
+        },
+        {
+            key: 'quotedCost',
+            label: 'Kosten lt. Angebot',
+            width: '160px',
+            renderCell: (_v, row) => costInput(row.measure, 'quotedCost', `Kosten laut Angebot für ${row.measure.title}`),
+        },
+        {
+            key: 'preferredStartDate',
+            label: 'Start Wunsch',
+            width: '175px',
+            renderCell: (_v, row) => dateInput(row.measure, 'preferredStartDate', `Wunschstart für ${row.measure.title}`),
+        },
+        {
+            key: 'quotedStartDate',
+            label: 'Start lt. Angebot',
+            width: '175px',
+            renderCell: (_v, row) => dateInput(row.measure, 'quotedStartDate', `Start laut Angebot für ${row.measure.title}`),
+        },
+        {
+            key: 'actualCompletionDate',
+            label: 'Abschluss ist',
+            width: '175px',
+            renderCell: (_v, row) => dateInput(row.measure, 'actualCompletionDate', `Tatsächlicher Abschluss für ${row.measure.title}`),
         },
     ];
 
-    /** Description and Belege of a measure, opened below its row. */
-    const renderMeasureDetails = (row: MeasureRow) => {
-        const m = row.measure;
-        if (detailsId !== m.renovationMeasureId) return null;
-        const files = savedFileLinks(m);
-        return (
-            <div className="grid gap-4 whitespace-normal md:grid-cols-[2fr_1fr]" onClick={(e) => e.stopPropagation()}>
-                <div>
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Beschreibung</p>
-                    {m.description
-                        ? <p className="whitespace-pre-line break-words text-foreground">{m.description}</p>
-                        : EMPTY}
-                </div>
-                <div>
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Belege</p>
-                    <FileLinkList files={files} onOpen={(file) => { const photo = photoByKey(m, file.key); if (photo) void data.viewPhoto(photo); }} />
-                </div>
-            </div>
-        );
-    };
-
-    /** Phones: one card per measure instead of the table. */
-    const renderMeasureCard = (row: MeasureRow) => {
-        const m = row.measure;
-        const files = savedFileLinks(m);
-        return (
-            <div onClick={() => openEdit(m)} className="flex cursor-pointer flex-col gap-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/50">
-                <div className="flex items-start justify-between gap-3">
-                    <MeasureSummary measure={m} />
-                    {columns[0].renderCell?.(undefined, row)}
-                </div>
-                <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">
-                    <ValueList items={costItems(m, measurePriceRange(m, data.pricingContext))} />
-                    <ValueList items={dateItems(m)} />
-                </div>
-                {files.length > 0 && (
-                    <div className="border-t border-border pt-3" onClick={(e) => e.stopPropagation()}>
-                        <FileLinkList files={files} onOpen={(file) => { const photo = photoByKey(m, file.key); if (photo) void data.viewPhoto(photo); }} />
-                    </div>
-                )}
-            </div>
-        );
-    };
-
-    // ── Status & Beauftragung ───────────────────────────────────────────
-    // Like Sanierung's "Auswertung & Planung": where each measure stands. A
-    // click on a row opens its Angebote, Rückfragen and Mängel below it.
-    const statusColumns: TableColumn<MeasureRow>[] = [
-        {
-            key: 'title',
-            label: 'Maßnahme',
-            renderCell: (_v, row) => (
-                <div className="flex min-w-0 flex-col items-start gap-1 whitespace-normal">
-                    <span className="break-words font-semibold text-foreground">{row.measure.title}</span>
-                    {row.measure.category && <Tag label={categoryLabel(row.measure.category)} variant="info" />}
-                </div>
-            ),
-        },
-        {
-            key: 'published',
-            label: 'Auftrag veröffentlichen',
-            width: '190px',
-            align: 'center',
-            renderCell: (_v, row) => {
-                const m = row.measure;
-                return (
-                    <span className="inline-flex justify-center" title="Im Handwerkerportal ausschreiben" onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                            checked={m.published}
-                            disabled={isLocked(m)}
-                            onChange={() => data.togglePublished(m)}
-                            aria-label={`${m.title} im Handwerkerportal veröffentlichen`}
-                        />
-                    </span>
-                );
-            },
-        },
-        {
-            key: 'quoteReceived',
-            label: 'Angebot',
-            width: '100px',
-            align: 'center',
-            renderCell: (_v, row) => (
-                <StatusMark checked={row.measure.quotedCost != null} label={row.measure.quotedCost != null ? 'Angebot erhalten' : 'Kein Angebot erhalten'} />
-            ),
-        },
-        {
-            key: 'quoteAccepted',
-            label: 'Beauftragt',
-            width: '110px',
-            align: 'center',
-            // Set by choosing an Angebot in the measure's panel (and undone there).
-            renderCell: (_v, row) => (
-                <StatusMark checked={row.measure.quoteAccepted} label={row.measure.quoteAccepted ? `${row.measure.title} beauftragt` : `${row.measure.title} nicht beauftragt`} />
-            ),
-        },
-        {
-            key: 'craftsmanConfirmedCompleted',
-            label: 'Handwerker bestätigt',
-            width: '170px',
-            align: 'center',
-            renderCell: (_v, row) => {
-                const m = row.measure;
-                return (
-                    <StatusMark
-                        checked={m.craftsmanConfirmedCompleted}
-                        label={m.craftsmanConfirmedCompleted ? `${m.title}: Bestätigung des Handwerkers zurücknehmen` : `${m.title}: vom Handwerker bestätigt`}
-                        onToggle={() => data.toggleCraftsmanConfirmed(m)}
-                    />
-                );
-            },
-        },
-        {
-            key: 'customerConfirmedCompleted',
-            label: 'Abgeschlossen',
-            width: '130px',
-            align: 'center',
-            renderCell: (_v, row) => {
-                const m = row.measure;
-                const canConfirm = canConfirmCustomerCompletion(m);
-                return (
-                    <StatusMark
-                        checked={m.customerConfirmedCompleted}
-                        label={m.customerConfirmedCompleted ? `${m.title} als nicht abgeschlossen markieren` : `${m.title} als abgeschlossen bestätigen`}
-                        disabled={!canConfirm}
-                        title={!canConfirm ? (m.craftsmanConfirmedCompleted ? 'Bitte zuerst das Abschlussdatum setzen' : 'Bitte zuerst „Handwerker bestätigt" setzen') : undefined}
-                        onToggle={() => data.toggleCustomerConfirmed(m)}
-                    />
-                );
-            },
-        },
-        {
-            key: 'expand',
-            label: '',
-            width: '56px',
-            align: 'center',
-            renderCell: (_v, row) => <ExpandChevron open={expandedId === row.measure.renovationMeasureId} what="Angebote & Mängel" />,
-        },
-    ];
+    // Footer, like Sanierung's Gesamtsumme: the totals of both cost columns.
+    const costFooter = (
+        <span className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm text-foreground">
+            <span className="font-medium">
+                Summe veranschlagt: <span className="text-base font-semibold text-primary">{formatEuro(totalEstimated)}</span>
+            </span>
+            <span className="font-medium">
+                Summe lt. Angebot: <span className="text-base font-semibold">{quotedCount > 0 ? formatEuro(totalQuoted) : '–'}</span>
+            </span>
+        </span>
+    );
 
     const tableData: MeasureRow[] = measures.map((measure) => ({ key: String(measure.renovationMeasureId), measure }));
 
@@ -524,7 +388,7 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                                 {locked && (
                                     <p className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground md:col-span-2">
                                         <Icons.Lock className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                                        Beauftragt — Maßnahme, Kosten, Starttermine und Beschreibung sind gesperrt. Zum Ändern die Beauftragung unter „Status & Beauftragung“ aufheben.
+                                        Beauftragt — Maßnahme und Beschreibung sind gesperrt. Zum Ändern die Beauftragung unter „Status & Beauftragung“ aufheben.
                                     </p>
                                 )}
                                 <RenovationMeasurePicker
@@ -575,45 +439,11 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                                         )}
                                     </FileDropZone>
                                 </div>
-                                <NumberField
-                                    label="Kosten veranschlagt"
-                                    optional
-                                    unit="€"
-                                    min={0}
-                                    disabled={locked}
-                                    placeholder={priceRange ? String(midpoint(priceRange)) : undefined}
-                                    value={form.estimatedCost}
-                                    onChange={(e) => setField({ estimatedCost: e.target.value })}
-                                />
-                                <NumberField
-                                    label="Kosten lt. Angebot"
-                                    optional
-                                    unit="€"
-                                    min={0}
-                                    disabled={locked}
-                                    value={form.quotedCost}
-                                    onChange={(e) => setField({ quotedCost: e.target.value })}
-                                />
-                                <div className="grid gap-4 sm:grid-cols-3 md:col-span-2">
-                                    <CalendarField label="Start Wunsch" optional disabled={locked} value={form.preferredStartDate} onChange={(date) => setField({ preferredStartDate: date })} />
-                                    <CalendarField label="Start lt. Angebot" optional disabled={locked} value={form.quotedStartDate} onChange={(date) => setField({ quotedStartDate: date })} />
-                                    <CalendarField label="Abschluss ist" optional value={form.actualCompletionDate} onChange={(date) => setField({ actualCompletionDate: date })} />
-                                </div>
-                                {priceRange && !locked && (
-                                    <div className="flex flex-col gap-2 md:col-span-2">
-                                        <p className="text-sm font-medium text-foreground">Mit welchem Preis möchtest du weiterrechnen?</p>
-                                        <PriceRangeSlider
-                                            min={priceRange.min}
-                                            max={priceRange.max}
-                                            value={sliderValue}
-                                            onChange={(value) => setField({ estimatedCost: String(value) })}
-                                            format={formatEuro}
-                                            hint="Wird als „Kosten veranschlagt“ übernommen."
-                                        />
-                                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                                            <Icons.Info className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                            Kostenspanne auf Basis von Kategorie, Wohnfläche und PLZ-Regionalfaktor — dieselbe Preisindikation wie in der Detailbewertung.
-                                        </p>
+                                {/* Like Sanierung: the indication for the chosen measure — its costs
+                                    and dates are then set in "Kosten & Termine". */}
+                                {priceRange && (
+                                    <div className="md:col-span-2">
+                                        <PriceIndicationHint range={priceRange} />
                                     </div>
                                 )}
                             </FormPanel>
@@ -622,32 +452,62 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                         <Table
                             columns={columns}
                             data={tableData}
-                            // Like "Status & Beauftragung": a click opens the row's panel
-                            // (editing is "Bearbeiten" in the ⋮ menu).
-                            onRowClick={(row) => setDetailsId((current) => current === row.measure.renovationMeasureId ? null : row.measure.renovationMeasureId)}
-                            getRowClassName={(row) => (detailsId === row.measure.renovationMeasureId ? 'bg-primary/5' : undefined)}
-                            renderExpandedRow={renderMeasureDetails}
-                            renderMobileCard={renderMeasureCard}
                             emptyMessage="Noch keine Sanierungsmaßnahmen erfasst."
                             footerLeft={`${measures.length} ${measures.length === 1 ? 'Eintrag' : 'Einträge'}`}
                         />
                     </section>
 
                     {measures.length > 0 && (
-                        <section className="flex flex-col gap-3">
-                            <SectionLabel>Status & Beauftragung</SectionLabel>
-                            <Table
-                                columns={statusColumns}
-                                data={tableData}
-                                onRowClick={(row) => setExpandedId((current) => current === row.measure.renovationMeasureId ? null : row.measure.renovationMeasureId)}
-                                getRowClassName={(row) => (expandedId === row.measure.renovationMeasureId ? 'bg-primary/5' : undefined)}
-                                renderExpandedRow={(row) => expandedId === row.measure.renovationMeasureId
-                                    ? <MeasureWorkPanel measure={row.measure} commit={commitFor(row.measure)} />
-                                    : null}
-                                emptyMessage="Noch keine Sanierungsmaßnahmen erfasst."
-                                footerLeft="Klick auf eine Maßnahme öffnet Angebote, Rückfragen und Mängel."
-                            />
-                        </section>
+                        <>
+                            <section className="flex flex-col gap-3">
+                                <SectionLabel>Kosten & Termine</SectionLabel>
+                                <Table
+                                    columns={costColumns}
+                                    data={tableData}
+                                    emptyMessage="Noch keine Sanierungsmaßnahmen erfasst."
+                                    footerLeft={costFooter}
+                                />
+                            </section>
+
+                            {/* ── Preiswahl, as in Sanierung ─────────────────────── */}
+                            {slider && (
+                                <section className="flex flex-col gap-3">
+                                    <SectionLabel>Mit welchem Preis möchtest du weiterrechnen?</SectionLabel>
+                                    <PriceRangeSlider
+                                        min={slider.min}
+                                        max={slider.max}
+                                        value={slider.value}
+                                        // Moves every measure within its own range (shown live), saved on release.
+                                        onChange={(value) => void data.applyEstimates(distributeEstimates(measures, rangeOf, value), false)}
+                                        onCommit={(value) => void data.applyEstimates(distributeEstimates(measures, rangeOf, value), true)}
+                                        format={formatEuro}
+                                        hint="Setzt „Kosten veranschlagt“ aller noch nicht beauftragten Maßnahmen mit Preisindikation."
+                                    />
+                                    <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                                        <Icons.Info className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                        Kostenspanne auf Basis von Kategorie, Wohnfläche und PLZ-Regionalfaktor.
+                                    </p>
+                                </section>
+                            )}
+
+                            <section className="flex flex-col gap-3">
+                                <SectionLabel>Status & Beauftragung</SectionLabel>
+                                <div className="flex flex-col gap-3">
+                                    {measures.map((m) => (
+                                        <MeasureStatusCard
+                                            key={m.renovationMeasureId}
+                                            measure={m}
+                                            open={expandedId === m.renovationMeasureId}
+                                            onToggleOpen={() => setExpandedId((current) => current === m.renovationMeasureId ? null : m.renovationMeasureId)}
+                                            onTogglePublished={() => data.togglePublished(m)}
+                                            onToggleCraftsman={() => data.toggleCraftsmanConfirmed(m)}
+                                            onToggleCustomer={() => data.toggleCustomerConfirmed(m)}
+                                            commit={(patch) => data.commitField(m.renovationMeasureId, patch)}
+                                        />
+                                    ))}
+                                </div>
+                            </section>
+                        </>
                     )}
                 </div>
             </main>

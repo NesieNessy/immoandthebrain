@@ -3,6 +3,7 @@
 import { useToast } from '@/components/ui';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { getPropertyPricingContext, type PropertyPricingContext } from '@/lib/api/renovationPricing';
+import { midpoint } from '@/lib/renovation/catalog';
 import { getPropertyById } from '@/lib/supabase/property.supabase';
 import { getPropertyUnitsByProperty } from '@/lib/supabase/property_unit.supabase';
 import { deletePhoto, getPhotosByProperty, getPhotoUrl, uploadPhoto } from '@/lib/supabase/renovation_measure_photo.supabase';
@@ -133,13 +134,15 @@ export function useRenovationMeasuresData(propertyId: string) {
             title,
             category: form.category !== '' ? form.category : null,
             description: form.description.trim() || null,
-            estimatedCost: form.estimatedCost !== '' ? Number(form.estimatedCost) : null,
-            quotedCost: form.quotedCost !== '' ? Number(form.quotedCost) : null,
+            // Like Sanierung: a priced measure starts at the middle of its
+            // range; costs and dates are then set in "Kosten & Termine".
+            estimatedCost: range ? midpoint(range) : null,
+            quotedCost: null,
             budgetMin: range?.min ?? null,
             budgetMax: range?.max ?? null,
-            preferredStartDate: toDateValue(form.preferredStartDate),
-            quotedStartDate: toDateValue(form.quotedStartDate),
-            actualCompletionDate: toDateValue(form.actualCompletionDate),
+            preferredStartDate: null,
+            quotedStartDate: null,
+            actualCompletionDate: null,
             published: false,
             quoteAccepted: false,
             craftsmanConfirmedCompleted: false,
@@ -156,19 +159,15 @@ export function useRenovationMeasuresData(propertyId: string) {
     };
 
     /**
-     * Saves "Maßnahme bearbeiten". A locked measure (quote accepted) only
-     * sends what stays editable then — the rest is refused by the server.
+     * Saves "Maßnahme bearbeiten" — what the measure is. Costs and dates are
+     * not part of the form (they're edited in "Kosten & Termine"), so saving
+     * it never overwrites them. A locked measure (quote accepted) only sends
+     * what stays editable then — the rest is refused by the server.
      */
     const saveMeasure = async (measure: RenovationMeasure, form: NewMeasureForm, files: File[] = []) => {
         const title = newMeasureTitle(form);
         if (title === '') return false;
-        const completion = toDateValue(form.actualCompletionDate);
-        const patch: Partial<RenovationMeasure> = {
-            category: form.category !== '' ? form.category : null,
-            actualCompletionDate: completion,
-            // Clearing the completion date also clears a stale customer confirmation.
-            ...(completion ? {} : { customerConfirmedCompleted: false }),
-        };
+        const patch: Partial<RenovationMeasure> = { category: form.category !== '' ? form.category : null };
         if (!measure.quoteAccepted) {
             // A different measure is a different price range; the same one keeps its stored range.
             const sameMeasure = title === measure.title && patch.category === measure.category;
@@ -176,17 +175,31 @@ export function useRenovationMeasuresData(propertyId: string) {
             Object.assign(patch, {
                 title,
                 description: form.description.trim() || null,
-                estimatedCost: form.estimatedCost !== '' ? Number(form.estimatedCost) : null,
-                quotedCost: form.quotedCost !== '' ? Number(form.quotedCost) : null,
                 budgetMin: range?.min ?? null,
                 budgetMax: range?.max ?? null,
-                preferredStartDate: toDateValue(form.preferredStartDate),
-                quotedStartDate: toDateValue(form.quotedStartDate),
             });
         }
         const ok = await persistField(measure.renovationMeasureId, patch);
         if (ok) reportFailedUploads(await uploadFiles(measure, files), files.length, 'Maßnahme gespeichert');
         return ok;
+    };
+
+    // ── Kosten & Termine ────────────────────────────────────────────────
+    /** A date of "Kosten & Termine" picked or cleared — saved right away. */
+    const setDate = (measure: RenovationMeasure, field: 'preferredStartDate' | 'quotedStartDate' | 'actualCompletionDate', date: Date | undefined) => {
+        const value = toDateValue(date);
+        // Clearing the completion date also clears a stale customer confirmation.
+        const patch: Partial<RenovationMeasure> = field === 'actualCompletionDate' && !value
+            ? { actualCompletionDate: null, customerConfirmedCompleted: false }
+            : { [field]: value };
+        commitField(measure.renovationMeasureId, patch);
+    };
+
+    /** The plan-wide price slider moved: new estimates, applied at once and saved. */
+    const applyEstimates = async (estimates: Map<number, number>, persist: boolean) => {
+        setMeasures((prev) => prev.map((m) => (estimates.has(m.renovationMeasureId) ? { ...m, estimatedCost: estimates.get(m.renovationMeasureId)! } : m)));
+        if (!persist) return;
+        await Promise.all([...estimates].map(([id, estimatedCost]) => persistField(id, { estimatedCost })));
     };
 
     // ── Status toggles ──────────────────────────────────────────────────
@@ -240,6 +253,10 @@ export function useRenovationMeasuresData(propertyId: string) {
         removePhoto,
         viewPhoto,
         commitField,
+        updateLocalField,
+        persistField,
+        setDate,
+        applyEstimates,
         addMeasure,
         saveMeasure,
         togglePublished,
