@@ -211,8 +211,11 @@ function detailCheckSteps(flow: Flow) {
             // No parking spaces were recorded in Objektdaten — nothing to price.
             await expect(page.getByLabel('Kaufpreis Stellplatz')).toBeDisabled();
 
+            // The positions show the bare amount; the Gesamtnebenkosten and
+            // Gesamtkaufpreis tiles append "€" in the same element — anchored,
+            // so 27.210,00 doesn't also match 327.210,00.
             for (const amount of ['4.000,00', '10.710,00', '4.500,00', '1.500,00', '10.500,00', '27.210,00', '327.210,00']) {
-                await expect(page.getByText(amount, { exact: true })).toBeVisible();
+                await expect(page.getByText(new RegExp(`^${escapeRegExp(amount)}(\\s*€)?$`)).first()).toBeVisible();
             }
 
             await page.getByLabel('Makler', { exact: true }).fill('25');
@@ -433,6 +436,115 @@ test('a malformed workflow id is rejected instead of falling back to the draft',
         const response = await request.get(`/api/detail-check/property-data?${query}`, { failOnStatusCode: false });
         expect(response.status(), query).toBe(400);
     }
+});
+
+// "In Bestandsobjekte übernehmen" (POST /api/detail-checks/takeover): every
+// step's data lands in the Bestandsobjekt, in one go, exactly once.
+test.describe('In Bestandsobjekte übernehmen', () => {
+    const street = 'E2E Detailbewertung-Straße 4';
+    const removeProperty = () => withDb((client) => client.query(
+        'DELETE FROM property WHERE user_id = $1 AND street = $2', [BYPASS_USER_ID, 'E2E Detailbewertung-Straße'],
+    ));
+
+    test.beforeAll(async () => { await removeFixture(`${street}a`); await removeProperty(); });
+    test.afterAll(async () => { await removeFixture(`${street}a`); await removeProperty(); });
+
+    test('takes Objektdaten, Kaufkosten, Vermietung, Sanierung and documents over — and only once', async ({ request }) => {
+        const workflowId = `detail-check:${randomUUID()}`;
+        await withDb(async (client) => {
+            await client.query(
+                `INSERT INTO detail_check_property_data (user_id, workflow_id, property_category, data_entry_source, tenancy_type, street_house_number, postal_code, city, year_of_construction, living_area_m2, parking_spaces, energy_efficiency)
+                 VALUES ($1, $2, 'EIGENTUMSWOHNUNG', 'MANUELL', 'STANDARD', $3, $4, $5, $6, 75, 1, 'C')`,
+                [BYPASS_USER_ID, workflowId, `${street}a`, POSTAL_CODE, CITY, YEAR_OF_CONSTRUCTION],
+            );
+            await client.query(
+                `INSERT INTO detail_check_acquisition_costs (user_id, workflow_id, purchase_price, parking_purchase_price, property_transfer_tax_percent,
+                   broker_amount, notary_amount, land_registry_amount, property_transfer_tax_amount, total_additional_costs, total_costs, state)
+                 VALUES ($1, $2, 300000, 0, 3.5, 10710, 4500, 1500, 10500, 27210, 327210, 'BY')`,
+                [BYPASS_USER_ID, workflowId],
+            );
+            await client.query(
+                `INSERT INTO detail_check_rental (user_id, workflow_id, valuation_date, cold_rent, parking_rent, service_charges_allocable, service_charges_non_allocable, service_charges_total)
+                 VALUES ($1, $2, '2026-03-01', $3, 50, 180, 40, 220)`,
+                [BYPASS_USER_ID, workflowId, COLD_RENT],
+            );
+            await client.query(
+                `INSERT INTO detail_check_renovation (user_id, workflow_id, cases) VALUES ($1, $2, $3)`,
+                [BYPASS_USER_ID, workflowId, JSON.stringify([
+                    { id: 'a', kategorie: 'SANITAER', massnahme: 'Bad sanieren', selected: true, zeitpunkt: 'FLEXIBEL', publish_order: false, cost_selected: 18000, ai: { summary: '', price_min: 15000, price_max: 22000, confidence: 0.8, source: 'FALLBACK' } },
+                    { id: 'b', kategorie: 'ENERGETISCH', massnahme: 'Fenster tauschen', selected: false, zeitpunkt: 'FLEXIBEL', publish_order: false },
+                ])],
+            );
+        });
+        // Metadata only — there is no file behind it, so the Nebenkostenabrechnung
+        // copy fails and the takeover reports that as a warning, not an error.
+        const uploaded = await request.post('/api/documents', {
+            data: {
+                category: 'Detailbewertung',
+                name: 'Nebenkostenabrechnung',
+                file_name: 'nebenkosten.pdf',
+                storage_path: `${documentPathPrefix(`${street}a`)}${Date.now()}.pdf`,
+                content_type: 'application/pdf',
+                detail_check_workflow_id: workflowId,
+            },
+        });
+        const document = await uploaded.json();
+
+        const response = await request.post('/api/detail-checks/takeover', { data: { workflowId } });
+        expect(response.status()).toBe(201);
+        const { propertyId, warnings } = await response.json();
+        expect(warnings).toHaveLength(1);
+
+        await withDb(async (client) => {
+            const { rows: [property] } = await client.query('SELECT * FROM property WHERE property_id = $1', [propertyId]);
+            expect(property).toMatchObject({ street: 'E2E Detailbewertung-Straße', house_number: '4a', postal_code: POSTAL_CODE, city: CITY, federal_state: 'Bayern', year_of_construction: YEAR_OF_CONSTRUCTION, energy_efficient: 'C' });
+            expect(Number(property.square_meters)).toBe(75);
+
+            const { rows: [costs] } = await client.query('SELECT * FROM acquisition_costs WHERE property_id = $1', [propertyId]);
+            expect(Number(costs.property_purchase_price)).toBe(300000);
+            expect(Number(costs.broker)).toBe(3.57);
+            expect(Number(costs.real_estate_tax_value)).toBe(10500);
+            expect(Number(costs.total_ancillary_costs_value)).toBe(27210);
+
+            const { rows: units } = await client.query('SELECT * FROM property_unit WHERE property_id = $1', [propertyId]);
+            expect(units).toHaveLength(1);
+            expect(units[0].unit_label).toBe('Gesamtes Objekt');
+            expect(Number(units[0].target_cold_rent)).toBe(COLD_RENT);
+            expect(Number(units[0].target_parking_rent)).toBe(50);
+            expect(Number(units[0].target_ancillary_costs)).toBe(220);
+
+            const { rows: parking } = await client.query('SELECT number_of_parking_spaces FROM parking_space WHERE property_id = $1', [propertyId]);
+            expect(parking.map((row) => row.number_of_parking_spaces)).toEqual([1]);
+
+            const { rows: measures } = await client.query('SELECT * FROM renovation_measure WHERE property_id = $1', [propertyId]);
+            expect(measures).toHaveLength(1);
+            expect(measures[0]).toMatchObject({ title: 'Bad sanieren', category: 'SANITAER' });
+            expect(Number(measures[0].estimated_cost)).toBe(18000);
+
+            const { rows: [linked] } = await client.query('SELECT property_id, category FROM document WHERE document_id = $1', [document.document_id]);
+            expect(linked).toEqual({ property_id: propertyId, category: 'Bestandsobjekt' });
+        });
+
+        // The overview now offers "Zum Bestandsobjekt" …
+        const list = await (await request.get(`/api/detail-checks?workflowId=${encodeURIComponent(workflowId)}`)).json();
+        expect(list[0].taken_over_property_id).toBe(propertyId);
+        // … and a second takeover creates no second Bestandsobjekt.
+        const again = await request.post('/api/detail-checks/takeover', { data: { workflowId }, failOnStatusCode: false });
+        expect(again.status()).toBe(409);
+        expect((await again.json()).propertyId).toBe(propertyId);
+    });
+
+    test('names what is missing instead of creating an incomplete Bestandsobjekt', async ({ request }) => {
+        const workflowId = `detail-check:${randomUUID()}`;
+        await withDb((client) => client.query(
+            `INSERT INTO detail_check_property_data (user_id, workflow_id, property_category, data_entry_source, tenancy_type, street_house_number, postal_code, city, year_of_construction, living_area_m2)
+             VALUES ($1, $2, 'EIGENTUMSWOHNUNG', 'MANUELL', 'STANDARD', $3, NULL, $4, 1995, 75)`,
+            [BYPASS_USER_ID, workflowId, `${street}a`, CITY],
+        ));
+        const response = await request.post('/api/detail-checks/takeover', { data: { workflowId }, failOnStatusCode: false });
+        expect(response.status()).toBe(400);
+        expect((await response.json()).error).toContain('PLZ');
+    });
 });
 
 // The Grunderwerbsteuer rate comes from the postal_code_state table. Potsdam

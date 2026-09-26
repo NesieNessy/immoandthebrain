@@ -2,17 +2,11 @@
 
 import { NoResult } from '@/components/common';
 import type { MenuItem, SortDirection, TableColumn } from '@/components/ui';
-import { Button, ConfirmDeleteModal, ErrorAlert, Header, Icons, LoadingScreen, PAGE_CONTAINER_CLASS, Table, Tag, TextFieldWithIcon } from '@/components/ui';
+import { Button, ConfirmDeleteModal, ErrorAlert, Header, Icons, LoadingScreen, PAGE_CONTAINER_CLASS, Table, Tag, TextFieldWithIcon, useToast } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { authFetch } from '@/lib/api/authFetch';
-import { createAcquisitionCosts } from '@/lib/supabase/acquisition_costs.supabase';
-import { createParkingSpace } from '@/lib/supabase/parking_space.supabase';
-import { createProperty } from '@/lib/supabase/property.supabase';
-import { upsertPropertyRnd } from '@/lib/supabase/property_rnd.supabase';
-import { upsertPropertyPriceSplit } from '@/lib/supabase/property_price_split.supabase';
 import { cn } from '@/lib/utils';
-import type { EnergyEfficient, PriceSplitMode, RndMode } from '@immoandthebrain/types';
 import { MoreVertical, Building2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -53,25 +47,8 @@ interface DetailCheckRow extends Record<string, unknown> {
    *  otherwise the step right after the furthest one completed ("result"
    *  once every step up to Vergleich is done). */
   resumeRoute: string;
-  /** Restnutzungsdauer/Kaufpreisaufteilung — only set once the Abschreibung
-   *  step has been saved (hasDepreciation), so "In Bestandsobjekte
-   *  übernehmen" can carry them over instead of losing that work. */
-  hasDepreciation: boolean;
-  rndMode: RndMode;
-  modernizationRoof: string | null;
-  modernizationWindows: string | null;
-  modernizationLines: string | null;
-  modernizationHeating: string | null;
-  modernizationFacade: string | null;
-  modernizationBathrooms: string | null;
-  modernizationInterior: string | null;
-  remainingUsefulLifeYears: number;
-  afaPercent: number;
-  priceSplitMode: PriceSplitMode;
-  plotAreaM2: number | null;
-  landReferenceValue: number | null;
-  coOwnershipNumerator: number | null;
-  coOwnershipDenominator: number | null;
+  /** The Bestandsobjekt this detail check was taken over into, if any. */
+  takenOverPropertyId: number | null;
 }
 
 // "Nicht begonnen" stays the actual status value (used for sorting/filtering
@@ -109,21 +86,7 @@ interface DetailCheckApiRow {
   has_calculator: boolean;
   has_location_score: boolean;
   has_comparison: boolean;
-  depreciation_mode: RndMode | null;
-  price_split_mode: PriceSplitMode | null;
-  modernization_roof: string | null;
-  modernization_windows: string | null;
-  modernization_lines: string | null;
-  modernization_heating: string | null;
-  modernization_facade: string | null;
-  modernization_bathrooms: string | null;
-  modernization_interior: string | null;
-  remaining_useful_life_years: string | number | null;
-  afa_percent: string | number | null;
-  plot_area_m2: string | number | null;
-  land_reference_value: string | number | null;
-  co_ownership_numerator: string | number | null;
-  co_ownership_denominator: string | number | null;
+  taken_over_property_id: number | null;
 }
 
 function computeResumeState(row: DetailCheckApiRow): { resumed: boolean; resumeRoute: string } {
@@ -164,7 +127,8 @@ function statusTagVariant(status: DetailCheckRow['status']) {
 
 export default function DetailCheckOverviewPage() {
   const router = useRouter();
-  const { user, isLoading: authLoading } = useRequireAuth();
+  const { isLoading: authLoading } = useRequireAuth();
+  const { showToast } = useToast();
   const [takingOverId, setTakingOverId] = useState<string | null>(null);
   const [rows, setRows] = useState<DetailCheckRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -208,22 +172,7 @@ export default function DetailCheckOverviewPage() {
             status,
             updatedAt: row.updated_at,
             ...resumeState,
-            hasDepreciation: row.has_depreciation,
-            rndMode: row.depreciation_mode ?? 'STANDARD',
-            modernizationRoof: row.modernization_roof,
-            modernizationWindows: row.modernization_windows,
-            modernizationLines: row.modernization_lines,
-            modernizationHeating: row.modernization_heating,
-            modernizationFacade: row.modernization_facade,
-            modernizationBathrooms: row.modernization_bathrooms,
-            modernizationInterior: row.modernization_interior,
-            remainingUsefulLifeYears: Number(row.remaining_useful_life_years ?? 50),
-            afaPercent: Number(row.afa_percent ?? 2),
-            priceSplitMode: row.price_split_mode ?? 'STANDARD',
-            plotAreaM2: row.plot_area_m2 == null ? null : Number(row.plot_area_m2),
-            landReferenceValue: row.land_reference_value == null ? null : Number(row.land_reference_value),
-            coOwnershipNumerator: row.co_ownership_numerator == null ? null : Number(row.co_ownership_numerator),
-            coOwnershipDenominator: row.co_ownership_denominator == null ? null : Number(row.co_ownership_denominator),
+            takenOverPropertyId: row.taken_over_property_id == null ? null : Number(row.taken_over_property_id),
           };
         }));
       } catch (loadError) {
@@ -245,98 +194,38 @@ export default function DetailCheckOverviewPage() {
     router.push(`/property-valuation/detail-check/${row.resumeRoute}${rowSuffix(row)}`);
   }, [router]);
 
-  // Creates the Bestandsobjekt directly from what the detail check already
-  // captured — no intermediate form, matching "In Bestandsobjekte
-  // übernehmen" being a one-click action from the row menu.
+  // One server call takes everything the detail check captured over into a
+  // Bestandsobjekt (api/detail-checks/takeover): Objektdaten, Kaufkosten,
+  // Soll-Mieten, Finanzierung, RND, Sanierungsmaßnahmen, Dokumente and the
+  // uploaded Nebenkostenabrechnung — all or nothing.
   const takeOverToBestandsobjekte = useCallback(async (row: DetailCheckRow) => {
-    if (!user) return;
     setTakingOverId(row.workflowId);
     try {
-      const created = await createProperty({
-        userId: user.id,
-        cityId: null,
-        propertyAbbreviation: null,
-        street: row.address,
-        houseNumber: '',
-        city: row.city,
-        postalCode: row.postalCode,
-        federalState: '',
-        squareMeters: row.livingAreaM2,
-        numberOfRooms: null,
-        yearOfConstruction: row.constructionYear,
-        energyEfficient: (row.energyEfficiency || null) as EnergyEfficient | null,
-        propertyCategory: row.propertyCategory,
-        imageUrl: null,
-        numberOfUnits: 1,
-        archivedAt: null,
+      const response = await authFetch('/api/detail-checks/takeover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workflowId: row.workflowId }),
       });
-      if (!created) {
-        setError('Objekt konnte nicht angelegt werden.');
-        return;
+      if (response.status === 409) {
+        // Already taken over (e.g. in another tab) — just go there.
+        const body = await response.json().catch(() => ({})) as { propertyId?: number };
+        if (body.propertyId) {
+          router.push(`/existing-properties/${body.propertyId}`);
+          return;
+        }
       }
-
-      if (row.purchasePrice > 0) {
-        await createAcquisitionCosts({
-          propertyId: created.propertyId,
-          parkingSpaceId: null,
-          propertyPurchasePrice: row.purchasePrice,
-          pricePerSqm: null,
-          broker: null,
-          brokerValue: null,
-          notary: null,
-          notaryValue: null,
-          landRegistry: null,
-          landRegistryValue: null,
-          realEstateTax: null,
-          realEstateTaxValue: null,
-          adjustmentVariable: null,
-          adjustmentVariableValue: null,
-          totalAncillaryCostsValue: null,
-          totalAncillaryCosts: null,
-          parkingSpacePurchasePrice: null,
-        });
-      }
-
-      if (row.parkingSpaces > 0) {
-        await createParkingSpace({
-          propertyId: created.propertyId,
-          parkingSpaceType: 'OTHER',
-          numberOfParkingSpaces: row.parkingSpaces,
-        });
-      }
-
-      // Carries over the Abschreibung step's RND/Kaufpreisaufteilung work
-      // (mode, modernization selections, and the already-computed values) so
-      // it doesn't have to be redone from scratch on the new Bestandsobjekt.
-      if (row.hasDepreciation) {
-        await upsertPropertyRnd({
-          propertyId: created.propertyId,
-          rndMode: row.rndMode,
-          modernizationRoof: row.modernizationRoof,
-          modernizationWindows: row.modernizationWindows,
-          modernizationLines: row.modernizationLines,
-          modernizationHeating: row.modernizationHeating,
-          modernizationFacade: row.modernizationFacade,
-          modernizationBathrooms: row.modernizationBathrooms,
-          modernizationInterior: row.modernizationInterior,
-          remainingUsefulLifeYears: row.remainingUsefulLifeYears,
-          afaPercent: row.afaPercent,
-        });
-        await upsertPropertyPriceSplit({
-          propertyId: created.propertyId,
-          splitMode: row.priceSplitMode,
-          plotAreaM2: row.plotAreaM2,
-          landReferenceValue: row.landReferenceValue,
-          coOwnershipNumerator: row.coOwnershipNumerator,
-          coOwnershipDenominator: row.coOwnershipDenominator,
-        });
-      }
-
-      router.push(`/existing-properties/${created.propertyId}`);
+      if (!response.ok) throw await readApiError(response);
+      const { propertyId, warnings } = await response.json() as { propertyId: number; warnings: string[] };
+      setRows((prev) => prev.map((r) => r.workflowId === row.workflowId ? { ...r, takenOverPropertyId: propertyId } : r));
+      if (warnings.length > 0) showToast(warnings.join(' '), 'warning');
+      else showToast('In die Bestandsobjekte übernommen.');
+      router.push(`/existing-properties/${propertyId}`);
+    } catch (takeoverError) {
+      showToast(errorMessage(takeoverError, 'Die Detailbewertung konnte nicht übernommen werden.'), 'error');
     } finally {
       setTakingOverId(null);
     }
-  }, [router, user]);
+  }, [router, showToast]);
 
   const handleConfirmDelete = async () => {
     if (!rowPendingDelete) return;
@@ -358,19 +247,25 @@ export default function DetailCheckOverviewPage() {
   };
 
   const menuItems = useCallback((row: DetailCheckRow): MenuItem[] => [
-    {
-      label: 'In Bestandsobjekte übernehmen',
-      icon: <Building2 className="h-4 w-4" />,
-      disabled: takingOverId === row.workflowId,
-      onClick: () => void takeOverToBestandsobjekte(row),
-    },
+    row.takenOverPropertyId != null
+      ? {
+        label: 'Zum Bestandsobjekt',
+        icon: <Building2 className="h-4 w-4" />,
+        onClick: () => router.push(`/existing-properties/${row.takenOverPropertyId}`),
+      }
+      : {
+        label: takingOverId === row.workflowId ? 'Wird übernommen …' : 'In Bestandsobjekte übernehmen',
+        icon: <Building2 className="h-4 w-4" />,
+        disabled: takingOverId !== null,
+        onClick: () => void takeOverToBestandsobjekte(row),
+      },
     {
       label: BUTTON_DETAILS.Delete.label,
       icon: <BUTTON_DETAILS.Delete.icon />,
       destructive: true,
       onClick: () => setRowPendingDelete(row),
     },
-  ], [takeOverToBestandsobjekte, takingOverId]);
+  ], [router, takeOverToBestandsobjekte, takingOverId]);
 
   const columns: TableColumn<DetailCheckRow>[] = useMemo(() => [
     {

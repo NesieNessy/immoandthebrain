@@ -392,8 +392,10 @@ function RentalContent() {
           <LoadingScreen message="Vermietungsdaten werden geladen…" fullScreen={false} />
         ) : (
           <div className="flex flex-col gap-6">
+            {/* The start month belongs to the Mieteinnahmen: the rent below is
+                what comes in from that month on. */}
             <div className="flex flex-col gap-2">
-              <SectionLabel>Bewertungsstichtag</SectionLabel>
+              <SectionLabel>Mieteinnahmen</SectionLabel>
               <PillOptions
                 size="md"
                 options={amountPeriodOptions}
@@ -402,17 +404,13 @@ function RentalContent() {
               />
               <div className="max-w-[260px]">
                 <MonthField
-                  label="Mieteinnahmen Bewertungs-Stichtag"
+                  label="Beginn der Vermietung"
                   value={form.valuationMonth}
-                  helperText="* Erste Vermietung ab Kauf"
+                  helperText="Monat der ersten Vermietung nach Kauf"
                   onChange={(value) => setForm((prev) => ({ ...prev, valuationMonth: value }))}
                 />
               </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <SectionLabel>Mieteinnahmen</SectionLabel>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="mt-2 grid gap-4 md:grid-cols-2">
                 <MoneyField
                   label="Kaltmiete"
                   optional

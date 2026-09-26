@@ -757,15 +757,18 @@ function RenovationContent() {
                     disabled={cases.length === 0 || isLoading || isSaving}
                     onClick={() => void openEvaluation()}
                   />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    label={isFormOpen ? 'Schließen' : 'Modernisierung hinzufügen'}
-                    icon={isFormOpen ? <Icons.X /> : <Icons.Plus />}
-                    aria-expanded={isFormOpen}
-                    aria-controls="renovation-form"
-                    onClick={() => (isFormOpen ? closeForm() : setIsFormOpen(true))}
-                  />
+                  {/* Only while the form is closed — once open, it's closed by
+                      the ✕ in its own header, right where the form is. */}
+                  {!isFormOpen && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      label="Modernisierung hinzufügen"
+                      icon={<Icons.Plus />}
+                      aria-controls="renovation-form"
+                      onClick={() => setIsFormOpen(true)}
+                    />
+                  )}
               </div>
 
               {isFormOpen && (
@@ -878,7 +881,7 @@ function RenovationContent() {
                   <div className="flex flex-wrap justify-end gap-2 border-t border-border px-4 py-3">
                     {editingCaseId
                       ? <Button variant="outline" size="sm" label={BUTTON_DETAILS.Cancel.label} icon={<Icons.X />} onClick={closeForm} />
-                      : <Button variant="outline" size="sm" label="Zurücksetzen" icon={<Icons.X />} onClick={resetForm} />}
+                      : <Button variant="outline" size="sm" label="Zurücksetzen" icon={<Icons.RotateCcw />} onClick={resetForm} />}
                     <Button
                       variant="outline"
                       size="sm"

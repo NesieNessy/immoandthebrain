@@ -2,6 +2,14 @@ export type StateCode =
   | 'BY' | 'BE' | 'HH' | 'HB' | 'SH' | 'MV' | 'BB' | 'ST'
   | 'TH' | 'SN' | 'NI' | 'NW' | 'HE' | 'RP' | 'SL' | 'BW';
 
+/** Full state names, as a Bestandsobjekt stores its Bundesland. */
+export const STATE_NAMES: Record<StateCode, string> = {
+  BW: 'Baden-Württemberg', BY: 'Bayern', BE: 'Berlin', BB: 'Brandenburg',
+  HB: 'Bremen', HH: 'Hamburg', HE: 'Hessen', MV: 'Mecklenburg-Vorpommern',
+  NI: 'Niedersachsen', NW: 'Nordrhein-Westfalen', RP: 'Rheinland-Pfalz', SL: 'Saarland',
+  SN: 'Sachsen', ST: 'Sachsen-Anhalt', SH: 'Schleswig-Holstein', TH: 'Thüringen',
+};
+
 export interface AcquisitionCostInput {
   purchasePrice: number;
   parkingPurchasePrice: number;

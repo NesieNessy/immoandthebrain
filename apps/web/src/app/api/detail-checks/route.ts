@@ -47,6 +47,7 @@ export async function GET(request: Request) {
         pd.property_category,
         pd.parking_spaces,
         pd.energy_efficiency,
+        taken.property_id AS taken_over_property_id,
         pd.created_at,
         GREATEST(pd.updated_at, COALESCE(rec.updated_at, pd.updated_at)) AS updated_at,
         COALESCE(costs.purchase_price, 0) AS purchase_price,
@@ -76,6 +77,8 @@ export async function GET(request: Request) {
         (loc.workflow_id IS NOT NULL) AS has_location_score,
         (comp.workflow_id IS NOT NULL) AS has_comparison
       FROM detail_check_property_data pd
+      LEFT JOIN property taken
+        ON taken.property_id = pd.taken_over_property_id AND taken.user_id = pd.user_id
       LEFT JOIN detail_check_acquisition_costs costs
         ON costs.user_id = pd.user_id AND costs.workflow_id = pd.workflow_id
       LEFT JOIN detail_check_rental rental

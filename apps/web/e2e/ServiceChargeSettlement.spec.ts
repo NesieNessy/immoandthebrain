@@ -135,15 +135,24 @@ async function dismissDiscardDialogIfPresent(page: import('@playwright/test').Pa
 // the actual displayed year afterwards rather than assuming the click
 // advanced it by exactly one — either defends against the same failure
 // mode actually causing the flakiness.
+//
+// Also steps *backwards* ("Vorheriges Jahr") when the page opens on a later
+// year than the target: a fresh load opens the most recently saved
+// settlement, so after a test that saved a later year (e.g. +5), a test
+// targeting an earlier one (+4) used to stay on +5 — its saved settlement
+// then broke that test's "nothing saved yet" precondition. It only passed
+// on retry, against a fresh fixture property.
 async function navigateToYear(page: import('@playwright/test').Page, targetYear: number): Promise<void> {
     let year = await readDisplayedYear(page);
-    while (year < targetYear) {
+    while (year !== targetYear) {
+        const step = year < targetYear ? 1 : -1;
+        const button = step > 0 ? 'Nächstes Jahr' : 'Vorheriges Jahr';
         let advanced = false;
         for (let attempt = 0; attempt < 4 && !advanced; attempt++) {
             await dismissDiscardDialogIfPresent(page);
-            await page.getByRole('button', { name: 'Nächstes Jahr' }).click();
+            await page.getByRole('button', { name: button }).click();
             try {
-                await expect(page.getByText(`Abrechnungsjahr ${year + 1}`).first()).toBeVisible({ timeout: 5000 });
+                await expect(page.getByText(`Abrechnungsjahr ${year + step}`).first()).toBeVisible({ timeout: 5000 });
                 advanced = true;
             } catch {
                 // isEditing (the app's own unsaved-changes flag) is `true`
@@ -159,7 +168,7 @@ async function navigateToYear(page: import('@playwright/test').Page, targetYear:
                 // immediately, giving that reload room to actually finish.
                 await dismissDiscardDialogIfPresent(page);
                 try {
-                    await expect(page.getByText(`Abrechnungsjahr ${year + 1}`).first()).toBeVisible({ timeout: 5000 });
+                    await expect(page.getByText(`Abrechnungsjahr ${year + step}`).first()).toBeVisible({ timeout: 5000 });
                     advanced = true;
                 } catch {
                     // Still not there after dismissing — the next attempt's
@@ -168,7 +177,7 @@ async function navigateToYear(page: import('@playwright/test').Page, targetYear:
                 }
             }
         }
-        if (!advanced) throw new Error(`navigateToYear: could not advance past ${year} towards ${targetYear} after repeated clicks`);
+        if (!advanced) throw new Error(`navigateToYear: could not move from ${year} towards ${targetYear} after repeated clicks`);
         year = await readDisplayedYear(page);
     }
     // Even on a clean success path, a dialog can be left open: reading the
