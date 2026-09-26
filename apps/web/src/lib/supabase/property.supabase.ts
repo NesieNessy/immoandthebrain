@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase/client.supabase';
+import { readApiError } from '@/lib/api/apiError';
 import { authFetch } from '@/lib/api/authFetch';
 import type { Property, PropertyInsert, PropertyUpdate, PropertyWithCity } from '@immoandthebrain/types';
 
@@ -146,13 +147,8 @@ export async function createProperty(payload: PropertyInsert): Promise<Property 
     body: JSON.stringify(payload),
   });
 
-  const result = await response.json().catch(() => null) as Property | { error?: string } | null;
-  if (!response.ok) {
-    throw new Error(result && 'error' in result && result.error
-      ? result.error
-      : 'Objekt konnte nicht gespeichert werden.');
-  }
-  return result as Property;
+  if (!response.ok) throw await readApiError(response);
+  return await response.json() as Property;
 }
 
 export async function updateProperty(propertyId: number, updates: PropertyUpdate): Promise<Property | null> {

@@ -14,7 +14,8 @@ import { EnergyEfficient, type AcquisitionCosts, type ParkingSpace, type Propert
 import { format, parseISO } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { isPropertyDataFormValid, normalizeNumberOfRooms } from './validation';
+import { isPropertyDataFormValid, normalizeNumberOfRooms } from './validation';
+import { errorMessage } from '@/lib/api/apiError';
 
 const ENERGY_OPTIONS = [
     { value: '', label: 'Bitte wählen...' },
@@ -216,7 +217,7 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
             showToast('Objektdaten gespeichert.');
             router.push(`/existing-properties/${propertyId}`);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
+            setError(errorMessage(err, 'Objektdaten konnten nicht gespeichert werden.'));
         } finally {
             setIsSaving(false);
         }

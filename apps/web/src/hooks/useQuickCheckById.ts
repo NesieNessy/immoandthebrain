@@ -1,5 +1,6 @@
 import { getQuickCheckById, QuickCheck } from '@/lib/supabase/quick_check.supabase';
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { errorMessage } from '@/lib/api/apiError';
 
 interface UseQuickCheckByIdResult {
     data: QuickCheck | null;
@@ -26,7 +27,7 @@ export function useQuickCheckById(id: number): UseQuickCheckByIdResult {
             })
             .catch((err: unknown) => {
                 if (!cancelled) {
-                    setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
+                    setError(errorMessage(err, 'Ersteinschätzung konnte nicht geladen werden.'));
                     setIsLoading(false);
                 }
             });

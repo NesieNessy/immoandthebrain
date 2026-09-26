@@ -15,7 +15,7 @@ const BUCKET = 'tax-expense-documents';
 function storageHeaders(extra?: Record<string, string>) {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) {
-    throw new Response(JSON.stringify({ error: 'Supabase admin configuration is missing.' }), {
+    throw new Response(JSON.stringify({ error: 'Der Server ist nicht richtig konfiguriert. Bitte später erneut versuchen.' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -26,7 +26,7 @@ function storageHeaders(extra?: Record<string, string>) {
 function storageBaseUrl(): string {
   const url = process.env.SUPABASE_ADMIN_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!url) {
-    throw new Response(JSON.stringify({ error: 'Supabase admin configuration is missing.' }), {
+    throw new Response(JSON.stringify({ error: 'Der Server ist nicht richtig konfiguriert. Bitte später erneut versuchen.' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -48,6 +48,7 @@ async function ownedCategoryPropertyId(userId: string, categoryId: number): Prom
 // total is derived this way instead of typed in directly.
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const formData = await request.formData();
   const file = formData.get('file');
   const categoryId = Number(formData.get('categoryId'));
@@ -71,8 +72,9 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     const detail = err instanceof Response ? `Response(${err.status}): ${await err.text().catch(() => '')}` : err instanceof Error ? err.message : String(err);
+    // Details stay in the server log — the response must not expose internals.
     console.error('tax-expense-documents upload request threw:', detail);
-    return NextResponse.json({ error: `Datei konnte nicht hochgeladen werden: ${detail}` }, { status: 500 });
+    return NextResponse.json({ error: 'Datei konnte nicht hochgeladen werden.' }, { status: 500 });
   }
   if (!uploadResponse.ok) {
     console.error('tax-expense-documents upload failed:', uploadResponse.status, await uploadResponse.text());
@@ -93,6 +95,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const path = new URL(request.url).searchParams.get('path');
   if (!path) return NextResponse.json({ error: 'Pfad fehlt.' }, { status: 400 });
   // The path is namespaced "{userId}/...", so a mismatched prefix rejects a
@@ -114,6 +117,7 @@ export async function GET(request: Request) {
 
 export async function DELETE(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const id = Number(new URL(request.url).searchParams.get('id'));
   if (!Number.isInteger(id)) return NextResponse.json({ error: 'Ungültige Anfrage.' }, { status: 400 });
 

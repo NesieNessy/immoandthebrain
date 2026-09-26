@@ -10,7 +10,8 @@ const REQUIRED_FIELDS = ['name', 'city', 'service_tier'] as const;
 // genuinely cross-user read, no ownership filter at all (unlike every
 // property-resources query, which always scopes to the caller).
 export async function GET(request: Request) {
-  await requireUserId(request);
+  const auth = await requireUserId(request);
+  if (auth instanceof Response) return auth;
   const { rows } = await db.query(
     `SELECT w.*, AVG(r.rating)::float AS average_rating, COUNT(r.weg_review_id)::int AS review_count
      FROM weg w
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
 
   const missing = REQUIRED_FIELDS.filter((field) => !String(input[field] ?? '').trim());

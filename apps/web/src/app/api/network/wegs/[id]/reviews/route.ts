@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic';
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(request: Request, context: RouteContext) {
-  await requireUserId(request);
+  const auth = await requireUserId(request);
+  if (auth instanceof Response) return auth;
   const wegId = Number((await context.params).id);
   if (!Number.isInteger(wegId)) return NextResponse.json({ error: 'Ungültige WEG-ID.' }, { status: 400 });
 
@@ -24,6 +25,7 @@ export async function GET(request: Request, context: RouteContext) {
 // adding a second one (see the UNIQUE (weg_id, user_id) constraint).
 export async function POST(request: Request, context: RouteContext) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const wegId = Number((await context.params).id);
   if (!Number.isInteger(wegId)) return NextResponse.json({ error: 'Ungültige WEG-ID.' }, { status: 400 });
 

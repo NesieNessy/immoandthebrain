@@ -3,6 +3,7 @@
 import { Button, Icons, SectionLabel, Tag, TextField, Tile, useToast } from '@/components/ui';
 import { supabase } from '@/lib/supabase/client.supabase';
 import { useEffect, useState } from 'react';
+import { authErrorMessage } from '@/lib/auth/authErrorMessage';
 
 function detectSessionLabel(): string {
     if (typeof navigator === 'undefined') return 'Aktuelle Sitzung';
@@ -54,7 +55,7 @@ export function SecuritySection() {
         const { error } = await supabase.auth.updateUser({ password: newPassword });
         setIsChangingPassword(false);
         if (error) {
-            showToast(error.message, 'error');
+            showToast(authErrorMessage(error, 'Das Passwort konnte nicht geändert werden.'), 'error');
             return;
         }
         setNewPassword('');
@@ -67,7 +68,7 @@ export function SecuritySection() {
         const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
         setIsMfaBusy(false);
         if (error || !data) {
-            showToast(error?.message ?? 'Authenticator-App konnte nicht eingerichtet werden.', 'error');
+            showToast(authErrorMessage(error, 'Authenticator-App konnte nicht eingerichtet werden.'), 'error');
             return;
         }
         setEnrollment({ factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret });
@@ -79,13 +80,13 @@ export function SecuritySection() {
         const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: enrollment.factorId });
         if (challengeError || !challenge) {
             setIsMfaBusy(false);
-            showToast(challengeError?.message ?? 'Bestätigung fehlgeschlagen.', 'error');
+            showToast(authErrorMessage(challengeError, 'Bestätigung fehlgeschlagen.'), 'error');
             return;
         }
         const { error: verifyError } = await supabase.auth.mfa.verify({ factorId: enrollment.factorId, challengeId: challenge.id, code: verifyCode.trim() });
         setIsMfaBusy(false);
         if (verifyError) {
-            showToast(verifyError.message, 'error');
+            showToast(authErrorMessage(verifyError, 'Der Code konnte nicht bestätigt werden.'), 'error');
             return;
         }
         setEnrollment(null);
@@ -106,7 +107,7 @@ export function SecuritySection() {
         const { error } = await supabase.auth.mfa.unenroll({ factorId: totpFactorId });
         setIsMfaBusy(false);
         if (error) {
-            showToast(error.message, 'error');
+            showToast(authErrorMessage(error, 'Die Zwei-Faktor-Anmeldung konnte nicht deaktiviert werden.'), 'error');
             return;
         }
         showToast('Authenticator-App deaktiviert.', 'success');

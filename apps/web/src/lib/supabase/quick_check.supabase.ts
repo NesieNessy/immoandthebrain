@@ -17,6 +17,7 @@
 
 import type { PropertyCondition } from '@immoandthebrain/types';
 import { authFetch } from '../api/authFetch';
+import { readApiError } from '@/lib/api/apiError';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -138,7 +139,7 @@ function mapOverview(row: Record<string, unknown>): QuickCheckOverview {
  */
 export async function getAllQuickChecks(detailCheck: boolean): Promise<QuickCheckOverview[]> {
     const res = await authFetch(`/api/quick-checks?detailCheck=${detailCheck}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw await readApiError(res);
     const data = await res.json();
     return (data ?? []).map(mapOverview);
 }
@@ -146,7 +147,7 @@ export async function getAllQuickChecks(detailCheck: boolean): Promise<QuickChec
 export async function getQuickCheckById(quickCheckId: number): Promise<QuickCheck | null> {
     const res = await authFetch(`/api/quick-checks?id=${quickCheckId}`, { cache: 'no-store' });
     if (res.status === 404) return null;
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw await readApiError(res);
     return mapQuickCheck(await res.json());
 }
 
@@ -157,7 +158,7 @@ export async function createQuickCheck(input: CreateQuickCheckInput): Promise<Qu
     const res = await authFetch('/api/quick-checks', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw await readApiError(res);
     return mapQuickCheck(await res.json());
 }
 
@@ -170,7 +171,7 @@ export async function updateQuickCheck(
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: quickCheckId, values: input }),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw await readApiError(res);
     return mapQuickCheck(await res.json());
 }
 
@@ -183,7 +184,7 @@ export async function discardQuickCheck(quickCheckId: number, userId: string): P
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: quickCheckId, action: 'DISCARD' }),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw await readApiError(res);
 }
 
 /**
@@ -206,7 +207,7 @@ export async function acceptQuickCheck(
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: quickCheckId, action: 'ACCEPT' }),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw await readApiError(res);
     return Number((await res.json()).propertyId);
 }
 
@@ -218,7 +219,7 @@ export async function markDetailCheck(quickCheckId: number): Promise<void> {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: quickCheckId, action: 'MARK_DETAIL_CHECK' }),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw await readApiError(res);
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
@@ -238,5 +239,5 @@ export async function deleteQuickChecks(quickCheckIds: number[]): Promise<void> 
     const res = await authFetch('/api/quick-checks', {
         method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: quickCheckIds }),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw await readApiError(res);
 }

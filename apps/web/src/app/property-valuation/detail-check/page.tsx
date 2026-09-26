@@ -2,7 +2,7 @@
 
 import { NoResult } from '@/components/common';
 import type { MenuItem, SortDirection, TableColumn } from '@/components/ui';
-import { Button, ConfirmDeleteModal, Header, Icons, LoadingScreen, PAGE_CONTAINER_CLASS, Table, Tag, TextFieldWithIcon } from '@/components/ui';
+import { Button, ConfirmDeleteModal, ErrorAlert, Header, Icons, LoadingScreen, PAGE_CONTAINER_CLASS, Table, Tag, TextFieldWithIcon } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { authFetch } from '@/lib/api/authFetch';
@@ -17,6 +17,7 @@ import { MoreVertical, Building2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { errorMessage, readApiError } from '@/lib/api/apiError';
 
 // Each step after "property-data" is saved to its own table once the user
 // clicks "Weiter" on it — the furthest one with a row is where they paused.
@@ -181,7 +182,7 @@ export default function DetailCheckOverviewPage() {
     async function load() {
       try {
         const response = await authFetch('/api/detail-checks', { cache: 'no-store' });
-        if (!response.ok) throw new Error(await response.text());
+        if (!response.ok) throw await readApiError(response);
         const data = await response.json() as DetailCheckApiRow[];
         if (cancelled) return;
         setRows(data.map((row) => {
@@ -226,7 +227,7 @@ export default function DetailCheckOverviewPage() {
           };
         }));
       } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : 'Detailbewertungen konnten nicht geladen werden.');
+        if (!cancelled) setError(errorMessage(loadError, 'Detailbewertungen konnten nicht geladen werden.'));
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -346,11 +347,11 @@ export default function DetailCheckOverviewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workflowId: rowPendingDelete.workflowId }),
       });
-      if (!response.ok) throw new Error(await response.text());
+      if (!response.ok) throw await readApiError(response);
       setRows((prev) => prev.filter((r) => r.workflowId !== rowPendingDelete.workflowId));
       setRowPendingDelete(null);
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Detailbewertung konnte nicht gelöscht werden.');
+      setError(errorMessage(deleteError, 'Detailbewertung konnte nicht gelöscht werden.'));
     } finally {
       setIsDeleting(false);
     }
@@ -513,7 +514,14 @@ export default function DetailCheckOverviewPage() {
         </div>
 
         {(authLoading || isLoading) && <LoadingScreen fullScreen={false} />}
-        {error && !isLoading && <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">Fehler beim Laden: {error}</div>}
+        {error && !isLoading && (
+          <ErrorAlert
+            title="Detailbewertungen konnten nicht geladen werden"
+            message={error}
+            onRetry={() => window.location.reload()}
+            className="mt-4"
+          />
+        )}
 
         {!authLoading && !isLoading && !error && (
           <div className="mt-4">

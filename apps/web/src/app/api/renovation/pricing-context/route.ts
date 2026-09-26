@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const propertyId = Number(new URL(request.url).searchParams.get('propertyId'));
   if (!Number.isInteger(propertyId)) return NextResponse.json({ error: 'propertyId fehlt.' }, { status: 400 });
 

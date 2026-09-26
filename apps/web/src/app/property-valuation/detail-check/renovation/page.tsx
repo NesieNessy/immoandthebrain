@@ -4,7 +4,7 @@ import { PriceIndicationHint } from '@/components/features/PriceIndicationHint';
 import { PriceRangeSlider } from '@/components/features/PriceRangeSlider';
 import { RenovationMeasurePicker } from '@/components/features/RenovationMeasurePicker';
 import { SaveStatusIndicator } from '@/components/features/SaveStatusIndicator';
-import { Button, Checkbox, ConfirmDeleteModal, Dropdown, Icons, LoadingScreen, SectionLabel, StatTile, StickyActionBar, Table, Tag, TextArea, TextField, type TableColumn } from '@/components/ui';
+import { Button, Checkbox, ConfirmDeleteModal, Dropdown, Icons, LoadingScreen, SectionLabel, StatTile, StickyActionBar, Table, Tag, TextArea, TextField, type TableColumn, ErrorAlert } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { authFetch } from '@/lib/api/authFetch';
@@ -20,6 +20,7 @@ import {
   type RenovationFinancingMode,
   type RenovationTiming,
 } from '@/lib/detailCheck/renovation';
+import { detailCheckWorkflowId } from '@/lib/detailCheck/workflow';
 import { categoryLabel, indicatePriceRange, type RenovationCategory } from '@/lib/renovation/catalog';
 import { getDocumentsByUser, getDocumentUrl, uploadDocument } from '@/lib/supabase/document.supabase';
 import { cn, deNumberFormatter, formatEuro } from '@/lib/utils';
@@ -28,6 +29,7 @@ import { format } from 'date-fns';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
+import { errorMessage, readApiError } from '@/lib/api/apiError';
 
 interface CaseRow extends Record<string, unknown> {
   key: string;
@@ -137,7 +139,7 @@ function RenovationContent() {
       setError(null);
       try {
         const res = await authFetch(`/api/detail-check/renovation${suffix}`, { cache: 'no-store' });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw await readApiError(res);
         const data = await res.json() as RenovationResponse;
         if (cancelled) return;
         const loadedCases = withDefaultSelectedCosts(data.cases);
@@ -151,7 +153,7 @@ function RenovationContent() {
         setIsFormOpen(data.cases.length === 0);
       } catch (loadError) {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : 'Sanierung konnte nicht geladen werden.');
+          setError(errorMessage(loadError, 'Sanierung konnte nicht geladen werden.'));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -222,7 +224,7 @@ function RenovationContent() {
           headers: { 'Content-Type': 'application/json' },
           body: saveBody,
         });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw await readApiError(res);
         setSavedSnapshot(snapshot);
         setFailedSnapshot(null);
       } catch {
@@ -252,6 +254,8 @@ function RenovationContent() {
           name: file.name.replace(/\.[^/.]+$/, ''),
           propertyId: null,
           quickCheckId: quickCheckId ? Number(quickCheckId) : null,
+          // Links it to this detail check — with or without an Ersteinschätzung.
+          detailCheckWorkflowId: detailCheckWorkflowId(quickCheckId, workflowId),
           documentDate: format(new Date(), 'yyyy-MM-dd'),
         });
         if (error) {
@@ -397,7 +401,7 @@ function RenovationContent() {
         headers: { 'Content-Type': 'application/json' },
         body: saveBody,
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await readApiError(res);
       const data = await res.json() as RenovationResponse;
       const savedCases = withDefaultSelectedCosts(data.cases);
       const savedFinancedAmount = formatDecimalInput(String(data.financing.financedAmount || ''));
@@ -410,7 +414,7 @@ function RenovationContent() {
       setIsEvaluationVisible(true);
       return true;
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Sanierung konnte nicht ausgewertet werden.');
+      setError(errorMessage(saveError, 'Sanierung konnte nicht ausgewertet werden.'));
       return false;
     } finally {
       setIsSaving(false);
@@ -446,12 +450,12 @@ function RenovationContent() {
           financing: { mode: 'FREMD', financedAmount: 0 },
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await readApiError(res);
       setSavedSnapshot(saveSnapshot([], 'FREMD', 0));
       if (navigate) router.push(`/property-valuation/detail-check/calculator${suffix}`);
       return true;
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Sanierung konnte nicht übersprungen werden.');
+      setError(errorMessage(saveError, 'Sanierung konnte nicht übersprungen werden.'));
       return false;
     } finally {
       setIsSaving(false);
@@ -717,11 +721,7 @@ function RenovationContent() {
       actions={isLoading ? undefined : <SaveStatusIndicator isSaving={isSaving || isAutosaving} isDirty={isDirty} />}
     >
       <div className="pb-24">
-        {error && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        {error && <ErrorAlert message={error} className="mb-4" />}
 
         {isLoading ? (
           <LoadingScreen message="Sanierung wird geladen…" fullScreen={false} />

@@ -62,6 +62,7 @@ function mapQuickCheck(row: QuickCheckRow) {
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
   const detailCheck = searchParams.get('detailCheck') === 'true';
@@ -79,7 +80,7 @@ export async function GET(request: Request) {
     );
 
     if (!rows[0]) {
-      return NextResponse.json({ error: 'Quick-check not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Ersteinschätzung nicht gefunden.' }, { status: 404 });
     }
 
     return NextResponse.json(mapQuickCheck(rows[0]));
@@ -102,6 +103,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
 
   const purchasePrice = Number(input.purchasePrice);
@@ -126,7 +128,7 @@ export async function POST(request: Request) {
     !input.city ||
     !input.condition
   ) {
-    return NextResponse.json({ error: 'Invalid quick-check payload' }, { status: 400 });
+    return NextResponse.json({ error: 'Die Angaben zur Ersteinschätzung sind unvollständig oder ungültig.' }, { status: 400 });
   }
   if (portalId && !isValidListingUrl(portalId)) {
     return NextResponse.json({ error: LISTING_URL_ERROR }, { status: 400 });
@@ -170,9 +172,10 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const id = Number(input.id);
-  if (!Number.isInteger(id)) return NextResponse.json({ error: 'Invalid quick-check id' }, { status: 400 });
+  if (!Number.isInteger(id)) return NextResponse.json({ error: 'Ungültige Ersteinschätzung.' }, { status: 400 });
 
   if (input.action === 'MARK_DETAIL_CHECK') {
     const result = await db.query(
@@ -206,7 +209,7 @@ export async function PATCH(request: Request) {
     !values.city ||
     !values.condition
   ) {
-    return NextResponse.json({ error: 'Invalid quick-check payload' }, { status: 400 });
+    return NextResponse.json({ error: 'Die Angaben zur Ersteinschätzung sind unvollständig oder ungültig.' }, { status: 400 });
   }
   const portalId = normalizeListingReference(values.portalId) || null;
   if (portalId && !isValidListingUrl(portalId)) {
@@ -227,12 +230,13 @@ export async function PATCH(request: Request) {
       String(values.city).trim(), yearOfConstruction, values.condition, kpfMultiplier,
     ],
   );
-  if (!rows[0]) return NextResponse.json({ error: 'Quick-check not found' }, { status: 404 });
+  if (!rows[0]) return NextResponse.json({ error: 'Ersteinschätzung nicht gefunden.' }, { status: 404 });
   return NextResponse.json(mapQuickCheck(rows[0]));
 }
 
 export async function DELETE(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const ids = Array.isArray(input.ids) ? input.ids.map(Number).filter(Number.isFinite) : [];
 

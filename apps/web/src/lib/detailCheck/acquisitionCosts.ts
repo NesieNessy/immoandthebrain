@@ -52,6 +52,13 @@ export function formatDecimalInput(value: string, maximumFractionDigits = 2): st
   }).format(parseDecimalInput(value));
 }
 
+/**
+ * Approximate federal state from the postal code's first two digits. The
+ * exact lookup is the `postal_code_state` table (lib/server/postalCodeState.ts);
+ * this is only its fallback for a postal code the table doesn't list. PLZ
+ * zones don't follow state borders exactly, so zones that straddle one
+ * (14, 21, 27, 28, …) resolve to their predominant state here.
+ */
 export function resolveStateFromPostalCode(postalCode?: string | null): StateCode | null {
   if (!postalCode || !/^\d{5}$/.test(postalCode)) return null;
   const prefix = Number(postalCode.slice(0, 2));
@@ -59,9 +66,11 @@ export function resolveStateFromPostalCode(postalCode?: string | null): StateCod
   if (prefix >= 10 && prefix <= 14) return 'BE';
   if (prefix >= 20 && prefix <= 22) return 'HH';
   if (prefix === 27 || prefix === 28) return 'HB';
-  if ((prefix >= 16 && prefix <= 19) || prefix === 14) return 'BB';
-  if (prefix >= 23 && prefix <= 25) return 'SH';
+  if (prefix === 3 || prefix === 15 || prefix === 16) return 'BB';
+  // 17–19 is Mecklenburg-Vorpommern. It used to be unreachable: the BB branch
+  // above also claimed 17–19, so MV postal codes got Brandenburg's tax rate.
   if (prefix >= 17 && prefix <= 19) return 'MV';
+  if (prefix >= 23 && prefix <= 25) return 'SH';
   if (prefix >= 26 && prefix <= 31) return 'NI';
   if (prefix >= 32 && prefix <= 33) return 'NW';
   if (prefix >= 34 && prefix <= 37) return 'HE';
@@ -75,9 +84,44 @@ export function resolveStateFromPostalCode(postalCode?: string | null): StateCod
   if (prefix >= 70 && prefix <= 79) return 'BW';
   if (prefix >= 80 && prefix <= 97) return 'BY';
   if (prefix >= 98 && prefix <= 99) return 'TH';
-  if (prefix >= 1 && prefix <= 4) return 'SN';
+  if (prefix === 6) return 'ST';
+  if (prefix === 7) return 'TH';
+  if (prefix === 1 || prefix === 2 || prefix === 4 || prefix === 8 || prefix === 9) return 'SN';
 
   return null;
+}
+
+const MAX_PRICE = 1_000_000_000;
+const MAX_BROKER_PERCENT = 20;
+
+export interface AcquisitionCostErrors {
+  purchasePrice?: string;
+  parkingPurchasePrice?: string;
+  brokerPercent?: string;
+}
+
+/**
+ * The Kaufkosten step's input rules — shared by the page (field messages,
+ * "Weiter") and the API (rejecting a save), so both always agree. A purchase
+ * price is required: a detail check started without an Ersteinschätzung has
+ * none to take over, and every later step computes from it.
+ */
+export function acquisitionCostErrors(input: {
+  purchasePrice: number;
+  parkingPurchasePrice: number;
+  brokerPercent: number;
+}): AcquisitionCostErrors {
+  const errors: AcquisitionCostErrors = {};
+  if (!(input.purchasePrice > 0) || input.purchasePrice > MAX_PRICE) {
+    errors.purchasePrice = 'Bitte einen Kaufpreis größer als 0 € eingeben (höchstens 1.000.000.000 €).';
+  }
+  if (!(input.parkingPurchasePrice >= 0) || input.parkingPurchasePrice > MAX_PRICE) {
+    errors.parkingPurchasePrice = 'Bitte einen Betrag zwischen 0 und 1.000.000.000 eingeben.';
+  }
+  if (!(input.brokerPercent >= 0) || input.brokerPercent > MAX_BROKER_PERCENT) {
+    errors.brokerPercent = 'Bitte einen Prozentsatz zwischen 0 und 20 eingeben.';
+  }
+  return errors;
 }
 
 export function computeAcquisitionCosts(input: AcquisitionCostInput): AcquisitionCostComputed {

@@ -1,4 +1,5 @@
 import { requireUserId } from '@/lib/server/auth';
+import { detailCheckWorkflowId } from '@/lib/detailCheck/workflow';
 import { db } from '@/lib/server/db';
 import { NextResponse } from 'next/server';
 
@@ -23,12 +24,13 @@ const DETAIL_CHECK_TABLES = [
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const url = new URL(request.url);
   const quickCheckId = url.searchParams.get('quickCheckId');
   // Scopes the list to one specific workflow — used by the step pages to
   // check which steps already have saved data (so the Stepper can unlock
   // them), as opposed to the unfiltered call the overview page makes.
-  const workflowId = quickCheckId ? `quick-check:${quickCheckId}` : url.searchParams.get('workflowId');
+  const workflowId = detailCheckWorkflowId(quickCheckId, url.searchParams.get('workflowId'));
   const filterClause = workflowId ? 'AND pd.workflow_id = $2' : '';
   const values = workflowId ? [userId, workflowId] : [userId];
 
@@ -104,16 +106,24 @@ export async function GET(request: Request) {
 
 export async function DELETE(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const workflowId = typeof input.workflowId === 'string' ? input.workflowId : null;
 
   if (!workflowId) {
-    return NextResponse.json({ error: 'workflowId required' }, { status: 400 });
+    return NextResponse.json({ error: 'Die Detailbewertung fehlt.' }, { status: 400 });
   }
 
   for (const table of DETAIL_CHECK_TABLES) {
     await db.query(`DELETE FROM ${table} WHERE user_id = $1 AND workflow_id = $2`, [userId, workflowId]);
   }
+  // Documents uploaded in the detail check are the user's files, not detail-
+  // check data — they are kept (Dokumente page) and only unlinked, instead of
+  // being deleted along with the evaluation.
+  await db.query(
+    'UPDATE document SET detail_check_workflow_id = NULL, updated_at = NOW() WHERE user_id = $1 AND detail_check_workflow_id = $2',
+    [userId, workflowId],
+  );
 
   return NextResponse.json({ deleted: true });
 }

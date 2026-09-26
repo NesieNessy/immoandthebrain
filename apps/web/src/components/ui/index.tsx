@@ -26,6 +26,7 @@ export type { PillOption } from "./PillOptions";
 export { RadioButton } from "./RadioButton";
 export { Rating } from "./Rating";
 export { RatingScale } from "./RatingScale";
+export { ErrorAlert } from "./ErrorAlert";
 export { SectionLabel } from "./SectionLabel";
 export { StatTile } from "./StatTile";
 export { Stepper } from "./Stepper";

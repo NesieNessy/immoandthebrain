@@ -34,6 +34,7 @@ function mapProperty(row: Record<string, unknown>) {
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const id = new URL(request.url).searchParams.get('id');
   if (id) {
     const { rows } = await db.query(
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const yearOfConstruction = Number(input.yearOfConstruction);
   const squareMeters = input.squareMeters == null ? null : Number(input.squareMeters);
@@ -156,6 +158,7 @@ function findUpdateError(updates: Record<string, unknown>): string | null {
 
 export async function PATCH(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const propertyId = Number(input.propertyId);
   if (!Number.isInteger(propertyId)) {
@@ -191,6 +194,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const id = Number(new URL(request.url).searchParams.get('id'));
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: 'Ungültige Objekt-ID.' }, { status: 400 });
@@ -200,7 +204,8 @@ export async function DELETE(request: Request) {
     if (!result.rowCount) return NextResponse.json({ error: 'Objekt nicht gefunden.' }, { status: 404 });
     return NextResponse.json({ deleted: true });
   } catch (err) {
+    // Details stay in the server log — the response must not expose internals.
     console.error('DELETE /api/properties failed:', err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    return NextResponse.json({ error: 'Objekt konnte nicht gelöscht werden.' }, { status: 500 });
   }
 }

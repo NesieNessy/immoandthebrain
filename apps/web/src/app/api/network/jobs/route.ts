@@ -15,7 +15,8 @@ async function ownsProperty(userId: string, propertyId: unknown): Promise<boolea
 // properties — the cross-user read the property-resources dispatcher can't
 // do (it always scopes to the caller's own properties).
 export async function GET(request: Request) {
-  await requireUserId(request);
+  const auth = await requireUserId(request);
+  if (auth instanceof Response) return auth;
   const { rows } = await db.query(
     `SELECT r.*, p.city, p.street FROM renovation_measure r
      JOIN property p ON p.property_id = r.property_id
@@ -30,6 +31,7 @@ export async function GET(request: Request) {
 // here IS the intent, so published/published_at are set directly.
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
 
   const propertyId = Number(input.property_id);

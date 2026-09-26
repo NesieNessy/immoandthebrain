@@ -1,6 +1,6 @@
 "use client";
 
-import { Dropdown, Icons, LoadingScreen, PillOptions, ReadOnlyField, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
+import { Dropdown, Icons, LoadingScreen, PillOptions, ReadOnlyField, SectionLabel, StickyActionBar, TextField, ErrorAlert } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { formatDecimalInput, parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
@@ -14,6 +14,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
+import { errorMessage, readApiError } from '@/lib/api/apiError';
 
 type ColumnForm = {
   purchasePrice: string;
@@ -76,25 +77,39 @@ function percent(value: number): string {
   return percentFormatter.format(value);
 }
 
-function ReadOnlyMoney({ value, bold = false }: { value: number; bold?: boolean }) {
-  return <ReadOnlyField value={money(value)} suffix="€" align="right" emphasis={bold} />;
+// Each value sits in a grid under a row label and a column heading, neither
+// of which is a <label> — `label` names it for screen readers (and tests),
+// e.g. "Darlehenssumme (Angebot)".
+function ReadOnlyMoney({ value, bold = false, label }: { value: number; bold?: boolean; label: string }) {
+  return (
+    <div role="group" aria-label={label}>
+      <ReadOnlyField value={money(value)} suffix="€" align="right" emphasis={bold} />
+    </div>
+  );
 }
 
-function ReadOnlyPercent({ value }: { value: number }) {
-  return <ReadOnlyField value={percent(value)} suffix="%" align="right" />;
+function ReadOnlyPercent({ value, label }: { value: number; label: string }) {
+  return (
+    <div role="group" aria-label={label}>
+      <ReadOnlyField value={percent(value)} suffix="%" align="right" />
+    </div>
+  );
 }
 
 function MoneyInput({
   value,
   onChange,
   readOnly,
+  label,
 }: {
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
+  label: string;
 }) {
   return (
     <TextField
+      aria-label={label}
       value={value}
       inputMode="decimal"
       suffix="€"
@@ -159,8 +174,8 @@ function FinancingContent() {
           authFetch(`/api/detail-check/financing${suffix}`, { cache: 'no-store' }),
           authFetch(`/api/detail-check/acquisition-costs${suffix}`, { cache: 'no-store' }),
         ]);
-        if (!financingRes.ok) throw new Error(await financingRes.text());
-        if (!acquisitionRes.ok) throw new Error(await acquisitionRes.text());
+        if (!financingRes.ok) throw await readApiError(financingRes);
+        if (!acquisitionRes.ok) throw await readApiError(acquisitionRes);
         const data = await financingRes.json() as ApiPayload;
         const acquisition = await acquisitionRes.json();
         if (cancelled) return;
@@ -194,7 +209,7 @@ function FinancingContent() {
         });
       } catch (loadError) {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : 'Finanzierung konnte nicht geladen werden.');
+          setError(errorMessage(loadError, 'Finanzierung konnte nicht geladen werden.'));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -300,10 +315,10 @@ function FinancingContent() {
           },
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await readApiError(res);
       return true;
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Finanzierung konnte nicht gespeichert werden.');
+      setError(errorMessage(saveError, 'Finanzierung konnte nicht gespeichert werden.'));
       return false;
     } finally {
       setIsSaving(false);
@@ -318,11 +333,7 @@ function FinancingContent() {
     <PropertyValuationLayout currentStep={3} title="Finanzierung" beforeStepChange={persist} showFieldLegend>
       <div className="pb-24">
 
-        {error && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        {error && <ErrorAlert message={error} className="mb-4" />}
 
         {isLoading ? (
           <LoadingScreen message="Finanzierung wird geladen…" fullScreen={false} />
@@ -363,58 +374,60 @@ function FinancingContent() {
                   <div className="pb-2 border-b border-border text-center text-sm font-semibold uppercase tracking-wide text-muted-foreground">Individuell</div>
 
                   <div className="self-center font-semibold text-foreground">Ermittelte Gesamtkosten</div>
-                  <ReadOnlyMoney value={offerComputed.totalCosts} bold />
-                  <ReadOnlyMoney value={individualComputed.totalCosts} bold />
+                  <ReadOnlyMoney value={offerComputed.totalCosts} bold label="Ermittelte Gesamtkosten (Angebot)" />
+                  <ReadOnlyMoney value={individualComputed.totalCosts} bold label="Ermittelte Gesamtkosten (Individuell)" />
 
                   <div className="self-center pl-4 text-sm text-muted-foreground">Kaufpreis</div>
-                  <ReadOnlyMoney value={offerValues.purchasePrice} />
-                  <MoneyInput value={individual.purchasePrice} onChange={(value) => updateIndividual('purchasePrice', value)} />
+                  <ReadOnlyMoney value={offerValues.purchasePrice} label="Kaufpreis (Angebot)" />
+                  <MoneyInput value={individual.purchasePrice} onChange={(value) => updateIndividual('purchasePrice', value)} label="Kaufpreis (Individuell)" />
 
                   <div className="self-center pl-4 text-sm text-muted-foreground">Stellplatz / Stellplätze</div>
-                  <ReadOnlyMoney value={offerValues.parkingPrice} />
-                  <MoneyInput value={individual.parkingPrice} onChange={(value) => updateIndividual('parkingPrice', value)} />
+                  <ReadOnlyMoney value={offerValues.parkingPrice} label="Stellplatz (Angebot)" />
+                  <MoneyInput value={individual.parkingPrice} onChange={(value) => updateIndividual('parkingPrice', value)} label="Stellplatz (Individuell)" />
 
                   <div className="self-center pl-4 text-sm text-muted-foreground">Kaufnebenkosten gesamt</div>
-                  <ReadOnlyMoney value={offerValues.additionalCosts} />
-                  <ReadOnlyMoney value={individualValues.additionalCosts} />
+                  <ReadOnlyMoney value={offerValues.additionalCosts} label="Kaufnebenkosten gesamt (Angebot)" />
+                  <ReadOnlyMoney value={individualValues.additionalCosts} label="Kaufnebenkosten gesamt (Individuell)" />
 
                   <div className="self-center pl-4 text-sm text-muted-foreground">Sanierungskosten</div>
-                  <MoneyInput value={offer.renovationCosts} onChange={(value) => updateOffer('renovationCosts', value)} />
-                  <MoneyInput value={individual.renovationCosts} onChange={(value) => updateIndividual('renovationCosts', value)} />
+                  <MoneyInput value={offer.renovationCosts} onChange={(value) => updateOffer('renovationCosts', value)} label="Sanierungskosten (Angebot)" />
+                  <MoneyInput value={individual.renovationCosts} onChange={(value) => updateIndividual('renovationCosts', value)} label="Sanierungskosten (Individuell)" />
 
                   <div className="col-span-3 mt-1 pt-3 border-t border-border" />
 
                   <div className="self-center font-semibold text-foreground">Anteil Eigenkapital</div>
-                  <MoneyInput value={offer.equity} onChange={(value) => updateOffer('equity', value)} />
-                  <MoneyInput value={individual.equity} onChange={(value) => updateIndividual('equity', value)} />
+                  <MoneyInput value={offer.equity} onChange={(value) => updateOffer('equity', value)} label="Anteil Eigenkapital (Angebot)" />
+                  <MoneyInput value={individual.equity} onChange={(value) => updateIndividual('equity', value)} label="Anteil Eigenkapital (Individuell)" />
 
                   <div className="self-center text-sm text-muted-foreground">Darlehenssumme</div>
-                  <ReadOnlyMoney value={offerComputed.loanAmount} />
-                  <ReadOnlyMoney value={individualComputed.loanAmount} />
+                  <ReadOnlyMoney value={offerComputed.loanAmount} label="Darlehenssumme (Angebot)" />
+                  <ReadOnlyMoney value={individualComputed.loanAmount} label="Darlehenssumme (Individuell)" />
 
                   <div className="self-center text-sm text-muted-foreground">Darlehensquote</div>
-                  <ReadOnlyPercent value={offerComputed.loanToCostPercent} />
-                  <ReadOnlyPercent value={individualComputed.loanToCostPercent} />
+                  <ReadOnlyPercent value={offerComputed.loanToCostPercent} label="Darlehensquote (Angebot)" />
+                  <ReadOnlyPercent value={individualComputed.loanToCostPercent} label="Darlehensquote (Individuell)" />
 
                   <div className="self-center text-sm text-muted-foreground">Zinsbindung</div>
                   <Dropdown
+                    aria-label="Zinsbindung (Angebot)"
                     options={periodOptions}
                     value={offer.interestPeriodYears}
                     onChange={(event) => updateOffer('interestPeriodYears', event.target.value)}
                   />
                   <Dropdown
+                    aria-label="Zinsbindung (Individuell)"
                     options={periodOptions}
                     value={individual.interestPeriodYears}
                     onChange={(event) => updateIndividual('interestPeriodYears', event.target.value)}
                   />
 
                   <div className="self-center text-sm text-muted-foreground">Ermittelter Zins (geschätzt)</div>
-                  <ReadOnlyPercent value={offerComputed.interestRate} />
-                  <ReadOnlyPercent value={individualComputed.interestRate} />
+                  <ReadOnlyPercent value={offerComputed.interestRate} label="Ermittelter Zins (Angebot)" />
+                  <ReadOnlyPercent value={individualComputed.interestRate} label="Ermittelter Zins (Individuell)" />
 
                   <div className="self-center text-sm text-muted-foreground">Kapitaldienst Monat (geschätzt)</div>
-                  <ReadOnlyMoney value={offerComputed.monthlyDebtService} />
-                  <ReadOnlyMoney value={individualComputed.monthlyDebtService} />
+                  <ReadOnlyMoney value={offerComputed.monthlyDebtService} label="Kapitaldienst Monat (Angebot)" />
+                  <ReadOnlyMoney value={individualComputed.monthlyDebtService} label="Kapitaldienst Monat (Individuell)" />
                 </div>
               </div>
             </div>

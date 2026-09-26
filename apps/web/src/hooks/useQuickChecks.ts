@@ -6,7 +6,8 @@ import {
     getAllQuickChecks,
     type QuickCheckOverview,
 } from '@/lib/supabase/quick_check.supabase';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { errorMessage } from '@/lib/api/apiError';
 
 export interface UseQuickChecksResult {
     data: QuickCheckOverview[];
@@ -35,7 +36,7 @@ export function useQuickChecks(detailCheck = false): UseQuickChecksResult {
             const rows = await getAllQuickChecks(detailCheck);
             setData(rows);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
+            setError(errorMessage(err, 'Ersteinschätzungen konnten nicht geladen werden.'));
         } finally {
             setIsLoading(false);
         }

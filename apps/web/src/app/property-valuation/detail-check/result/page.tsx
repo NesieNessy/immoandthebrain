@@ -1,12 +1,13 @@
 "use client";
 
-import { Button, SectionLabel, StickyActionBar, Tag, type TagVariant } from '@/components/ui';
+import { Button, SectionLabel, StickyActionBar, Tag, type TagVariant, ErrorAlert } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { type MetricStatus, type RecommendationLevel, type RecommendationMetric, type RecommendationScorePart } from '@/lib/detailCheck/recommendation';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
+import { errorMessage, readApiError } from '@/lib/api/apiError';
 
 type RecommendationResponse = {
   workflowId: string;
@@ -116,11 +117,11 @@ function ResultContent() {
       setError(null);
       try {
         const res = await authFetch(`/api/detail-check/recommendation${suffix}`, { cache: 'no-store' });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw await readApiError(res);
         const loaded = await res.json() as RecommendationResponse;
         if (!cancelled) setData(loaded);
       } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : 'Empfehlung konnte nicht geladen werden.');
+        if (!cancelled) setError(errorMessage(loadError, 'Empfehlung konnte nicht geladen werden.'));
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -143,13 +144,13 @@ function ResultContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quickCheckId, workflowId }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await readApiError(res);
       const saved = await res.json() as RecommendationResponse;
       setData(saved);
       setSavedMessage('Empfehlung wurde gespeichert.');
       router.push('/property-valuation/detail-check');
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Empfehlung konnte nicht gespeichert werden.');
+      setError(errorMessage(saveError, 'Empfehlung konnte nicht gespeichert werden.'));
     } finally {
       setIsSaving(false);
     }
@@ -169,11 +170,7 @@ function ResultContent() {
       }
     >
       <div className="pb-24">
-        {error && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        {error && <ErrorAlert message={error} className="mb-4" />}
         {savedMessage && (
           <div className="mb-4 rounded-lg border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
             {savedMessage}

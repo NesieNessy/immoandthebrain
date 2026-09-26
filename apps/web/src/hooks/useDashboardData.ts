@@ -6,7 +6,8 @@ import { getDocumentsByUser } from '@/lib/supabase/document.supabase';
 import { getPropertiesOverview } from '@/lib/supabase/property.supabase';
 import { getTaxExpenseDocumentsByUser } from '@/lib/supabase/tax_expense_document.supabase';
 import { computeGrossYield } from '@/app/existing-properties/[propertyId]/key-metrics/keyMetricsCalculations';
-import type { UserDocument } from '@immoandthebrain/types';
+import type { UserDocument } from '@immoandthebrain/types';
+import { errorMessage } from '@/lib/api/apiError';
 
 // ----------------------------------------------------------------------------
 // Row shapes returned by the generic property-resources endpoint (snake_case
@@ -570,7 +571,7 @@ export function useDashboardData(userId: string | undefined): DashboardData {
           });
         setRecentDocuments(recentDocs);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
+        if (!cancelled) setError(errorMessage(err, 'Die Übersicht konnte nicht geladen werden.'));
       } finally {
         if (!cancelled) setIsLoading(false);
       }

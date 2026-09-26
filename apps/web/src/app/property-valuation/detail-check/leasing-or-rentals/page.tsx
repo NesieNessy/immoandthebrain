@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Icons, LoadingScreen, Modal, MonthField, PillOptions, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
+import { Button, Icons, LoadingScreen, Modal, MonthField, PillOptions, SectionLabel, StickyActionBar, TextField, ErrorAlert } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { authFetch } from '@/lib/api/authFetch';
@@ -13,11 +13,13 @@ import {
   serviceChargesMismatch,
   type RentalField,
 } from '@/lib/detailCheck/rental';
+import { detailCheckWorkflowId } from '@/lib/detailCheck/workflow';
 import { uploadDocument } from '@/lib/supabase/document.supabase';
 import { format } from 'date-fns';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
+import { errorMessage, readApiError } from '@/lib/api/apiError';
 
 type RentalForm = {
   valuationMonth: string;
@@ -137,7 +139,7 @@ function RentalContent() {
       setTopError(null);
       try {
         const res = await authFetch(`/api/detail-check/rental${suffix}`, { cache: 'no-store' });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw await readApiError(res);
         const data = await res.json() as RentalResponse;
         if (cancelled) return;
         const allocable = valueString(data.serviceChargesAllocable);
@@ -159,7 +161,7 @@ function RentalContent() {
         setParkingSpaces(data.parkingSpaces);
       } catch (error) {
         if (!cancelled) {
-          setTopError(error instanceof Error ? error.message : 'Vermietungsdaten konnten nicht geladen werden.');
+          setTopError(errorMessage(error, 'Vermietungsdaten konnten nicht geladen werden.'));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -288,10 +290,10 @@ function RentalContent() {
           serviceChargesTotal: values.serviceChargesTotal,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await readApiError(res);
       return true;
     } catch (error) {
-      setTopError(error instanceof Error ? error.message : 'Vermietungsdaten konnten nicht gespeichert werden.');
+      setTopError(errorMessage(error, 'Vermietungsdaten konnten nicht gespeichert werden.'));
       return false;
     } finally {
       setIsSaving(false);
@@ -303,7 +305,7 @@ function RentalContent() {
   };
 
   const handleUploadServiceCharge = async (file: File) => {
-    if (!user || !quickCheckId) return;
+    if (!user) return;
     setIsUploadingServiceCharge(true);
     setServiceChargeUploadError(null);
     try {
@@ -312,7 +314,9 @@ function RentalContent() {
         category: 'Detailbewertung',
         name: 'Nebenkostenabrechnung',
         propertyId: null,
-        quickCheckId: Number(quickCheckId),
+        quickCheckId: quickCheckId ? Number(quickCheckId) : null,
+        // Links it to this detail check — with or without an Ersteinschätzung.
+        detailCheckWorkflowId: detailCheckWorkflowId(quickCheckId, workflowId),
         documentDate: format(new Date(), 'yyyy-MM-dd'),
       });
       if (uploaded) {
@@ -382,11 +386,7 @@ function RentalContent() {
 
       <div className="pb-24">
 
-        {topError && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {topError}
-          </div>
-        )}
+        {topError && <ErrorAlert message={topError} className="mb-4" />}
 
         {isLoading ? (
           <LoadingScreen message="Vermietungsdaten werden geladen…" fullScreen={false} />
@@ -524,7 +524,7 @@ function RentalContent() {
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
                 className="sr-only"
-                disabled={!quickCheckId || isUploadingServiceCharge}
+                disabled={!user || isUploadingServiceCharge}
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   event.target.value = '';
@@ -548,12 +548,12 @@ function RentalContent() {
                   />
                 </div>
               ) : (
-                <span title={!quickCheckId ? 'Bitte zuerst speichern' : undefined} className="w-fit">
+                <span className="w-fit">
                   <Button
                     label={isUploadingServiceCharge ? 'Wird hochgeladen…' : 'Nebenkostenabrechnung hochladen'}
                     icon={isUploadingServiceCharge ? <Icons.Loader2 className="w-4 h-4 animate-spin" /> : <Icons.Upload className="w-4 h-4" />}
                     variant="outline"
-                    disabled={!quickCheckId || isUploadingServiceCharge}
+                    disabled={!user || isUploadingServiceCharge}
                     onClick={() => serviceChargeInputRef.current?.click()}
                   />
                 </span>

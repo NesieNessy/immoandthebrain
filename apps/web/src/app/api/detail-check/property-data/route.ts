@@ -1,6 +1,6 @@
 import { isValidListingUrl, LISTING_URL_ERROR, listingLinkHref, normalizeListingReference } from '@/lib/listingUrl';
 import { db } from '@/lib/server/db';
-import { requireUserId, workflowIdFor } from '@/lib/server/auth';
+import { requireUserId, resolveWorkflowId } from '@/lib/server/auth';
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 
@@ -40,10 +40,12 @@ async function loadQuickCheck(userId: string, quickCheckId: string | null) {
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const url = new URL(request.url);
   const quickCheckId = url.searchParams.get('quickCheckId');
   const requestedWorkflowId = url.searchParams.get('workflowId');
-  const workflowId = workflowIdFor(userId, quickCheckId, requestedWorkflowId);
+  const workflowId = resolveWorkflowId(userId, quickCheckId, requestedWorkflowId);
+  if (workflowId instanceof Response) return workflowId;
   const quickCheck = await loadQuickCheck(userId, quickCheckId);
 
   const { rows } = quickCheckId || requestedWorkflowId ? await db.query(
@@ -83,12 +85,15 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const quickCheckId = input.quickCheckId ? String(input.quickCheckId) : null;
   const requestedWorkflowId = input.workflowId ? String(input.workflowId) : null;
+  // No id yet = the first save of a new detail check, which mints its workflow.
   const workflowId = quickCheckId || requestedWorkflowId
-    ? workflowIdFor(userId, quickCheckId, requestedWorkflowId)
+    ? resolveWorkflowId(userId, quickCheckId, requestedWorkflowId)
     : `detail-check:${randomUUID()}`;
+  if (workflowId instanceof Response) return workflowId;
   const quickCheck = await loadQuickCheck(userId, quickCheckId);
 
   const propertyCategory = String(input.propertyCategory ?? '');

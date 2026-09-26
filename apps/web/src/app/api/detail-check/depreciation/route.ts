@@ -6,7 +6,7 @@ import {
   type ModernizationSelections,
   type PriceSplitMode,
 } from '@/lib/detailCheck/depreciation';
-import { requireUserId, workflowIdFor } from '@/lib/server/auth';
+import { requireUserId, resolveWorkflowId } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
 import { NextResponse } from 'next/server';
 
@@ -119,9 +119,11 @@ function buildResponse(saved: Record<string, unknown> | undefined, context: Awai
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const url = new URL(request.url);
   const quickCheckId = url.searchParams.get('quickCheckId');
-  const workflowId = workflowIdFor(userId, quickCheckId, url.searchParams.get('workflowId'));
+  const workflowId = resolveWorkflowId(userId, quickCheckId, url.searchParams.get('workflowId'));
+  if (workflowId instanceof Response) return workflowId;
   const context = await loadContext(userId, workflowId, quickCheckId);
   const { rows } = await db.query(
     'SELECT * FROM detail_check_depreciation WHERE user_id = $1 AND workflow_id = $2 LIMIT 1',
@@ -133,9 +135,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const quickCheckId = input.quickCheckId ? String(input.quickCheckId) : null;
-  const workflowId = workflowIdFor(userId, quickCheckId, input.workflowId ? String(input.workflowId) : null);
+  const workflowId = resolveWorkflowId(userId, quickCheckId, input.workflowId ? String(input.workflowId) : null);
+  if (workflowId instanceof Response) return workflowId;
   const context = await loadContext(userId, workflowId, quickCheckId);
   const requestedPropertyCategory = String(input.propertyCategory ?? context.propertyCategory);
   const propertyCategory = PROPERTY_CATEGORIES.has(requestedPropertyCategory)

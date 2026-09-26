@@ -28,10 +28,11 @@ function mapTenancyMoveOut(row: TenancyMoveOutRow) {
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const { searchParams } = new URL(request.url);
   const tenancyId = Number(searchParams.get('tenancyId'));
   if (!Number.isInteger(tenancyId)) {
-    return NextResponse.json({ error: 'tenancyId is required' }, { status: 400 });
+    return NextResponse.json({ error: 'Das Mietverhältnis fehlt.' }, { status: 400 });
   }
 
   const { rows } = await db.query<TenancyMoveOutRow>(
@@ -52,12 +53,13 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
 
   const tenancyId = Number(input.tenancyId);
   const propertyId = Number(input.propertyId);
   if (!Number.isInteger(tenancyId) || !Number.isInteger(propertyId)) {
-    return NextResponse.json({ error: 'Invalid tenancy move-out payload' }, { status: 400 });
+    return NextResponse.json({ error: 'Die Angaben zum Auszug sind unvollständig oder ungültig.' }, { status: 400 });
   }
 
   const { rows } = await db.query<TenancyMoveOutRow>(
@@ -70,16 +72,17 @@ export async function POST(request: Request) {
     [tenancyId, propertyId, JSON.stringify(input.meterReadings ?? []), JSON.stringify(input.damages ?? []), userId],
   );
 
-  if (!rows[0]) return NextResponse.json({ error: 'Property not found or not owned by user' }, { status: 404 });
+  if (!rows[0]) return NextResponse.json({ error: 'Objekt nicht gefunden.' }, { status: 404 });
   return NextResponse.json(mapTenancyMoveOut(rows[0]), { status: 201 });
 }
 
 export async function PATCH(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const tenancyMoveOutId = Number(input.tenancyMoveOutId);
   if (!Number.isInteger(tenancyMoveOutId)) {
-    return NextResponse.json({ error: 'Invalid tenancy move-out id' }, { status: 400 });
+    return NextResponse.json({ error: 'Ungültiger Auszug.' }, { status: 400 });
   }
 
   const { rows } = await db.query<TenancyMoveOutRow>(
@@ -97,6 +100,6 @@ export async function PATCH(request: Request) {
     [tenancyMoveOutId, userId, JSON.stringify(input.meterReadings ?? []), JSON.stringify(input.damages ?? [])],
   );
 
-  if (!rows[0]) return NextResponse.json({ error: 'Tenancy move-out record not found' }, { status: 404 });
+  if (!rows[0]) return NextResponse.json({ error: 'Auszug nicht gefunden.' }, { status: 404 });
   return NextResponse.json(mapTenancyMoveOut(rows[0]));
 }

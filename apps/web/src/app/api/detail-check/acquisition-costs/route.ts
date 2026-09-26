@@ -1,9 +1,7 @@
-import {
-  computeAcquisitionCosts,
-  resolveStateFromPostalCode,
-} from '@/lib/detailCheck/acquisitionCosts';
-import { requireUserId, workflowIdFor } from '@/lib/server/auth';
+import { acquisitionCostErrors, computeAcquisitionCosts } from '@/lib/detailCheck/acquisitionCosts';
+import { requireUserId, resolveWorkflowId } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
+import { loadStateForPostalCode } from '@/lib/server/postalCodeState';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -80,13 +78,15 @@ async function loadPropertyData(userId: string, workflowId: string) {
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const url = new URL(request.url);
   const quickCheckId = url.searchParams.get('quickCheckId');
-  const workflowId = workflowIdFor(userId, quickCheckId, url.searchParams.get('workflowId'));
+  const workflowId = resolveWorkflowId(userId, quickCheckId, url.searchParams.get('workflowId'));
+  if (workflowId instanceof Response) return workflowId;
   const quickCheck = await loadQuickCheck(userId, quickCheckId);
   const propertyData = await loadPropertyData(userId, workflowId);
   const postalCode = propertyData?.postal_code ?? quickCheck?.postal_code ?? null;
-  const state = resolveStateFromPostalCode(postalCode);
+  const state = await loadStateForPostalCode(postalCode);
   const defaults = await loadDefaults(state);
 
   const { rows } = await db.query(
@@ -177,13 +177,15 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const quickCheckId = input.quickCheckId ? String(input.quickCheckId) : null;
-  const workflowId = workflowIdFor(userId, quickCheckId, input.workflowId ? String(input.workflowId) : null);
+  const workflowId = resolveWorkflowId(userId, quickCheckId, input.workflowId ? String(input.workflowId) : null);
+  if (workflowId instanceof Response) return workflowId;
   const quickCheck = await loadQuickCheck(userId, quickCheckId);
   const propertyData = await loadPropertyData(userId, workflowId);
   const postalCode = propertyData?.postal_code ?? quickCheck?.postal_code ?? input.postalCode ?? null;
-  const state = resolveStateFromPostalCode(postalCode);
+  const state = await loadStateForPostalCode(postalCode);
   const defaults = await loadDefaults(state);
 
   const purchasePrice = toNumber(input.purchasePrice);
@@ -196,15 +198,10 @@ export async function POST(request: Request) {
   const landRegistryPercent = defaults.landRegistryPercent;
   const propertyTransferTaxPercent = defaults.propertyTransferTaxPercent;
 
-  if (
-    purchasePrice < 0 ||
-    purchasePrice > 1_000_000_000 ||
-    parkingPurchasePrice < 0 ||
-    parkingPurchasePrice > 1_000_000_000 ||
-    brokerPercent < 0 ||
-    brokerPercent > 20
-  ) {
-    return NextResponse.json({ error: 'Invalid acquisition-cost payload' }, { status: 400 });
+  const fieldErrors = acquisitionCostErrors({ purchasePrice, parkingPurchasePrice, brokerPercent });
+  if (Object.keys(fieldErrors).length > 0) {
+    // The field messages themselves are the most useful summary.
+    return NextResponse.json({ error: Object.values(fieldErrors).join(' '), fieldErrors }, { status: 400 });
   }
 
   const computed = computeAcquisitionCosts({

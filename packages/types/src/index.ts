@@ -1321,8 +1321,11 @@ export interface UserDocument {
   name: string;
   /** Set when category is "Bestandsobjekt". */
   propertyId: number | null;
-  /** Set when category is "Detailbewertung". */
+  /** Set when category is "Detailbewertung" and it started from an Ersteinschätzung. */
   quickCheckId: number | null;
+  /** The Detailbewertung workflow ("quick-check:<id>" / "detail-check:<uuid>")
+   *  the document belongs to — set with or without an Ersteinschätzung. */
+  detailCheckWorkflowId: string | null;
   /** Drives the KI-Hinweis "vermutlich zu alt" heuristic. */
   documentDate: string | null;
   fileName: string;
@@ -1333,7 +1336,8 @@ export interface UserDocument {
   updatedAt: string;
 }
 
-export type UserDocumentInsert = Omit<UserDocument, 'documentId' | 'fileName' | 'storagePath' | 'contentType' | 'fileSize' | 'createdAt' | 'updatedAt'>;
+export type UserDocumentInsert = Omit<UserDocument, 'documentId' | 'fileName' | 'storagePath' | 'contentType' | 'fileSize' | 'createdAt' | 'updatedAt' | 'detailCheckWorkflowId'>
+  & { detailCheckWorkflowId?: string | null };
 
 // ----------------------------------------------------------------------------
 // API Response types

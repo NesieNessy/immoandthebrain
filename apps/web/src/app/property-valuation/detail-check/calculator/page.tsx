@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, CalculatedPanel, Dropdown, FixedOverlay, LoadingScreen, MetricCard, MonthField, ReadOnlyField, SectionLabel, StickyActionBar, TextField } from '@/components/ui';
+import { Button, CalculatedPanel, Dropdown, FixedOverlay, LoadingScreen, MetricCard, MonthField, ReadOnlyField, SectionLabel, StickyActionBar, TextField, ErrorAlert } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { authFetch } from '@/lib/api/authFetch';
 import { parseDecimalInput } from '@/lib/detailCheck/acquisitionCosts';
@@ -14,6 +14,7 @@ import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { createPortal } from 'react-dom';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
 import { AnalysisPanel } from './AnalysisPanel';
+import { errorMessage, readApiError } from '@/lib/api/apiError';
 
 /**
  * Renders a modal straight into `document.body`, bypassing every ancestor —
@@ -1759,14 +1760,14 @@ function CalculatorContent() {
       setError(null);
       try {
         const res = await authFetch(`/api/detail-check/calculator${suffix}`, { cache: 'no-store' });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw await readApiError(res);
         const loaded = await res.json() as CalculatorResponse;
         if (cancelled) return;
         applyServerSnapshot(loaded);
         initialDataRef.current = loaded;
         setUpstreamResetNotice(loaded.overridesResetByUpstreamChange === true);
       } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : 'Kalkulator konnte nicht geladen werden.');
+        if (!cancelled) setError(errorMessage(loadError, 'Kalkulator konnte nicht geladen werden.'));
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -1856,7 +1857,7 @@ function CalculatorContent() {
           apply,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await readApiError(res);
       const updated = await res.json() as CalculatorResponse;
       // Always safe to adopt: `data` is only the baseline `effectiveParams`
       // builds on, and the overrides layered on top of it stay whatever the
@@ -1884,7 +1885,7 @@ function CalculatorContent() {
       if (navigate) router.push(`/property-valuation/detail-check/macro-location${suffix}`);
       return true;
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Kalkulation konnte nicht gespeichert werden.');
+      setError(errorMessage(saveError, 'Kalkulation konnte nicht gespeichert werden.'));
       return false;
     } finally {
       isSavingRef.current = false;
@@ -2061,11 +2062,11 @@ function CalculatorContent() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(buildRestoreRequestBody(initial.params, quickCheckId, workflowId)),
         });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw await readApiError(res);
         const restored = await res.json() as CalculatorResponse;
         applyServerSnapshot(restored);
       } catch (discardError) {
-        setError(discardError instanceof Error ? discardError.message : 'Änderungen konnten nicht verworfen werden.');
+        setError(errorMessage(discardError, 'Änderungen konnten nicht verworfen werden.'));
         setApplyPhase('ASK');
         return;
       }
@@ -2127,11 +2128,7 @@ function CalculatorContent() {
             </button>
           </div>
         )}
-        {error && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        {error && <ErrorAlert message={error} className="mb-4" />}
 
         {isLoading || !data || !presented ? (
           <LoadingScreen message="Kalkulator wird geladen…" fullScreen={false} />
@@ -2538,11 +2535,7 @@ function CalculatorContent() {
                 {/* Shown inside the dialog, not only in the page banner behind
                     it — after a failed apply the overlay is still up, so a
                     banner underneath would be invisible exactly when it matters. */}
-                {error && (
-                  <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                    Übernehmen fehlgeschlagen: {error}
-                  </div>
-                )}
+                {error && <ErrorAlert title="Übernehmen fehlgeschlagen" message={error} className="mb-4" />}
                 <div className="flex flex-wrap justify-end gap-2">
                   <button
                     className="rounded-md border border-border px-3 py-2"

@@ -20,6 +20,7 @@ function toQueryValue(key: string, value: unknown): unknown {
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const { rows } = await db.query('SELECT * FROM personal_data WHERE user_id = $1 LIMIT 1', [userId]);
   if (!rows[0]) return NextResponse.json({ error: 'Profildaten nicht gefunden.' }, { status: 404 });
   return NextResponse.json(rows[0]);
@@ -27,6 +28,7 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const values = Object.fromEntries(Object.entries(COLUMNS).filter(([key]) => Object.hasOwn(input, key)).map(([key, column]) => [column, toQueryValue(key, input[key])]));
   const required = ['last_name', 'first_name', 'street', 'house_number', 'city', 'postal_code', 'email_address', 'tax_identification_number'];
@@ -45,6 +47,7 @@ export async function PUT(request: Request) {
 
 export async function PATCH(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const input = await request.json();
   const entries = Object.entries(COLUMNS).filter(([key]) => Object.hasOwn(input, key));
   if (entries.length === 0) return NextResponse.json({ error: 'Keine Änderungen übermittelt.' }, { status: 400 });

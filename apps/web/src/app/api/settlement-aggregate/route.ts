@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const userId = await requireUserId(request);
+  if (userId instanceof Response) return userId;
   const url = new URL(request.url);
   const propertyId = url.searchParams.get('propertyId');
   const propertyUnitId = url.searchParams.get('propertyUnitId');
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
   const periodStart = url.searchParams.get('periodStart');
   const periodEnd = url.searchParams.get('periodEnd');
 
-  if (!propertyId) return NextResponse.json({ error: 'propertyId missing' }, { status: 400 });
+  if (!propertyId) return NextResponse.json({ error: 'Das Objekt fehlt.' }, { status: 400 });
 
   const values: unknown[] = [userId, Number(propertyId)];
 

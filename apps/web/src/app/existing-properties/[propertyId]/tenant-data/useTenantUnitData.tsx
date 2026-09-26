@@ -31,7 +31,8 @@ import { htmlToPdfBlob } from '@/lib/pdf/htmlToPdf';
 import type { MaintenanceCostItem, MaintenanceCosts, PersonalData, Property, PropertyUnit, Tenancy, TenancyAdjustmentHistoryEntry, TenancyAdjustmentType, TenancyDocument, TenancyDocumentType } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { errorMessage, UserFacingError } from '@/lib/api/apiError';
 
 export function euro(value: number | null | undefined): string {
     return value != null ? `${deCurrencyFormatter.format(value)} €` : '–';
@@ -630,7 +631,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                 if (!overlap) return;
                 const overlapLabel = `${overlap.tenantFirstName ?? ''} ${overlap.tenantLastName ?? ''}`.trim() || 'ein anderes Mietverhältnis';
                 const overlapEndLabel = overlap.tenancyEndDate ? formatDeDate(overlap.tenancyEndDate) : 'laufend';
-                throw new Error(`Der Mietzeitraum überschneidet sich mit „${overlapLabel}" (${formatDeDate(overlap.tenancyStartDate)} – ${overlapEndLabel}). Bitte zuerst dessen Zeitraum in der Mieterhistorie anpassen.`);
+                throw new UserFacingError(`Der Mietzeitraum überschneidet sich mit „${overlapLabel}" (${formatDeDate(overlap.tenancyStartDate)} – ${overlapEndLabel}). Bitte zuerst dessen Zeitraum in der Mieterhistorie anpassen.`);
             };
 
             if (startFreshTenancy) {
@@ -704,7 +705,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                 if (!updated) throw new Error('updateTenancy failed');
             } else {
                 if (hasOrphanedRentalData({ ...rentalForm, persons })) {
-                    throw new Error('Bitte zuerst einen Mieternamen unter „Mieterdaten“ erfassen, bevor Mietvertragsdaten gespeichert werden können.');
+                    throw new UserFacingError('Bitte zuerst einen Mieternamen unter „Mieterdaten“ erfassen, bevor Mietvertragsdaten gespeichert werden können.');
                 }
             }
 
@@ -750,7 +751,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                         // Steuer-ID/Einzugsdatum; isPrimaryPersonValid should already
                         // block Save, but throw here too rather than silently report
                         // "gespeichert" while this person's edits were dropped.
-                        if (!updated) throw new Error(`Mieterdaten für Person ${i + 1} konnten nicht gespeichert werden.`);
+                        if (!updated) throw new UserFacingError(`Mieterdaten für Person ${i + 1} konnten nicht gespeichert werden.`);
                     } else if (p.lastName.trim() !== '' || p.firstName.trim() !== '') {
                         const created = await createTenancyPerson({
                             tenancyId: activeTenancyId,
@@ -761,7 +762,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
                             sortOrder: i,
                             moveInDate,
                         });
-                        if (!created) throw new Error(`Mieterdaten für Person ${i + 1} konnten nicht gespeichert werden.`);
+                        if (!created) throw new UserFacingError(`Mieterdaten für Person ${i + 1} konnten nicht gespeichert werden.`);
                     }
                 }
             }
@@ -773,7 +774,7 @@ export function useTenantUnitData(propertyId: string, property: Property, unit: 
             showToast('Mieterdaten gespeichert.');
             router.push(backHref);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
+            setError(errorMessage(err, 'Mieterdaten konnten nicht gespeichert werden.'));
         } finally {
             setIsSaving(false);
         }

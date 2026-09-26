@@ -13,7 +13,8 @@ import { base64ToDataUri } from '@/lib/utils';
 import { EnergyEfficient } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useRef, useState } from 'react';
+import { Suspense, useRef, useState } from 'react';
+import { errorMessage } from '@/lib/api/apiError';
 
 /** Strips the "data:image/...;base64," prefix; Property.imageUrl stores raw base64 only. */
 function readFileAsRawBase64(file: File): Promise<string> {
@@ -181,7 +182,7 @@ function NewPropertyPageContent() {
       showToast('Objekt gespeichert.');
       router.push('/existing-properties');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
+      setError(errorMessage(err, 'Objekt konnte nicht gespeichert werden.'));
       setIsSaving(false);
     }
   };
