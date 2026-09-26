@@ -3,7 +3,9 @@
 import { Button } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { cn } from '@/lib/utils';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+
+type BarButton = 'ghost' | 'secondary' | 'primary';
 
 interface StickyActionBarProps {
     show: boolean;
@@ -19,6 +21,10 @@ interface StickyActionBarProps {
     primaryIcon?: React.ReactNode;
     ghostDisabled?: boolean;
     primaryDisabled?: boolean;
+    /** A save started from this bar is in flight. The spinner goes on the
+     *  button the user actually clicked, so pages whose "Zurück" and "Weiter"
+     *  both save (sharing one isSaving flag) don't animate the wrong one. */
+    loading?: boolean;
     /** e.g. a "Schritt 1 von 2" label, shown at the start of the bar. */
     leftContent?: React.ReactNode;
     /** Optional third button, rendered between ghost and primary — for a
@@ -40,13 +46,24 @@ export function StickyActionBar({
     primaryIcon,
     ghostDisabled = false,
     primaryDisabled = false,
+    loading = false,
     leftContent,
     onSecondary,
     secondaryLabel,
     secondaryIcon,
     secondaryDisabled = false,
 }: StickyActionBarProps) {
+    const [lastClicked, setLastClicked] = useState<BarButton | null>(null);
+
+    // Forget the click once the save settles, so a later save triggered from
+    // elsewhere (stepper, autosave) doesn't spin a bar button.
+    useEffect(() => {
+        if (!loading) setLastClicked(null);
+    }, [loading]);
+
     if (!show) return null;
+
+    const isLoading = (button: BarButton) => loading && lastClicked === button;
 
     return (
         <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border shadow-lg z-50">
@@ -55,26 +72,29 @@ export function StickyActionBar({
                 <div className="flex items-center gap-3">
                     <Button
                         variant="ghost"
-                        onClick={onGhost}
+                        onClick={() => { setLastClicked('ghost'); onGhost(); }}
                         label={ghostLabel}
                         icon={ghostIcon}
                         disabled={ghostDisabled}
+                        loading={isLoading('ghost')}
                     />
                     {onSecondary && secondaryLabel && (
                         <Button
                             variant="outline"
-                            onClick={onSecondary}
+                            onClick={() => { setLastClicked('secondary'); onSecondary(); }}
                             label={secondaryLabel}
                             icon={secondaryIcon}
                             disabled={secondaryDisabled}
+                            loading={isLoading('secondary')}
                         />
                     )}
                     <Button
                         variant="primary"
-                        onClick={onPrimary}
+                        onClick={() => { setLastClicked('primary'); onPrimary(); }}
                         label={primaryLabel}
                         icon={primaryIcon}
                         disabled={primaryDisabled}
+                        loading={isLoading('primary')}
                     />
                 </div>
             </div>

@@ -4,6 +4,7 @@ import { PROPERTY_CATEGORY_CREATE_OPTIONS, PropertyLoadingPage, PropertyNotFound
 import { PropertyImageGallery } from '@/components/features/PropertyImageGallery';
 import { CalendarField, Dropdown, Header, NumberField, PAGE_CONTAINER_CLASS, PillOptions, SectionLabel, StickyActionBar, TextField, UnsavedChangesModal, useToast } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
+import { errorMessage } from '@/lib/api/apiError';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import { getLabel } from '@/constants/FieldLabels';
 import { createAcquisitionCosts, getAcquisitionCosts, updateAcquisitionCosts } from '@/lib/supabase/acquisition_costs.supabase';
@@ -14,8 +15,7 @@ import { EnergyEfficient, type AcquisitionCosts, type ParkingSpace, type Propert
 import { format, parseISO } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { isPropertyDataFormValid, normalizeNumberOfRooms } from './validation';
-import { errorMessage } from '@/lib/api/apiError';
+import { isPropertyDataFormValid, normalizeNumberOfRooms } from './validation';
 
 const ENERGY_OPTIONS = [
     { value: '', label: 'Bitte wählen...' },
@@ -396,6 +396,7 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                 ghostIcon={<BUTTON_DETAILS.Back.icon />}
                 primaryIcon={<BUTTON_DETAILS.Save.icon />}
                 primaryDisabled={!isEditing || !isValid || isSaving}
+                loading={isSaving}
             />
 
             <UnsavedChangesModal

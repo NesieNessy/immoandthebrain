@@ -66,9 +66,10 @@ export function NotificationsSection({ userId, personalData, onSaved }: {
             <div className="flex justify-end">
                 <Button
                     label={isSaving ? 'Speichert…' : 'Speichern'}
-                    icon={isSaving ? <Icons.Loader2 className="w-4 h-4 animate-spin" /> : <Icons.Check className="w-4 h-4" />}
+                    icon={<Icons.Check className="w-4 h-4" />}
                     variant="primary"
-                    disabled={!isDirty || isSaving}
+                    disabled={!isDirty}
+                    loading={isSaving}
                     onClick={() => void handleSave()}
                 />
             </div>

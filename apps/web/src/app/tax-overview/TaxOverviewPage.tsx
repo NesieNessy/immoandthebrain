@@ -281,7 +281,8 @@ export default function TaxOverviewPage() {
                             label="Hochladen"
                             icon={<Icons.Upload className="w-4 h-4" />}
                             variant="primary"
-                            disabled={!data.uploadFile || Number(data.uploadAmount) <= 0 || data.isSubmittingUpload}
+                            disabled={!data.uploadFile || Number(data.uploadAmount) <= 0}
+                            loading={data.isSubmittingUpload}
                             onClick={() => void data.confirmUpload()}
                         />
                     </>

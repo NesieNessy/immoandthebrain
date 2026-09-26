@@ -127,7 +127,7 @@ function WegCard({ weg, expanded, onToggle, data }: {
                 footer={
                     <>
                         <Button label="Abbrechen" variant="outline" onClick={() => setReviewOpen(false)} />
-                        <Button label="Speichern" icon={<Icons.Check className="w-4 h-4" />} variant="primary" disabled={rating === 0 || isSubmittingReview} onClick={() => void submitReview()} />
+                        <Button label="Speichern" icon={<Icons.Check className="w-4 h-4" />} variant="primary" disabled={rating === 0} loading={isSubmittingReview} onClick={() => void submitReview()} />
                     </>
                 }
             >

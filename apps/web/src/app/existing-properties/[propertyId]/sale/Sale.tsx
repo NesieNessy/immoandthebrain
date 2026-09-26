@@ -336,6 +336,7 @@ export default function Sale({ propertyId }: { propertyId: string }) {
                 primaryIcon={<BUTTON_DETAILS.Publish.icon className="w-4 h-4" />}
                 onPrimary={openPublishModal}
                 primaryDisabled={data.isSaving}
+                loading={data.isSaving}
             />
 
             <UnsavedChangesModal
@@ -356,7 +357,8 @@ export default function Sale({ propertyId }: { propertyId: string }) {
                         <Button
                             label="Veröffentlichen"
                             variant="primary"
-                            disabled={selectedPortals.length === 0 || data.isSaving}
+                            disabled={selectedPortals.length === 0}
+                            loading={data.isSaving}
                             onClick={confirmPublish}
                         />
                     </>
@@ -386,7 +388,8 @@ export default function Sale({ propertyId }: { propertyId: string }) {
                             label="Hinzufügen"
                             icon={<Icons.Upload className="w-4 h-4" />}
                             variant="primary"
-                            disabled={!addDocFile || addDocName.trim() === '' || isAddingDoc}
+                            disabled={!addDocFile || addDocName.trim() === ''}
+                            loading={isAddingDoc}
                             onClick={() => void confirmAddDoc()}
                         />
                     </>

@@ -358,7 +358,8 @@ export default function Contractors({ propertyId }: { propertyId: string }) {
                             label="Hinzufügen"
                             icon={<Icons.Plus className="w-4 h-4" />}
                             variant="primary"
-                            disabled={newMeasureTitle(newMeasure) === '' || isAdding}
+                            disabled={newMeasureTitle(newMeasure) === ''}
+                            loading={isAdding}
                             onClick={() => void confirmAdd()}
                         />
                     </>

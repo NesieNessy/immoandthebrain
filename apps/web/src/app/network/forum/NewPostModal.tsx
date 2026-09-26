@@ -47,7 +47,8 @@ export function NewPostModal({ open, onClose, onSubmit }: {
                         label="Veröffentlichen"
                         icon={<Icons.Plus className="w-4 h-4" />}
                         variant="primary"
-                        disabled={!canSubmit || isSubmitting}
+                        disabled={!canSubmit}
+                        loading={isSubmitting}
                         onClick={() => void handleSubmit()}
                     />
                 </>

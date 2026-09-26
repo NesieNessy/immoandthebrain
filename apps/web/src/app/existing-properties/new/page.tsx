@@ -3,6 +3,7 @@
 import { BESTANDSOBJEKTE_BREADCRUMB_ROOT, PROPERTY_CATEGORY_CREATE_OPTIONS } from '@/components/features/PropertyDisplay';
 import { CalendarField, Dropdown, Header, Icons, NumberField, PAGE_CONTAINER_CLASS, PillOptions, SectionLabel, StickyActionBar, TextField, UnsavedChangesModal, UploadButton, useToast, type BreadcrumbItem } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
+import { errorMessage } from '@/lib/api/apiError';
 import { getLabel } from '@/constants/FieldLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { createAcquisitionCosts } from '@/lib/supabase/acquisition_costs.supabase';
@@ -13,8 +14,7 @@ import { base64ToDataUri } from '@/lib/utils';
 import { EnergyEfficient } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useRef, useState } from 'react';
-import { errorMessage } from '@/lib/api/apiError';
+import { Suspense, useRef, useState } from 'react';
 
 /** Strips the "data:image/...;base64," prefix; Property.imageUrl stores raw base64 only. */
 function readFileAsRawBase64(file: File): Promise<string> {
@@ -347,6 +347,7 @@ function NewPropertyPageContent() {
         primaryLabel="Objekt speichern"
         primaryIcon={<BUTTON_DETAILS.Save.icon />}
         primaryDisabled={!isEditing || !isValid || isSaving || authLoading}
+        loading={isSaving}
         onPrimary={() => void handleSave()}
       />
 

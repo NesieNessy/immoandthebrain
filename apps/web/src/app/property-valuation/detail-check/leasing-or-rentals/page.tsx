@@ -575,6 +575,7 @@ function RentalContent() {
         primaryLabel="Weiter"
         primaryIcon={<BUTTON_DETAILS.Next.icon />}
         primaryDisabled={isLoading || isSaving || hasAmountError}
+        loading={isSaving}
         onPrimary={() => void saveAndNavigate('/property-valuation/detail-check/financing')}
       />
     </PropertyValuationLayout>

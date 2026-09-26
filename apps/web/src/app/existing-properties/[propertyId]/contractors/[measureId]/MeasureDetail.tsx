@@ -441,7 +441,8 @@ export default function MeasureDetail({ propertyId, measureId }: { propertyId: s
                             label="Hinzufügen"
                             icon={<Icons.Plus className="w-4 h-4" />}
                             variant="primary"
-                            disabled={quoteCompany.trim() === '' || isAddingQuote}
+                            disabled={quoteCompany.trim() === ''}
+                            loading={isAddingQuote}
                             onClick={() => void confirmAddQuote()}
                         />
                     </>

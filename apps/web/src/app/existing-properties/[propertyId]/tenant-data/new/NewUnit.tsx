@@ -272,6 +272,7 @@ export default function NewUnit({ propertyId }: { propertyId: string }) {
                 primaryLabel="Einheit speichern"
                 primaryIcon={<Icons.Check className="w-4 h-4" />}
                 primaryDisabled={!isEditing || !isValid || isSaving}
+                loading={isSaving}
             />
 
             <UnsavedChangesModal

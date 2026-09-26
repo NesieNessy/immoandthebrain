@@ -32,6 +32,17 @@ import { Sparkles } from 'lucide-react';
 
 import { euro, useServiceChargeSettlementData } from './useServiceChargeSettlementData';
 
+// Gesamt Objekt / Anteil Wohnung (and the Verteilerschlüssel Zähler/Nenner
+// that can compute a suggested Anteil Wohnung from them) all feed straight
+// into the NK-Vorauszahlung calculation — a negative one has no real-world
+// meaning and would let a landlord "übernehmen" a negative monthly
+// prepayment. NumberField's min={0} is only the native HTML attribute (it
+// flags :invalid, it doesn't stop the keystroke), so the minus sign has to
+// be stripped here instead.
+function nonNegativeInput(value: string): string {
+    return value.replace(/-/g, '');
+}
+
 function settlementPeriodLabel(s: ServiceChargeSettlement): string {
     const start = new Date(s.periodStart);
     const end = new Date(s.periodEnd);
@@ -77,9 +88,9 @@ function SuggestSharePopover({
                 <p className="text-xs font-medium text-foreground">{existingKey ? 'Verteilerschlüssel bearbeiten' : 'Verteilerschlüssel festlegen'}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">Einmal festgelegt, gilt er für diese Position auch in künftigen Abrechnungen.</p>
                 <div className="mt-2 flex items-center gap-1.5">
-                    <NumberField aria-label="Zähler" placeholder="80" value={numerator} onChange={(e) => { setNumerator(e.target.value); setSaved(false); }} min={0} hideStepper className="w-20" />
+                    <NumberField aria-label="Zähler" placeholder="80" value={numerator} onChange={(e) => { setNumerator(nonNegativeInput(e.target.value)); setSaved(false); }} min={0} hideStepper className="w-20" />
                     <span className="text-muted-foreground">/</span>
-                    <NumberField aria-label="Nenner" placeholder="1000" value={denominator} onChange={(e) => { setDenominator(e.target.value); setSaved(false); }} min={0} hideStepper className="w-20" />
+                    <NumberField aria-label="Nenner" placeholder="1000" value={denominator} onChange={(e) => { setDenominator(nonNegativeInput(e.target.value)); setSaved(false); }} min={0} hideStepper className="w-20" />
                 </div>
                 <TextField aria-label="Art" placeholder="Miteigentumsanteil" value={allocationType} onChange={(e) => { setAllocationType(e.target.value); setSaved(false); }} className="mt-1.5 w-full" />
                 <Button
@@ -117,9 +128,9 @@ function OverallAllocationKeyPopover({ onApply }: { onApply: (numerator: number,
                 </p>
             </div>
             <div className="flex items-center gap-1.5">
-                <NumberField aria-label="Zähler" placeholder="80" value={numerator} onChange={(e) => setNumerator(e.target.value)} min={0} hideStepper className="w-20" />
+                <NumberField aria-label="Zähler" placeholder="80" value={numerator} onChange={(e) => setNumerator(nonNegativeInput(e.target.value))} min={0} hideStepper className="w-20" />
                 <span className="text-muted-foreground">/</span>
-                <NumberField aria-label="Nenner" placeholder="1000" value={denominator} onChange={(e) => setDenominator(e.target.value)} min={0} hideStepper className="w-20" />
+                <NumberField aria-label="Nenner" placeholder="1000" value={denominator} onChange={(e) => setDenominator(nonNegativeInput(e.target.value))} min={0} hideStepper className="w-20" />
             </div>
             <TextField aria-label="Art" placeholder="Miteigentumsanteil" value={allocationType} onChange={(e) => setAllocationType(e.target.value)} className="w-full" />
             <Button
@@ -506,7 +517,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     <NumberField
                                                         placeholder="–"
                                                         value={item.actualAmount}
-                                                        onChange={(e) => data.updateCostItemField(index, { actualAmount: e.target.value })}
+                                                        onChange={(e) => data.updateCostItemField(index, { actualAmount: nonNegativeInput(e.target.value) })}
                                                         min={0}
                                                         hideStepper
                                                         className={cn('pr-11', actualAmountMissing && 'border-destructive focus:ring-destructive/50')}
@@ -524,7 +535,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     <NumberField
                                                         placeholder="–"
                                                         value={item.actualShareOverride}
-                                                        onChange={(e) => data.updateCostItemField(index, { actualShareOverride: e.target.value })}
+                                                        onChange={(e) => data.updateCostItemField(index, { actualShareOverride: nonNegativeInput(e.target.value) })}
                                                         min={0}
                                                         hideStepper
                                                         className={cn('pr-11', actualShareIssue && 'border-destructive focus:ring-destructive/50')}
@@ -569,7 +580,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     <NumberField
                                                         placeholder="–"
                                                         value={item.budgetAmount}
-                                                        onChange={(e) => data.updateCostItemField(index, { budgetAmount: e.target.value })}
+                                                        onChange={(e) => data.updateCostItemField(index, { budgetAmount: nonNegativeInput(e.target.value) })}
                                                         min={0}
                                                         hideStepper
                                                         className={cn('pr-11', budgetAmountMissing && 'border-destructive focus:ring-destructive/50')}
@@ -587,7 +598,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                                     <NumberField
                                                         placeholder="–"
                                                         value={item.budgetShareOverride}
-                                                        onChange={(e) => data.updateCostItemField(index, { budgetShareOverride: e.target.value })}
+                                                        onChange={(e) => data.updateCostItemField(index, { budgetShareOverride: nonNegativeInput(e.target.value) })}
                                                         min={0}
                                                         hideStepper
                                                         className={cn('pr-11', budgetShareIssue && 'border-destructive focus:ring-destructive/50')}
@@ -725,6 +736,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                         label="Bisherige NK-Vorauszahlung"
                                         value={`${euro(data.prepaymentUntilSettlement)}`}
                                         detail="/Monat"
+                                        footnote={`Summe im Zeitraum: ${euro(data.annualPrepayment)}`}
                                     />
                                     <MetricCard
                                         label="Neue NK-Vorauszahlung"
@@ -737,6 +749,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                                             : data.displayedPrepaymentDelta === 0
                                                 ? 'entspricht der aktuellen Vorauszahlung'
                                                 : `${data.displayedPrepaymentDelta > 0 ? '+' : '−'}${euro(Math.abs(data.displayedPrepaymentDelta))}${data.displayedPrepaymentDeltaPercent != null ? ` (${data.displayedPrepaymentDeltaPercent > 0 ? '+' : '−'}${Math.abs(data.displayedPrepaymentDeltaPercent).toFixed(1).replace('.', ',')} %)` : ''}`}
+                                        footnote={data.newAnnualPrepayment != null ? `Summe im Zeitraum: ${euro(data.newAnnualPrepayment)}` : undefined}
                                         tone={data.displayedPrepaymentDelta == null || data.displayedPrepaymentDelta === 0
                                             ? 'neutral'
                                             : data.displayedPrepaymentDelta > 0 ? 'warning' : 'positive'}
@@ -914,6 +927,7 @@ export function ServiceChargeSettlementView({ propertyId, property, unit, hasMul
                 primaryLabel="Abrechnung speichern"
                 primaryIcon={<BUTTON_DETAILS.Save.icon />}
                 primaryDisabled={!data.isEditing || data.isSaving}
+                loading={data.isSaving}
                 leftContent={<DetailFieldLegend />}
             />
 
