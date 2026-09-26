@@ -129,10 +129,13 @@ test('saving persists every field and shows a success toast', async ({ page }) =
     await client.connect();
     try {
         const { rows } = await client.query(
-            `SELECT square_meters, number_of_rooms, property_category, federal_state
+            `SELECT street, house_number, square_meters, number_of_rooms, property_category, federal_state
                FROM property WHERE property_id = $1`,
             [propertyId],
         );
+        // The one "Straße & Hausnummer" field is stored as its two columns.
+        expect(rows[0].street).toBe(STREET);
+        expect(rows[0].house_number).toBe('5');
         expect(Number(rows[0].square_meters)).toBe(92.5);
         expect(Number(rows[0].number_of_rooms)).toBe(4);
         expect(rows[0].property_category).toBe('EIGENTUMSWOHNUNG');

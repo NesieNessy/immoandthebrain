@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Icons, LoadingScreen, Modal, MonthField, PillOptions, SectionLabel, StickyActionBar, TextField, ErrorAlert } from '@/components/ui';
+import { Button, Icons, LoadingScreen, Modal, MonthField, PillOptions, ReadOnlyField, SectionLabel, StickyActionBar, TextField, ErrorAlert } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { authFetch } from '@/lib/api/authFetch';
@@ -83,6 +83,11 @@ function MoneyField({
   helperText?: string;
   optional?: boolean;
 }) {
+  // Calculated (e.g. the NK split) or not applicable (no Stellplätze) —
+  // shown locked like every other calculated/taken-over value.
+  if (readOnly || disabled) {
+    return <ReadOnlyField label={label} value={value} suffix={suffix} helperText={helperText} />;
+  }
   return (
     <TextField
       label={label}
@@ -94,9 +99,6 @@ function MoneyField({
       suffix={suffix}
       error={error}
       helperText={helperText}
-      disabled={disabled}
-      readOnly={readOnly}
-      className={readOnly ? 'bg-muted' : undefined}
     />
   );
 }
@@ -330,7 +332,7 @@ function RentalContent() {
   };
 
   return (
-    <PropertyValuationLayout currentStep={2} title="Vermietung" beforeStepChange={() => persist(false)}>
+    <PropertyValuationLayout currentStep={2} title="Vermietung" beforeStepChange={() => persist(false)} showFieldLegend>
       <Modal
         open={infoOpen}
         onClose={() => setInfoOpen(false)}

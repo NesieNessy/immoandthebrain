@@ -209,7 +209,8 @@ function detailCheckSteps(flow: Flow) {
                 await purchasePrice.fill(String(PURCHASE_PRICE));
             }
             // No parking spaces were recorded in Objektdaten — nothing to price.
-            await expect(page.getByLabel('Kaufpreis Stellplatz')).toBeDisabled();
+            await expect(page.getByRole('status', { name: 'Kaufpreis Stellplatz' })).toBeVisible();
+            await expect(page.getByRole('textbox', { name: 'Kaufpreis Stellplatz' })).toHaveCount(0);
 
             // The positions show the bare amount; the Gesamtnebenkosten and
             // Gesamtkaufpreis tiles append "€" in the same element — anchored,
@@ -244,13 +245,16 @@ function detailCheckSteps(flow: Flow) {
                 await expect(coldRent).toHaveValue('');
                 await coldRent.fill(String(COLD_RENT));
             }
-            await expect(page.getByLabel('Stellplatz')).toBeDisabled();
+            // No Stellplätze in Objektdaten: shown locked, not as an input.
+            await expect(page.getByRole('status', { name: 'Stellplatz' })).toBeVisible();
+            await expect(page.getByRole('textbox', { name: 'Stellplatz' })).toHaveCount(0);
             // Available with and without a quick check.
             await expect(page.getByRole('button', { name: 'Nebenkostenabrechnung hochladen' })).toBeEnabled();
 
             await page.getByLabel('NK umlagefähig').fill('150');
             await page.getByLabel('NK nicht umlagefähig').fill('50');
-            await expect(page.getByLabel('NK gesamt')).toHaveValue('200');
+            // The total is calculated — locked, not editable.
+            await expect(page.getByRole('status', { name: 'NK gesamt' })).toHaveText('200');
 
             await page.getByRole('button', { name: 'Weiter' }).click();
             await expect(page).toHaveURL(new RegExp(`/detail-check/financing\\?${escapeRegExp(flow.query)}$`));
@@ -532,6 +536,19 @@ test.describe('In Bestandsobjekte übernehmen', () => {
         const again = await request.post('/api/detail-checks/takeover', { data: { workflowId }, failOnStatusCode: false });
         expect(again.status()).toBe(409);
         expect((await again.json()).propertyId).toBe(propertyId);
+
+        // Saving the Objektdaten on the Bestandsobjekt completes the takeover:
+        // only then is the detail check deleted — its documents stay there.
+        const pending = await (await request.get(`/api/detail-checks?takenOverPropertyId=${propertyId}`)).json();
+        expect(pending).toHaveLength(1);
+        const completed = await request.delete('/api/detail-checks', { data: { takenOverPropertyId: propertyId } });
+        expect(await completed.json()).toEqual({ deleted: true });
+        await withDb(async (client) => {
+            const { rowCount } = await client.query('SELECT 1 FROM detail_check_property_data WHERE workflow_id = $1', [workflowId]);
+            expect(rowCount).toBe(0);
+            const { rows: [kept] } = await client.query('SELECT property_id FROM document WHERE document_id = $1', [document.document_id]);
+            expect(kept.property_id).toBe(propertyId);
+        });
     });
 
     test('names what is missing instead of creating an incomplete Bestandsobjekt', async ({ request }) => {

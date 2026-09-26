@@ -50,7 +50,7 @@ export function ReadOnlyField({
           emphasis && 'font-semibold',
         )}
       >
-        <output className="min-w-0 flex-1 break-words">{value || '-'}</output>
+        <output aria-label={label} className="min-w-0 flex-1 break-words">{value || '-'}</output>
         {suffix && <span className="shrink-0 text-muted-foreground">{suffix}</span>}
         {!label && <LockKeyhole className="shrink-0 text-muted-foreground" size={14} aria-hidden="true" />}
       </div>

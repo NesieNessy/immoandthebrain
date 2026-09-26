@@ -2,9 +2,11 @@
 
 import { PROPERTY_CATEGORY_CREATE_OPTIONS, PropertyLoadingPage, PropertyNotFoundPage } from '@/components/features/PropertyDisplay';
 import { PropertyImageGallery } from '@/components/features/PropertyImageGallery';
-import { CalendarField, Dropdown, Header, NumberField, PAGE_CONTAINER_CLASS, PillOptions, SectionLabel, StickyActionBar, TextField, UnsavedChangesModal, useToast } from '@/components/ui';
+import { CalendarField, Dropdown, Header, Icons, NumberField, PAGE_CONTAINER_CLASS, PillOptions, SectionLabel, StickyActionBar, TextField, UnsavedChangesModal, useToast } from '@/components/ui';
 import { BUTTON_DETAILS } from '@/constants/ButtonLabels';
 import { errorMessage } from '@/lib/api/apiError';
+import { authFetch } from '@/lib/api/authFetch';
+import { splitStreetAndHouseNumber } from '@/lib/detailCheck/takeover';
 import { ExistingPropertiesUseCases } from '@/constants/ExistingPropertiesUseCases';
 import { getLabel } from '@/constants/FieldLabels';
 import { createAcquisitionCosts, getAcquisitionCosts, updateAcquisitionCosts } from '@/lib/supabase/acquisition_costs.supabase';
@@ -65,10 +67,20 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
     const [error, setError] = useState<string | null>(null);
     const [pendingHref, setPendingHref] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    // Set while this Bestandsobjekt comes from a Detailbewertung that hasn't
+    // been confirmed yet: saving the Objektdaten completes the takeover and
+    // only then deletes the detail check.
+    const [pendingTakeover, setPendingTakeover] = useState(false);
 
     useEffect(() => {
         const id = parseInt(propertyId, 10);
         let cancelled = false;
+
+        // Best effort: without it the page simply works as for any property.
+        authFetch(`/api/detail-checks?takenOverPropertyId=${id}`, { cache: 'no-store' })
+            .then((response) => (response.ok ? response.json() : []))
+            .then((rows: unknown[]) => { if (!cancelled) setPendingTakeover(rows.length > 0); })
+            .catch(() => undefined);
 
         Promise.all([
             getPropertyById(id),
@@ -140,9 +152,11 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
         setIsSaving(true);
         setError(null);
         try {
+            // One form field, two columns: "Musterstraße 12a" → street + house number.
+            const address = splitStreetAndHouseNumber(form.strasseHausnummer);
             const updated = await updateProperty(property.propertyId, {
-                street: form.strasseHausnummer.trim(),
-                houseNumber: '',
+                street: address.street,
+                houseNumber: address.houseNumber ?? '',
                 city: form.ort.trim(),
                 postalCode: form.plz,
                 federalState: form.bundesland.trim(),
@@ -212,9 +226,25 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                 setParkingSpace(null);
             }
 
+            let takeoverCompleted = false;
+            if (pendingTakeover) {
+                // The takeover is confirmed — the detail check is done. Its
+                // documents stay on this Bestandsobjekt. A failure here only
+                // leaves the detail check in its list; the save itself stands.
+                const response = await authFetch('/api/detail-checks', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ takenOverPropertyId: property.propertyId }),
+                }).catch(() => null);
+                takeoverCompleted = response?.ok === true;
+                if (takeoverCompleted) setPendingTakeover(false);
+            }
+
             setProperty(updated);
             setOriginal(form);
-            showToast('Objektdaten gespeichert.');
+            showToast(takeoverCompleted
+                ? 'Objektdaten gespeichert. Die Detailbewertung wurde übernommen und gelöscht.'
+                : 'Objektdaten gespeichert.');
             router.push(`/existing-properties/${propertyId}`);
         } catch (err) {
             setError(errorMessage(err, 'Objektdaten konnten nicht gespeichert werden.'));
@@ -247,6 +277,15 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                 />
 
                 <div className="flex flex-col gap-6">
+                    {pendingTakeover && (
+                        <div role="status" className="flex items-start gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/30 text-sm text-foreground">
+                            <Icons.Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                            <span>
+                                Diese Daten wurden aus einer Detailbewertung übernommen. Bitte prüfen und speichern —
+                                erst dann ist die Übernahme abgeschlossen und die Detailbewertung wird gelöscht.
+                            </span>
+                        </div>
+                    )}
                     {error && (
                         <div className="px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/30 text-sm text-destructive">
                             {error}
@@ -395,7 +434,8 @@ export default function PropertyData({ propertyId }: { propertyId: string }) {
                 primaryLabel="Objektdaten speichern"
                 ghostIcon={<BUTTON_DETAILS.Back.icon />}
                 primaryIcon={<BUTTON_DETAILS.Save.icon />}
-                primaryDisabled={!isEditing || !isValid || isSaving}
+                // A pending takeover can be confirmed unchanged.
+                primaryDisabled={(!isEditing && !pendingTakeover) || !isValid || isSaving}
                 loading={isSaving}
             />
 
