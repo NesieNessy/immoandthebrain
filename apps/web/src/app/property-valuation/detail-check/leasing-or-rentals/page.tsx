@@ -402,15 +402,13 @@ function RentalContent() {
                 value={amountPeriod}
                 onChange={(value) => changeAmountPeriod(value as AmountPeriod)}
               />
-              <div className="max-w-[260px]">
+              <div className="mt-2 grid items-start gap-4 md:grid-cols-3">
                 <MonthField
                   label="Beginn der Vermietung"
                   value={form.valuationMonth}
                   helperText="Monat der ersten Vermietung nach Kauf"
                   onChange={(value) => setForm((prev) => ({ ...prev, valuationMonth: value }))}
                 />
-              </div>
-              <div className="mt-2 grid gap-4 md:grid-cols-2">
                 <MoneyField
                   label="Kaltmiete"
                   optional
