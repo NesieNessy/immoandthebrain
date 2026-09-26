@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Icons } from "@/components/common";
 import { cn } from "@/lib/utils";
@@ -67,6 +67,12 @@ export interface TableProps<T extends Record<string, unknown> = Record<string, u
    * the page size via that picker; this is only the initial value.
    */
   pageSize?: number;
+  /**
+   * Content shown in a full-width row directly below a row (e.g. an opened
+   * detail panel); return null/undefined for rows without one. Desktop table
+   * only — the mobile card list ignores it.
+   */
+  renderExpandedRow?: (row: T, index: number) => React.ReactNode | null | undefined;
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
@@ -115,6 +121,7 @@ export function Table<T extends Record<string, unknown> = Record<string, unknown
   getRowClassName,
   renderMobileCard,
   pageSize,
+  renderExpandedRow,
 }: TableProps<T>) {
 
   const hasFilterRow = columns.some((c) => c.filterable);
@@ -281,9 +288,11 @@ export function Table<T extends Record<string, unknown> = Record<string, unknown
                 </td>
               </tr>
             ) : (
-              pageData.map((row, rowIndex) => (
+              pageData.map((row, rowIndex) => {
+                const expanded = renderExpandedRow?.(row, rowIndex);
+                return (
+                <React.Fragment key={rowIndex}>
                 <tr
-                  key={rowIndex}
                   className={cn(
                     "transition-colors",
                     onRowClick && "cursor-pointer hover:bg-primary/5",
@@ -313,7 +322,16 @@ export function Table<T extends Record<string, unknown> = Record<string, unknown
                     );
                   })}
                 </tr>
-              ))
+                {expanded != null && (
+                  <tr>
+                    <td colSpan={columns.length} className="bg-muted/30 px-4 py-4 text-sm text-foreground">
+                      {expanded}
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
+                );
+              })
             )}
           </tbody>
         </table>

@@ -143,8 +143,9 @@ const RESOURCES: Record<string, ResourceConfig> = {
     ],
     orderBy: 'sort_order, renovation_measure_id',
     nonBlankColumnsOnUpdate: ['title'],
-    // Matches the FE's own isLocked-disabled field set exactly (Contractors.tsx
-    // and MeasureDetail.tsx) — actual_completion_date, quote_accepted itself,
+    // Matches the FE's own isLocked-disabled field set exactly (Contractors.tsx,
+    // saveMeasure in useRenovationMeasuresData.ts and MeasureWorkPanel.tsx) —
+    // category, actual_completion_date, quote_accepted itself,
     // and the craftsman/customer-confirmed flags are deliberately excluded,
     // they all stay editable (or are the unlock switch) once locked.
     lockedColumns: {

@@ -15,6 +15,12 @@ function toPhoto(row: Record<string, unknown>): RenovationMeasurePhoto {
     };
 }
 
+/** Every measure's files of a property in one request (the overview's Belege column). */
+export async function getPhotosByProperty(propertyId: number): Promise<RenovationMeasurePhoto[]> {
+    const data = await propertyResourceRequest<Record<string, unknown>[]>('renovation-measure-photos', {}, { propertyId });
+    return data?.map(toPhoto) ?? [];
+}
+
 export async function getPhotosByMeasure(measureId: number): Promise<RenovationMeasurePhoto[]> {
     const data = await propertyResourceRequest<Record<string, unknown>[]>('renovation-measure-photos', {}, { measureId });
     return data?.map(toPhoto) ?? [];

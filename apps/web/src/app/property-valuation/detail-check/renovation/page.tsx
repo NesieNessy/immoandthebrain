@@ -1,5 +1,8 @@
 "use client";
 
+import { FileDropZone } from '@/components/features/FileDropZone';
+import { FileLinkList, type FileLink } from '@/components/features/FileLinkList';
+import { FormPanel } from '@/components/features/FormPanel';
 import { PriceIndicationHint } from '@/components/features/PriceIndicationHint';
 import { PriceRangeSlider } from '@/components/features/PriceRangeSlider';
 import { RenovationMeasurePicker } from '@/components/features/RenovationMeasurePicker';
@@ -23,7 +26,7 @@ import {
 import { detailCheckWorkflowId } from '@/lib/detailCheck/workflow';
 import { categoryLabel, indicatePriceRange, type RenovationCategory } from '@/lib/renovation/catalog';
 import { getDocumentsByUser, getDocumentUrl, uploadDocument } from '@/lib/supabase/document.supabase';
-import { cn, deNumberFormatter, formatEuro } from '@/lib/utils';
+import { deNumberFormatter, formatEuro } from '@/lib/utils';
 import type { UserDocument } from '@immoandthebrain/types';
 import { format } from 'date-fns';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -117,14 +120,12 @@ function RenovationContent() {
   const [editingCaseId, setEditingCaseId] = useState<string | null>(null);
   const [casePendingDelete, setCasePendingDelete] = useState<RenovationCase | null>(null);
   const formRef = useRef<HTMLDivElement>(null);
-  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   /** "Auswertung & Planung" and the price choice stay hidden — even
    *  for a workflow that already has saved (evaluated) cases — until an
    *  Auswertung is run in this visit ("Auswertung prüfen & anpassen" or
    *  the bar's "Weiter zur Auswertung"). */
   const [isEvaluationVisible, setIsEvaluationVisible] = useState(false);
   const evaluationRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   /** Snapshot (see saveSnapshot) of what the server holds; null until loaded. */
   const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
   /** A snapshot whose autosave failed — not retried until something changes again. */
@@ -504,42 +505,16 @@ function RenovationContent() {
 
   const casesRows: CaseRow[] = cases.map((item) => ({ key: item.id, item }));
 
-  /** Belege as file links; `onRemove` adds a remove button per file (form only). */
-  const renderUploads = (uploads: string[] | undefined, onRemove?: (reference: string) => void) => (
-    uploads?.length ? (
-      <ul className="flex flex-col gap-1">
-        {uploads.map((reference) => {
-          const documentId = reference.startsWith('document:') ? Number(reference.slice('document:'.length)) : 0;
-          const document = documentsById[documentId];
-          const FileIcon = document?.contentType?.startsWith('image/') ? Icons.Image : Icons.FileText;
-          return (
-            <li key={reference} className="flex min-w-0 items-center gap-1">
-              <button
-                type="button"
-                onClick={() => void openUpload(reference)}
-                disabled={!document}
-                title={document ? `${document.fileName} öffnen` : `${uploadLabel(reference)} (wird hochgeladen)`}
-                className="inline-flex min-w-0 cursor-pointer items-center gap-1.5 text-left text-sm text-primary hover:underline disabled:cursor-default disabled:text-muted-foreground disabled:no-underline"
-              >
-                <FileIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span className="truncate">{uploadLabel(reference)}</span>
-              </button>
-              {onRemove && (
-                <button
-                  type="button"
-                  onClick={() => onRemove(reference)}
-                  aria-label={`${uploadLabel(reference)} entfernen`}
-                  className="shrink-0 cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Icons.X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    ) : <span className="text-muted-foreground">–</span>
-  );
+  /** A case's Belege ("document:<id>", or "local:<name>" while uploading) as file links. */
+  const uploadLinks = (uploads: string[] | undefined): FileLink[] => (uploads ?? []).map((reference) => {
+    const document = reference.startsWith('document:') ? documentsById[Number(reference.slice('document:'.length))] : undefined;
+    return {
+      key: reference,
+      name: uploadLabel(reference),
+      isImage: Boolean(document?.contentType?.startsWith('image/')),
+      pending: !document,
+    };
+  });
 
   const casesColumns: TableColumn<CaseRow>[] = [
     {
@@ -576,7 +551,12 @@ function RenovationContent() {
         <span className="block whitespace-pre-line break-words text-muted-foreground">{row.item.beschreibung || '–'}</span>
       ),
     },
-    { key: 'uploads', label: 'Belege', width: '22%', renderCell: (_v, row) => renderUploads(row.item.uploads) },
+    {
+      key: 'uploads',
+      label: 'Belege',
+      width: '22%',
+      renderCell: (_v, row) => <FileLinkList files={uploadLinks(row.item.uploads)} onOpen={(file) => void openUpload(file.key)} />,
+    },
   ];
 
   const allSelected = cases.length > 0 && cases.every((item) => item.selected);
@@ -609,15 +589,15 @@ function RenovationContent() {
       key: 'massnahme',
       label: 'Maßnahme',
       renderCell: (_v, row) => (
-        <>
-          <span className="block whitespace-normal break-words font-semibold">{row.item.massnahme}</span>
-          <span className="block text-xs text-muted-foreground">{categoryLabel(row.item.kategorie)}</span>
-        </>
+        <div className="flex min-w-0 flex-col items-start gap-1 whitespace-normal">
+          <span className="break-words font-semibold">{row.item.massnahme}</span>
+          <Tag label={categoryLabel(row.item.kategorie)} variant="info" />
+        </div>
       ),
     },
     {
       key: 'indikation',
-      label: 'KI-Indikation',
+      label: 'Preisindikation',
       width: '170px',
       renderCell: (_v, row) => row.item.ai ? (
         <span title={row.item.ai.summary}>
@@ -772,25 +752,28 @@ function RenovationContent() {
               </div>
 
               {isFormOpen && (
-                <div id="renovation-form" ref={formRef} className="scroll-mt-24 rounded-lg border border-border bg-card">
-                  <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                    <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <FormPanel
+                  id="renovation-form"
+                  ref={formRef}
+                  icon={editingCaseId ? <Icons.Rename /> : <Icons.Plus />}
+                  title={editingCaseId ? 'Modernisierung bearbeiten' : 'Neue Modernisierung'}
+                  onClose={closeForm}
+                  footer={(
+                    <>
                       {editingCaseId
-                        ? <Icons.Rename className="h-4 w-4 text-primary" aria-hidden="true" />
-                        : <Icons.Plus className="h-4 w-4 text-primary" aria-hidden="true" />}
-                      {editingCaseId ? 'Modernisierung bearbeiten' : 'Neue Modernisierung'}
-                    </h4>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      iconOnly
-                      icon={<Icons.X />}
-                      aria-label="Formular schließen"
-                      onClick={closeForm}
-                    />
-                  </div>
-
-                  <div className="grid gap-4 p-4 md:grid-cols-2">
+                        ? <Button variant="outline" size="sm" label={BUTTON_DETAILS.Cancel.label} icon={<Icons.X />} onClick={closeForm} />
+                        : <Button variant="outline" size="sm" label="Zurücksetzen" icon={<Icons.RotateCcw />} onClick={resetForm} />}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        label={editingCaseId ? 'Übernehmen' : 'Hinzufügen'}
+                        icon={editingCaseId ? <Icons.Check /> : <Icons.Plus />}
+                        disabled={!category || !measure || isUploadingFiles}
+                        onClick={saveCase}
+                      />
+                    </>
+                  )}
+                >
                     <RenovationMeasurePicker
                       category={category}
                       measure={measure}
@@ -813,62 +796,23 @@ function RenovationContent() {
                       <p className="mb-2 text-sm font-medium text-foreground">
                         Bilder & Unterlagen <span className="font-normal text-muted-foreground">(optional)</span>
                       </p>
-                      <div
-                        onDragOver={(event) => {
-                          event.preventDefault();
-                          setIsDraggingFiles(true);
-                        }}
-                        onDragLeave={() => setIsDraggingFiles(false)}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          setIsDraggingFiles(false);
-                          selectFiles(Array.from(event.dataTransfer.files));
-                        }}
-                        className={cn(
-                          'rounded-lg border-2 border-dashed px-4 py-4 transition-colors',
-                          isDraggingFiles ? 'border-primary bg-primary/5' : 'border-border bg-background',
-                        )}
+                      <FileDropZone
+                        title="Bilder und Unterlagen hochladen"
+                        description="Exposé, Besichtigungsfotos, Kostendokumente · PNG, JPG, PDF"
+                        accept={UPLOAD_ACCEPT}
+                        disabled={!user}
+                        isUploading={isUploadingFiles}
+                        error={uploadFilesError}
+                        onFiles={selectFiles}
                       >
-                        <div className="flex items-start gap-3">
-                          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                            <Icons.Image className="h-[18px] w-[18px]" aria-hidden="true" />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-foreground">Bilder und Unterlagen hochladen</p>
-                            <p className="text-xs text-muted-foreground">Exposé, Besichtigungsfotos, Kostendokumente · PNG, JPG, PDF</p>
-                          </div>
-                        </div>
-                        <div className="mt-3 flex flex-wrap items-center gap-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            label="Datei auswählen"
-                            icon={isUploadingFiles ? <Icons.Loader2 className="animate-spin" /> : <Icons.Upload />}
-                            disabled={!user || isUploadingFiles}
-                            onClick={() => fileInputRef.current?.click()}
-                          />
-                          <span className="text-xs text-muted-foreground">oder hierher ziehen</span>
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            multiple
-                            accept={UPLOAD_ACCEPT}
-                            className="sr-only"
-                            tabIndex={-1}
-                            aria-hidden="true"
-                            onChange={(event) => {
-                              selectFiles(Array.from(event.target.files ?? []));
-                              event.target.value = '';
-                            }}
-                          />
-                        </div>
                         {uploadNames.length > 0 && (
-                          <div className="mt-3">
-                            {renderUploads(uploadNames, (reference) => setUploadNames((prev) => prev.filter((name) => name !== reference)))}
-                          </div>
+                          <FileLinkList
+                            files={uploadLinks(uploadNames)}
+                            onOpen={(file) => void openUpload(file.key)}
+                            onRemove={(file) => setUploadNames((prev) => prev.filter((name) => name !== file.key))}
+                          />
                         )}
-                        {uploadFilesError && <p className="mt-2 text-xs text-destructive">{uploadFilesError}</p>}
-                      </div>
+                      </FileDropZone>
                     </div>
 
                     {formPriceRange && (
@@ -876,22 +820,7 @@ function RenovationContent() {
                         <PriceIndicationHint range={formPriceRange} />
                       </div>
                     )}
-                  </div>
-
-                  <div className="flex flex-wrap justify-end gap-2 border-t border-border px-4 py-3">
-                    {editingCaseId
-                      ? <Button variant="outline" size="sm" label={BUTTON_DETAILS.Cancel.label} icon={<Icons.X />} onClick={closeForm} />
-                      : <Button variant="outline" size="sm" label="Zurücksetzen" icon={<Icons.RotateCcw />} onClick={resetForm} />}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      label={editingCaseId ? 'Übernehmen' : 'Hinzufügen'}
-                      icon={editingCaseId ? <Icons.Check /> : <Icons.Plus />}
-                      disabled={!category || !measure || isUploadingFiles}
-                      onClick={saveCase}
-                    />
-                  </div>
-                </div>
+                </FormPanel>
               )}
 
               <Table

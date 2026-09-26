@@ -27,6 +27,9 @@ export const RENOVATION_CATEGORIES: { value: RenovationCategory; label: string }
   { value: 'SONSTIGES', label: 'Sonstiges' },
 ];
 
+/** Maßnahme option that switches to a free-text title (RenovationMeasurePicker's `allowCustom`). */
+export const CUSTOM_MEASURE = '__custom__';
+
 export const RENOVATION_MEASURES: Record<RenovationCategory, string[]> = {
   ENERGETISCH: [
     'Fassadendämmung',
