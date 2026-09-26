@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/server/apiError';
 import { requireUserId } from '@/lib/server/auth';
 import { detailCheckWorkflowId } from '@/lib/detailCheck/workflow';
 import { db } from '@/lib/server/db';
@@ -31,8 +32,17 @@ export async function GET(request: Request) {
   // check which steps already have saved data (so the Stepper can unlock
   // them), as opposed to the unfiltered call the overview page makes.
   const workflowId = detailCheckWorkflowId(quickCheckId, url.searchParams.get('workflowId'));
-  const filterClause = workflowId ? 'AND pd.workflow_id = $2' : '';
-  const values = workflowId ? [userId, workflowId] : [userId];
+  // …or to the detail check taken over into one Bestandsobjekt — used by its
+  // Objektdaten page, whose save completes the takeover.
+  const takenOverParam = url.searchParams.get('takenOverPropertyId');
+  const takenOverPropertyId = takenOverParam == null ? null : Number(takenOverParam);
+  if (takenOverPropertyId != null && !Number.isInteger(takenOverPropertyId)) {
+    return apiError(400, 'Ungültige Objekt-ID.');
+  }
+  const filterClause = workflowId
+    ? 'AND pd.workflow_id = $2'
+    : takenOverPropertyId != null ? 'AND pd.taken_over_property_id = $2' : '';
+  const values = workflowId ? [userId, workflowId] : takenOverPropertyId != null ? [userId, takenOverPropertyId] : [userId];
 
   const { rows } = await db.query(
     `
@@ -110,23 +120,39 @@ export async function GET(request: Request) {
 export async function DELETE(request: Request) {
   const userId = await requireUserId(request);
   if (userId instanceof Response) return userId;
-  const input = await request.json();
-  const workflowId = typeof input.workflowId === 'string' ? input.workflowId : null;
+  const input = await request.json().catch(() => ({}));
+  const takenOverPropertyId = input.takenOverPropertyId == null ? null : Number(input.takenOverPropertyId);
+  let workflowIds: string[];
 
-  if (!workflowId) {
-    return NextResponse.json({ error: 'Die Detailbewertung fehlt.' }, { status: 400 });
+  if (takenOverPropertyId != null) {
+    // Completing a takeover: once the Bestandsobjekt's Objektdaten are saved,
+    // the detail check it came from is done and is removed. No detail check
+    // taken over into this property → nothing to do.
+    if (!Number.isInteger(takenOverPropertyId)) return apiError(400, 'Ungültige Objekt-ID.');
+    const { rows } = await db.query(
+      'SELECT workflow_id FROM detail_check_property_data WHERE user_id = $1 AND taken_over_property_id = $2',
+      [userId, takenOverPropertyId],
+    );
+    workflowIds = rows.map((row) => String(row.workflow_id));
+  } else if (typeof input.workflowId === 'string' && input.workflowId) {
+    workflowIds = [input.workflowId];
+  } else {
+    return apiError(400, 'Die Detailbewertung fehlt.');
   }
 
-  for (const table of DETAIL_CHECK_TABLES) {
-    await db.query(`DELETE FROM ${table} WHERE user_id = $1 AND workflow_id = $2`, [userId, workflowId]);
+  for (const workflowId of workflowIds) {
+    for (const table of DETAIL_CHECK_TABLES) {
+      await db.query(`DELETE FROM ${table} WHERE user_id = $1 AND workflow_id = $2`, [userId, workflowId]);
+    }
+    // Documents uploaded in the detail check are the user's files, not detail-
+    // check data — they are kept (Dokumente page; after a takeover also on the
+    // Bestandsobjekt) and only unlinked, instead of being deleted along with
+    // the evaluation.
+    await db.query(
+      'UPDATE document SET detail_check_workflow_id = NULL, updated_at = NOW() WHERE user_id = $1 AND detail_check_workflow_id = $2',
+      [userId, workflowId],
+    );
   }
-  // Documents uploaded in the detail check are the user's files, not detail-
-  // check data — they are kept (Dokumente page) and only unlinked, instead of
-  // being deleted along with the evaluation.
-  await db.query(
-    'UPDATE document SET detail_check_workflow_id = NULL, updated_at = NOW() WHERE user_id = $1 AND detail_check_workflow_id = $2',
-    [userId, workflowId],
-  );
 
-  return NextResponse.json({ deleted: true });
+  return NextResponse.json({ deleted: workflowIds.length > 0 });
 }

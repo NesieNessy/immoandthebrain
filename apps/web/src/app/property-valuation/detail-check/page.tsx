@@ -210,7 +210,7 @@ export default function DetailCheckOverviewPage() {
         // Already taken over (e.g. in another tab) — just go there.
         const body = await response.json().catch(() => ({})) as { propertyId?: number };
         if (body.propertyId) {
-          router.push(`/existing-properties/${body.propertyId}`);
+          router.push(`/existing-properties/${body.propertyId}/property-data`);
           return;
         }
       }
@@ -218,8 +218,8 @@ export default function DetailCheckOverviewPage() {
       const { propertyId, warnings } = await response.json() as { propertyId: number; warnings: string[] };
       setRows((prev) => prev.map((r) => r.workflowId === row.workflowId ? { ...r, takenOverPropertyId: propertyId } : r));
       if (warnings.length > 0) showToast(warnings.join(' '), 'warning');
-      else showToast('In die Bestandsobjekte übernommen.');
-      router.push(`/existing-properties/${propertyId}`);
+      else showToast('Bitte die Objektdaten prüfen und speichern, um die Übernahme abzuschließen.');
+      router.push(`/existing-properties/${propertyId}/property-data`);
     } catch (takeoverError) {
       showToast(errorMessage(takeoverError, 'Die Detailbewertung konnte nicht übernommen werden.'), 'error');
     } finally {
@@ -249,9 +249,11 @@ export default function DetailCheckOverviewPage() {
   const menuItems = useCallback((row: DetailCheckRow): MenuItem[] => [
     row.takenOverPropertyId != null
       ? {
-        label: 'Zum Bestandsobjekt',
+        // Taken over but not yet confirmed there — saving the Objektdaten
+        // completes the takeover and removes this row.
+        label: 'Übernahme abschließen',
         icon: <Building2 className="h-4 w-4" />,
-        onClick: () => router.push(`/existing-properties/${row.takenOverPropertyId}`),
+        onClick: () => router.push(`/existing-properties/${row.takenOverPropertyId}/property-data`),
       }
       : {
         label: takingOverId === row.workflowId ? 'Wird übernommen …' : 'In Bestandsobjekte übernehmen',

@@ -10,6 +10,7 @@ import {
   parseDecimalInput,
   resolveStateFromPostalCode,
 } from '@/lib/detailCheck/acquisitionCosts';
+import { LockKeyhole } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { PropertyValuationLayout } from '../PropertyValuationLayout';
@@ -68,6 +69,11 @@ function DecimalField({
   disabled?: boolean;
   helperText?: string;
 }) {
+  // Not applicable (e.g. no Stellplätze recorded) — shown locked, like the
+  // calculated values, instead of as a greyed-out input.
+  if (disabled) {
+    return <ReadOnlyField label={label} value={value} suffix={unit} helperText={helperText} />;
+  }
   return (
     <TextField
       label={label}
@@ -75,7 +81,6 @@ function DecimalField({
       value={value}
       suffix={unit}
       error={error}
-      disabled={disabled}
       helperText={helperText}
       onBlur={() => onChange(formatDecimalInput(value))}
       onChange={(event) => onChange(event.target.value)}
@@ -331,13 +336,19 @@ function AcquisitionCostsContent() {
               <SectionLabel>Gesamtkosten</SectionLabel>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="rounded-lg border border-border bg-card p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Gesamtnebenkosten</p>
+                  <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Gesamtnebenkosten
+                    <LockKeyhole size={12} aria-hidden="true" />
+                  </p>
                   <p className="mt-1 text-2xl font-semibold text-foreground">
                     {formatCurrency(computed.totalAdditionalCosts)} <span className="text-base font-normal text-muted-foreground">€</span>
                   </p>
                 </div>
                 <div className="rounded-lg border border-primary/30 bg-primary/10 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">Gesamtkaufpreis</p>
+                  <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
+                    Gesamtkaufpreis
+                    <LockKeyhole size={12} aria-hidden="true" />
+                  </p>
                   <p className="mt-1 text-2xl font-semibold text-primary">
                     {formatCurrency(computed.totalCosts)} <span className="text-base font-normal text-primary/70">€</span>
                   </p>
